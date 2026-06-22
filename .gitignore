@@ -1,0 +1,29 @@
+# HeySure-Web (Vue 3 + Vite)
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+.vite/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+*.log
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Misc
+*.tmp
