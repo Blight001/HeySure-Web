@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la ../src/)",
+      "Read(//d/1.STUDY/1_project/AI/HeySure_AI_2.0/web/src/**)"
+    ]
+  }
+}

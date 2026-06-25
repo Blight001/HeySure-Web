@@ -1046,22 +1046,6 @@ const repoActive = computed(() => {
   return p === 'checking' || p === 'pulling' || p === 'restarting'
 })
 
-const repoDeployProgress = computed(() => {
-  const state = repoStatus.value?.state
-  if (!state) return { percent: 0, label: '等待开始' }
-  if (state.phase === 'error') return { percent: 100, label: '更新失败' }
-  if (state.phase === 'up_to_date' && state.logs?.length) return { percent: 100, label: '更新完成' }
-
-  const output = (state.logs || []).join('\n').toLowerCase()
-  if (/deploy finished|update complete|successfully built|启动完成/.test(output)) return { percent: 100, label: '更新完成' }
-  if (/container .* (started|running|healthy)|creating|recreating|starting/.test(output)) return { percent: 88, label: '正在启动服务' }
-  if (/docker compose|building|buildkit|exporting|writing image|naming to/.test(output)) return { percent: 58, label: '正在构建镜像' }
-  if (/update found|git pull|reset --hard|fast-forward|updating [0-9a-f]/.test(output)) return { percent: 32, label: '正在拉取代码' }
-  if (/checking updates|fetch_head|from https?:|git fetch/.test(output) || state.phase === 'checking') return { percent: 15, label: '正在检查版本' }
-  if (state.phase === 'pulling') return { percent: 8, label: '正在启动更新脚本' }
-  return { percent: 0, label: state.message || '等待开始' }
-})
-
 const fmtCommitTime = formatCommitDateTime
 
 const loadRepoStatus = async (silent = false) => {
@@ -1128,9 +1112,7 @@ const saveRepoConfig = async () => {
 const triggerRepoCheck = async (apply: boolean) => {
   if (apply) {
     const yes = await confirm({
-      message: repoStatus.value?.update_mode === 'webhook'
-        ? '将通知服务器更新器立即执行宿主机更新脚本，服务可能短暂不可用。确定继续？'
-        : '将检测远程是否有新版本；若发现更新会自动拉取最新代码并重启全部服务（重启期间控制台会短暂不可用）。确定继续？',
+      message: '将检测远程是否有新版本；若发现更新会自动拉取最新代码并重启全部服务（重启期间控制台会短暂不可用）。确定继续？',
       type: 'warning',
     })
     if (!yes) return
@@ -2075,14 +2057,7 @@ const avatarFor = (u: AdminUser) =>
               v-if="repoStatus && repoStatus.update_mode === 'unavailable'"
               class="rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-700/40 dark:bg-amber-900/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300"
             >
-              当前部署没有 Git 工作区，也未配置服务器更新 Webhook。请为网关设置 <code>HEYSURE_REPO_UPDATE_WEBHOOK_URL</code>，即可从本页控制宿主机更新脚本。
-            </div>
-
-            <div
-              v-if="repoStatus && repoStatus.update_mode === 'webhook'"
-              class="rounded-xl border border-indigo-200 bg-indigo-50/60 dark:border-indigo-700/40 dark:bg-indigo-900/10 px-4 py-3 text-xs text-indigo-700 dark:text-indigo-300"
-            >
-              已连接服务器更新器。本页会先通过宿主机 Git 检查版本，仅在发现新提交时调用更新脚本并重新部署服务。
+              当前部署不是 Git 工作区，无法自动更新。请将服务器以 <code>git clone</code> 的方式部署（目录含 <code>.git</code>），即可在本页一键检测并直接拉取最新代码。
             </div>
 
             <template v-if="repoStatus">
@@ -2158,7 +2133,7 @@ const avatarFor = (u: AdminUser) =>
                     class="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
                     :disabled="repoBusy || repoActive || !repoStatus.updater_available"
                     @click="triggerRepoCheck(true)"
-                  >{{ repoBusy || repoActive ? '执行中…' : (repoStatus.update_mode === 'webhook' ? '立即更新服务器' : '立即检测并更新') }}</button>
+                  >{{ repoBusy || repoActive ? '执行中…' : '立即检测并更新' }}</button>
                 </div>
 
                 <!-- 阶段步骤 -->
@@ -2200,23 +2175,6 @@ const avatarFor = (u: AdminUser) =>
                 <p v-if="repoStatus.state.phase === 'error' && repoStatus.state.last_error" class="text-xs text-red-600 dark:text-red-400 break-all">
                   ✕ {{ repoStatus.state.last_error }}
                 </p>
-                <div v-if="repoStatus.update_mode === 'webhook' && (repoActive || repoStatus.state.logs?.length)" class="space-y-2">
-                  <div class="flex items-center justify-between text-xs">
-                    <span class="font-medium text-zinc-600 dark:text-zinc-300">{{ repoDeployProgress.label }}</span>
-                    <span class="font-mono text-zinc-400">{{ repoDeployProgress.percent }}%</span>
-                  </div>
-                  <div class="h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                    <div
-                      class="h-full rounded-full transition-all duration-500"
-                      :class="repoStatus.state.phase === 'error' ? 'bg-red-500' : 'bg-indigo-500'"
-                      :style="{ width: `${repoDeployProgress.percent}%` }"
-                    ></div>
-                  </div>
-                  <details v-if="repoStatus.state.logs?.length" class="text-[11px] text-zinc-400">
-                    <summary class="cursor-pointer select-none hover:text-zinc-600 dark:hover:text-zinc-300">查看原始日志</summary>
-                    <pre class="mt-2 max-h-64 overflow-auto rounded-lg bg-zinc-950 p-3 leading-5 text-zinc-200 whitespace-pre-wrap break-all">{{ repoStatus.state.logs.join('\n') }}</pre>
-                  </details>
-                </div>
               </section>
             </template>
           </div>

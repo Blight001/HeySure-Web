@@ -11,6 +11,32 @@ if not defined SERVER_URL set "SERVER_URL=http://127.0.0.1:3000"
 
 cd /d "%~dp0"
 
+where node >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] Node.js was not found.
+  echo [ERROR] Install Node.js 22 LTS or a newer LTS version.
+  echo [ERROR] Download: https://nodejs.org/en/download
+  start "" "https://nodejs.org/en/download"
+  exit /b 1
+)
+
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] npm was not found. Reinstall Node.js LTS and make sure npm is in PATH.
+  echo [ERROR] Download: https://nodejs.org/en/download
+  start "" "https://nodejs.org/en/download"
+  exit /b 1
+)
+
+if not exist "node_modules" (
+  echo [INFO] node_modules not found. Installing frontend dependencies...
+  npm install
+  if errorlevel 1 (
+    echo [ERROR] Frontend dependency installation failed. Check network or npm config, then retry.
+    exit /b 1
+  )
+)
+
 rem Clear Vite's local cache so stale optimized chunks do not poison the next dev session.
 if exist "node_modules\.vite" rmdir /s /q "node_modules\.vite"
 
