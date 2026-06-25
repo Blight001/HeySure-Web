@@ -39,7 +39,6 @@ interface Props {
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
-  (e: 'context', payload: { agent: Agent; x: number; y: number }): void
   (e: 'show-tasks', agent: Agent): void
   (e: 'show-task-detail', payload: { agent: Agent; jobId: string }): void
   (e: 'chat', agent: Agent): void
@@ -113,7 +112,6 @@ const toggleViewMode = () => {
             v-for="agent in allAgents"
             :key="agent.id"
             :agent="agent"
-            @context="emit('context', $event)"
             @show-tasks="emit('show-tasks', $event)"
             @show-task-detail="emit('show-task-detail', $event)"
             @chat="emit('chat', $event)"
@@ -134,7 +132,6 @@ const toggleViewMode = () => {
             v-for="agent in adminAgents"
             :key="agent.id"
             :agent="agent"
-            @context="emit('context', $event)"
             @show-tasks="emit('show-tasks', $event)"
             @show-task-detail="emit('show-task-detail', $event)"
             @chat="emit('chat', $event)"
@@ -155,7 +152,6 @@ const toggleViewMode = () => {
             v-for="agent in memberAgents"
             :key="agent.id"
             :agent="agent"
-            @context="emit('context', $event)"
             @show-tasks="emit('show-tasks', $event)"
             @show-task-detail="emit('show-task-detail', $event)"
             @chat="emit('chat', $event)"

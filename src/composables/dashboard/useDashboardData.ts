@@ -231,7 +231,7 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
         tokenLimit: Number.isFinite(parsedTokenLimit) ? parsedTokenLimit : defaultTokenLimit,
         generation: parsedGeneration,
         status: normalizeLifecycleStatus(row.lifecycle_status),
-        platform: row.platform || 'Server-Core',
+        platform: row.platform || '服务器',
         currentTask: row.current_behavior || '等待指令...',
         projectId,
         projectName: getProjectName(projectId, row.project_name),
@@ -561,8 +561,8 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     ])
     if (knowledgeBase.value.length === 0) {
       knowledgeBase.value = [
-        { id: 'k1', title: '学习总结数据库规范 v1.0', author: '主脑·阿尔法', time: '2026-03-01', tags: ['记忆', '规范'] },
-        { id: 'k2', title: '多 Agent 端接入与行为准则', author: '主脑·阿尔法', time: '2026-03-05', tags: ['接入', '治理'] },
+        { id: 'k1', title: '学习总结数据库规范 v1.0', author: '阿尔法', time: '2026-03-01', tags: ['记忆', '规范'] },
+        { id: 'k2', title: '多 Agent 端接入与行为准则', author: '阿尔法', time: '2026-03-05', tags: ['接入', '治理'] },
       ]
     }
   }

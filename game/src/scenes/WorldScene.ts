@@ -11,8 +11,6 @@ import type { WorkshopView } from './types'
 import { portraitSpecFor, type PortraitSpec } from '../ui/portrait'
 import {
   FIXED_BUILDINGS,
-  MAP_H,
-  MAP_W,
   TILE,
   WORKSHOP_SCALE,
   WORKSHOP_SLOTS,
@@ -24,6 +22,16 @@ import {
   workshopZone,
   type Rect,
 } from '../world/layout'
+import {
+  BENCH_POSITIONS,
+  BUTTERFLY_TINTS,
+  MAIN_ROAD_LAMP_TILES,
+  NIGHT_GLOW_SOURCES,
+  SIGNPOST_POS,
+  SPAWN_FENCE_XS,
+  WORKSHOP_STREET_LAMPS,
+  generateGroundMap,
+} from '../world/map'
 import { skinFor } from '../world/skins'
 import { WorldStore, type WorldEvent, type WorldMember, type WorldSnapshot } from '../world/store'
 import { clockLabel, nightnessForHour, resolveWorldHour } from '../world/time'
@@ -415,95 +423,18 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- 初始化
   private createGround() {
-    const rnd = mulberry32(20260611)
-    const grid: number[][] = []
-    for (let y = 0; y < MAP_H; y++) {
-      const row: number[] = []
-      for (let x = 0; x < MAP_W; x++) {
-        const r = rnd()
-        let t: number = TILES.grassA
-        if (r > 0.93) t = TILES.flowerYellow
-        else if (r > 0.88) t = TILES.flowerRed
-        else if (r > 0.8) t = TILES.tallGrass
-        else if (r > 0.55) t = TILES.grassB
-        else if (r > 0.35) t = TILES.grassC
-        else if (r > 0.33) t = TILES.bush
-        else if (r > 0.31) t = TILES.stone
-        row.push(t)
-      }
-      grid.push(row)
-    }
-    // 西北角池塘（不规则岸线，记录水面格子用于波动动画）
-    for (let y = 4; y <= 10; y++) {
-      for (let x = 3; x <= 11; x++) {
-        const edge = y === 4 || y === 10 || x === 3 || x === 11
-        if (edge && rnd() > 0.45) continue
-        grid[y][x] = rnd() > 0.5 ? TILES.waterA : TILES.waterB
-        this.waterTiles.push({ x, y })
-      }
-    }
-    const path = (x0: number, y0: number, x1: number, y1: number) => {
-      for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) {
-        for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) {
-          if (y >= 0 && y < MAP_H && x >= 0 && x < MAP_W) grid[y][x] = TILES.path
-        }
-      }
-    }
-    // 道路统一 2 格宽，更贴近小镇尺度
-    path(4, 21, 53, 22) // 主路（东西）
-    path(8, 19, 9, 21) // 出生地支路
-    path(26, 17, 27, 21) // 图书馆支路
-    path(5, 32, 53, 33) // 作坊街
-    path(29, 22, 30, 32) // 主路 → 作坊街
-    // 图书馆前广场，也是核心管理员的活动区域。
-    for (let y = 15; y <= 19; y++) {
-      for (let x = 25; x <= 38; x++) {
-        grid[y][x] = rnd() > 0.5 ? TILES.plazaA : TILES.plazaB
-      }
-    }
-    // 作坊街地块：前 8 个插槽脚下铺土场
-    for (let i = 0; i < WORKSHOP_SLOTS; i++) {
-      const pos = workshopSlotPos(i)
-      const tx = Math.floor(pos.x / TILE)
-      const ty = Math.floor(pos.y / TILE)
-      path(tx - 1, ty - 1, tx + 1, ty)
-    }
-    // 出生地花圃：泉水周围一圈花
-    for (let y = 17; y <= 23; y++) {
-      for (let x = 5; x <= 13; x++) {
-        const d = Math.hypot(x - 9, (y - 20) * 1.3)
-        if (d > 2.2 && d < 3.6 && grid[y][x] !== TILES.path) {
-          grid[y][x] = rnd() > 0.5 ? TILES.flowerRed : TILES.flowerYellow
-        }
-      }
-    }
-
-    const map = this.make.tilemap({ data: grid, tileWidth: TILE, tileHeight: TILE })
+    const ground = generateGroundMap()
+    this.waterTiles = ground.waterTiles
+    const map = this.make.tilemap({ data: ground.grid, tileWidth: TILE, tileHeight: TILE })
     const tiles = map.addTilesetImage('tileset.png', 'tileset.png', TILE, TILE)
     // Phaser 4 可能返回 GPU layer；二者 putTileAt/getTileAt 同接口
     if (tiles) this.groundLayer = (map.createLayer(0, tiles, 0, 0) ?? null) as Phaser.Tilemaps.TilemapLayer | null
 
     // 沿边与空地点树（避开建筑、道路带）
-    const treeRnd = mulberry32(7)
-    const blocked: Rect[] = [
-      { x: 100, y: 480, w: 400, h: 320 }, // 出生地一带
-      { x: 700, y: 250, w: 650, h: 420 }, // 图书馆与广场
-      { x: 100, y: 920, w: 1750, h: 250 }, // 作坊街
-      { x: 60, y: 90, w: 360, h: 300 }, // 池塘
-    ]
-    const inBlocked = (px: number, py: number) =>
-      blocked.some(b => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h)
-    for (let i = 0; i < 80; i++) {
-      const px = 40 + treeRnd() * (WORLD_W - 80)
-      const py = 60 + treeRnd() * (WORLD_H - 120)
-      const ty = Math.floor(py / TILE)
-      const tx = Math.floor(px / TILE)
-      if (inBlocked(px, py)) continue
-      const t = grid[ty]?.[tx]
-      if (t === TILES.path || t === TILES.waterA || t === TILES.waterB || t === TILES.plazaA || t === TILES.plazaB) continue
-      const tree = this.add.image(px, py, 'tree.png', 0)
+    for (const { x, y } of ground.treePositions) {
+      const tree = this.add.image(x, y, 'tree.png', 0)
       tree.setOrigin(0.5, 0.92)
-      tree.setDepth(py)
+      tree.setDepth(y)
     }
     // 池塘波动：水面格子周期性换帧
     this.time.addEvent({
@@ -530,17 +461,21 @@ export class WorldScene extends Phaser.Scene {
       return img
     }
     // 主路灯柱（夜晚自动点亮 + 暖光光晕）
-    for (const tx of [12, 22, 32, 42, 50]) {
+    for (const tx of MAIN_ROAD_LAMP_TILES) {
       const lamp = deco('lamp.png', tx * TILE + 16, 21 * TILE - 2)
       this.lamps.push(lamp)
       this.addStreetLampGlow(lamp)
     }
-    const streetLamp = deco('lamp.png', 30 * TILE + 16, 31 * TILE) // 作坊街路口
-    this.lamps.push(streetLamp)
-    this.addStreetLampGlow(streetLamp)
+    // 作坊街区灯柱沿上下两条门前路错开，避免压住建筑和门口。
+    for (const pos of WORKSHOP_STREET_LAMPS) {
+      const lamp = deco('lamp.png', pos.x * TILE + 16, pos.y * TILE + 10)
+      this.lamps.push(lamp)
+      this.addStreetLampGlow(lamp)
+    }
     // 建筑灯火与泉水的夜光
-    this.addNightGlow(880, 438, 0xffb866, 6, 0.35) // 图书馆窗火
-    this.addNightGlow(290, 640, 0x7fd8ff, 3.2, 0.4) // 出生地泉水
+    for (const glow of NIGHT_GLOW_SOURCES) {
+      this.addNightGlow(glow.x, glow.y, glow.color, glow.scaleX, glow.base, glow.scaleY, glow.pulse)
+    }
     // 萤火虫：夜间出没（白天 alpha=0），缓慢游移 + 呼吸闪烁
     const frnd = mulberry32(123)
     for (let i = 0; i < 14; i++) {
@@ -553,21 +488,18 @@ export class WorldScene extends Phaser.Scene {
       this.fireflies.push({ img, vx: (frnd() - 0.5) * 18, vy: (frnd() - 0.5) * 14, phase: frnd() * Math.PI * 2 })
     }
     // 出生地栅栏（北侧半围）+ 路牌
-    for (let x = 160; x <= 416; x += 32) {
+    for (const x of SPAWN_FENCE_XS) {
       deco('fence.png', x, 548, x === 160 || x === 416 ? 1 : 0)
     }
-    deco('signpost.png', 332, 668)
-    // 广场长椅：两座建筑之间对称摆放（完全落在石板上）
-    deco('bench.png', 985, 522)
-    deco('bench.png', 1085, 522)
-    deco('bench.png', 230, 700)
+    deco('signpost.png', SIGNPOST_POS.x, SIGNPOST_POS.y)
+    // 广场长椅：落在图书馆和作坊前方的石板街边。
+    for (const pos of BENCH_POSITIONS) deco('bench.png', pos.x, pos.y)
     // 蝴蝶：花丛间飞舞
-    const tints = [0xffffff, 0xff9ed2, 0x9ed2ff, 0xfff09e]
     const rnd = mulberry32(99)
     for (let i = 0; i < 6; i++) {
       const sprite = this.add.sprite(200 + rnd() * 1500, 200 + rnd() * 900, 'butterfly.png', 0)
       sprite.play('butterfly.png:loop')
-      sprite.setTint(tints[i % tints.length])
+      sprite.setTint(BUTTERFLY_TINTS[i % BUTTERFLY_TINTS.length])
       sprite.setDepth(95000)
       this.butterflies.push({ sprite, tx: sprite.x, ty: sprite.y, phase: rnd() * Math.PI * 2 })
     }

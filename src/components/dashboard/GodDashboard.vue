@@ -119,7 +119,6 @@ const {
   loadProjectContext,
   loadAIAgents,
   toggleAiRunByConfigId,
-  addKnowledge,
   createSeedData,
   refreshDashboardLive,
 } = useDashboardData({
@@ -131,20 +130,13 @@ const {
 })
 
 const {
-  contextMenu,
-  guidanceDialog,
   settingsOpen,
   leftCollapsed,
   knowledgeFilterOpen,
   knowledgeFilter,
   userMenuOpen,
-  openContextMenu,
-  closeContextMenu,
   closeSettings,
   closeKnowledgeFilter,
-  openGuidanceDialog,
-  closeGuidanceDialog,
-  submitGuidance,
   closeUserMenu,
   adminAgents,
   sidebarMemberAgents,
@@ -154,7 +146,6 @@ const {
   unassignedProjectId: UNASSIGNED_PROJECT_ID,
   agents,
   knowledgeBase,
-  addKnowledge,
 })
 
 const {
@@ -398,7 +389,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative isolate h-screen flex flex-col bg-zinc-50 text-zinc-900 overflow-hidden font-sans dark:bg-zinc-950 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeContextMenu(); closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
+  <div class="relative isolate h-screen flex flex-col bg-zinc-50 text-zinc-900 overflow-hidden font-sans dark:bg-zinc-950 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
     <div class="app-background-glow pointer-events-none absolute inset-0"></div>
     <div class="pointer-events-none absolute inset-0 opacity-60">
       <div class="app-background-orb app-background-orb-left"></div>
@@ -419,8 +410,8 @@ onUnmounted(() => {
       </div>
       <div class="flex gap-2 md:gap-4 text-sm items-center relative shrink-0">
         <div class="hidden sm:flex flex-col items-end">
-           <span class="text-xs text-zinc-400 uppercase font-semibold">存活个体</span>
-           <span class="text-lg font-bold text-indigo-600 leading-none">{{ agents.filter(a => a.status !== 'dead').length }}</span>
+           <span class="text-xs text-zinc-400 uppercase font-semibold">AI成员</span>
+           <span class="text-lg font-bold text-indigo-600 leading-none">{{ agents.length }}</span>
         </div>
         <div class="hidden sm:block w-px h-8 bg-zinc-200 dark:bg-zinc-700"></div>
         <div class="hidden sm:flex flex-col items-end">
@@ -431,11 +422,11 @@ onUnmounted(() => {
           v-if="isAdminUser"
           class="ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-amber-200 bg-white text-amber-600 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 transition-colors dark:bg-zinc-800 dark:border-amber-700/60 dark:text-amber-300 dark:hover:text-amber-200 shadow-sm hover:shadow-md flex items-center justify-center"
           title="管理员控制台"
-          @click.stop="adminModalOpen = true; closeContextMenu()"
+          @click.stop="adminModalOpen = true"
         >
           <AppIcon name="shield" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
         </button>
-        <button class="ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-zinc-200 bg-white text-zinc-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300 shadow-sm hover:shadow-md flex items-center justify-center" @click.stop="settingsOpen = true; closeContextMenu()">
+        <button class="ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-zinc-200 bg-white text-zinc-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300 shadow-sm hover:shadow-md flex items-center justify-center" @click.stop="settingsOpen = true">
           <span class="block hover:rotate-90 transition-transform duration-500 ease-spring"><AppIcon name="gear" class="w-4 h-4 md:w-[18px] md:h-[18px]" /></span>
         </button>
 
@@ -505,7 +496,6 @@ onUnmounted(() => {
             :knowledge-filter-open="knowledgeFilterOpen"
             :knowledge-filter="knowledgeFilter"
             :brain-view-mode="brainViewMode"
-            @context="openContextMenu"
             @update:brain-view-mode="saveBrainViewMode"
             @show-tasks="openAgentTaskList"
             @show-task-detail="openAgentTaskDetailFromCard"
@@ -678,44 +668,6 @@ onUnmounted(() => {
       :current-user="currentUser"
       @close="adminModalOpen = false"
     />
-
-
-    <Teleport to="body">
-      <Transition name="fade">
-        <div
-          v-if="contextMenu.visible"
-          class="fixed z-[350] bg-white border border-zinc-200 rounded-lg shadow-lg text-xs text-zinc-700 w-36 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-200"
-          :style="{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }"
-          @click.stop
-        >
-          <button class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800" @click="openGuidanceDialog">
-            给予指引
-          </button>
-        </div>
-      </Transition>
-    </Teleport>
-
-    <Teleport to="body">
-      <Transition name="fade">
-        <div v-if="guidanceDialog.visible" class="fixed inset-0 z-[320] bg-black/40 flex items-center justify-center backdrop-blur-sm" @click="closeGuidanceDialog">
-          <div class="bg-white rounded-2xl shadow-xl w-[420px] max-w-[calc(100vw-2rem)] p-5 dark:bg-zinc-900 transform transition-all scale-100" @click.stop>
-            <h3 class="text-sm font-semibold text-zinc-800 mb-3 dark:text-zinc-100">上帝指引</h3>
-            <div class="text-xs text-zinc-500 mb-2 dark:text-zinc-400">{{ guidanceDialog.agent?.name }}</div>
-            <textarea
-              v-model="guidanceDialog.text"
-              rows="4"
-              class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
-              placeholder="输入指引内容，让 AI 执行..."
-            ></textarea>
-            <div class="mt-4 flex justify-end gap-2">
-              <button class="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200" @click="closeGuidanceDialog">取消</button>
-              <button class="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400" @click="submitGuidance">确认指引</button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-    </Teleport>
-
 
     </div>
   </div>

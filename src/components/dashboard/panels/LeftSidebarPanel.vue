@@ -49,7 +49,6 @@ interface Props {
 
 defineProps<Props>()
 const emit = defineEmits<{
-  (e: 'context', payload: { agent: Agent; x: number; y: number }): void
   (e: 'update:brain-view-mode', value: Props['brainViewMode']): void
   (e: 'show-tasks', agent: Agent): void
   (e: 'show-task-detail', payload: { agent: Agent; jobId: string }): void
@@ -111,7 +110,6 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           :member-agents="memberAgents"
           :view-mode="brainViewMode"
           @update:view-mode="emit('update:brain-view-mode', $event)"
-          @context="emit('context', $event)"
           @show-tasks="emit('show-tasks', $event)"
           @show-task-detail="emit('show-task-detail', $event)"
           @chat="emit('chat', $event)"

@@ -44,24 +44,32 @@ export const ZONES: Record<string, Rect> = {
   spawn: { x: 150, y: 560, w: 300, h: 230 },
   library: { x: 790, y: 500, w: 210, h: 130 },
   // 图书馆前石板广场：核心管理员踱步区。
-  plaza: { x: 790, y: 505, w: 430, h: 150 },
-  // 辅助管理员全图漫步（留出边缘与作坊街）
-  wanderAll: { x: 120, y: 140, w: WORLD_W - 280, h: WORLD_H - 380 },
+  plaza: { x: 760, y: 500, w: 1040, h: 130 },
+  // 辅助管理员全图漫步（留出边缘与图书馆/作坊主街）
+  wanderAll: { x: 120, y: 140, w: WORLD_W - 280, h: WORLD_H - 260 },
 }
 
-/** 作坊街：南侧一排插槽 */
+/** 作坊街区：4 列 x 2 排，给每座作坊留出独立地皮与门口活动区。 */
 export const WORKSHOP_SLOTS = 8
-export const WORKSHOP_STREET_Y = 1030
+export const WORKSHOP_COLS = 4
+export const WORKSHOP_START_X = 1090
+export const WORKSHOP_START_Y = 385
+export const WORKSHOP_COL_GAP = 180
+export const WORKSHOP_ROW_GAP = 210
 
-export const workshopSlotPos = (i: number): Point => ({
-  x: 280 + i * 200,
-  y: WORKSHOP_STREET_Y,
-})
+export const workshopSlotPos = (i: number): Point => {
+  const col = i % WORKSHOP_COLS
+  const row = Math.floor(i / WORKSHOP_COLS)
+  return {
+    x: WORKSHOP_START_X + col * WORKSHOP_COL_GAP,
+    y: WORKSHOP_START_Y + row * WORKSHOP_ROW_GAP,
+  }
+}
 
 /** 作坊附近锚区（绑定该 agent 的成员在门口活动） */
 export const workshopZone = (i: number): Rect => {
   const p = workshopSlotPos(i)
-  return { x: p.x - 80, y: p.y + 30, w: 160, h: 90 }
+  return { x: p.x - 48, y: p.y + 70, w: 96, h: 82 }
 }
 
 export const randomPointIn = (zone: Rect, rnd: () => number = Math.random): Point => ({

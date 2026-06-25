@@ -102,6 +102,7 @@ game/
     world/store.ts  ← 数据绑定层（REST 轮询 + Socket.IO → WorldSnapshot，只读）
     world/bindings.ts ← 拖拽绑定/解绑动作：作坊、端侧 agent 的写接口适配
     world/layout.ts ← 地图尺寸 / 建筑坐标 / 锚区矩形 / 作坊插槽
+    world/map.ts    ← 地表网格生成 / 道路广场 / 树木与装饰坐标配置
     world/skins.ts  ← 角色→皮肤映射（普通成员按 id 哈希确定性取色，可被 WorldActorMeta 覆盖）
     world/time.ts   ← 北京时间 / 调试小时 / 昼夜深度等时间规则
     world/workshops.ts ← 作坊贴图、活跃态、保留时长、交互距离等规则

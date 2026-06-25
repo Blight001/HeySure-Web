@@ -5,27 +5,10 @@ interface UseDashboardUiOptions {
   unassignedProjectId: string
   agents: Ref<Agent[]>
   knowledgeBase: Ref<KnowledgeItem[]>
-  addKnowledge: (title: string, author: string, tags: string[]) => void
 }
 
 export const useDashboardUi = (options: UseDashboardUiOptions) => {
-  const { unassignedProjectId, agents, knowledgeBase, addKnowledge } = options
-  const CONTEXT_MENU_WIDTH = 144
-  const CONTEXT_MENU_HEIGHT = 34
-  const CONTEXT_MENU_MARGIN = 8
-
-  const contextMenu = ref({
-    visible: false,
-    x: 0,
-    y: 0,
-    agent: null as Agent | null,
-  })
-
-  const guidanceDialog = ref({
-    visible: false,
-    agent: null as Agent | null,
-    text: '',
-  })
+  const { unassignedProjectId, agents, knowledgeBase } = options
 
   const settingsOpen = ref(false)
   const leftCollapsed = ref(false)
@@ -33,31 +16,6 @@ export const useDashboardUi = (options: UseDashboardUiOptions) => {
   const knowledgeFilterOpen = ref(false)
   const knowledgeFilter = ref<'all' | 'personas' | 'skills' | 'tools' | 'inheritance' | 'system' | 'business'>('all')
   const userMenuOpen = ref(false)
-
-  const clampContextMenuPosition = (x: number, y: number) => {
-    if (typeof window === 'undefined') return { x, y }
-    const maxX = Math.max(CONTEXT_MENU_MARGIN, window.innerWidth - CONTEXT_MENU_WIDTH - CONTEXT_MENU_MARGIN)
-    const maxY = Math.max(CONTEXT_MENU_MARGIN, window.innerHeight - CONTEXT_MENU_HEIGHT - CONTEXT_MENU_MARGIN)
-    return {
-      x: Math.min(Math.max(CONTEXT_MENU_MARGIN, x), maxX),
-      y: Math.min(Math.max(CONTEXT_MENU_MARGIN, y), maxY),
-    }
-  }
-
-  const openContextMenu = (payload: { agent: Agent; x: number; y: number }) => {
-    const position = clampContextMenuPosition(payload.x, payload.y)
-    contextMenu.value = {
-      visible: true,
-      x: position.x,
-      y: position.y,
-      agent: payload.agent,
-    }
-  }
-
-  const closeContextMenu = () => {
-    if (!contextMenu.value.visible) return
-    contextMenu.value.visible = false
-  }
 
   const closeSettings = () => {
     if (!settingsOpen.value) return
@@ -69,39 +27,6 @@ export const useDashboardUi = (options: UseDashboardUiOptions) => {
     knowledgeFilterOpen.value = false
   }
 
-  const openGuidanceDialog = () => {
-    if (!contextMenu.value.agent) return
-    guidanceDialog.value = {
-      visible: true,
-      agent: contextMenu.value.agent,
-      text: '',
-    }
-    closeContextMenu()
-  }
-
-  const closeGuidanceDialog = () => {
-    guidanceDialog.value.visible = false
-    guidanceDialog.value.text = ''
-    guidanceDialog.value.agent = null
-  }
-
-  const submitGuidance = () => {
-    const { agent, text } = guidanceDialog.value
-    if (!agent) return
-    const trimmed = text.trim()
-    if (!trimmed) {
-      closeGuidanceDialog()
-      return
-    }
-    if (agent.status !== 'dead') {
-      agent.currentTask = `执行上帝指引：${trimmed}`
-    } else {
-      agent.summary = `上帝指引：${trimmed}`
-    }
-    addKnowledge(`上帝指引：${trimmed}`, '上帝', ['指引', agent.role === 'admin' ? '系统' : '业务'])
-    closeGuidanceDialog()
-  }
-
   const closeUserMenu = () => {
     if (!userMenuOpen.value) return
     userMenuOpen.value = false
@@ -109,14 +34,12 @@ export const useDashboardUi = (options: UseDashboardUiOptions) => {
 
   const isUnassignedAgent = (agent: Agent) => (agent.projectId || unassignedProjectId) === unassignedProjectId
 
-  const adminAgents = computed(() => agents.value.filter(a => a.role === 'admin' && a.status !== 'dead'))
+  const adminAgents = computed(() => agents.value.filter(a => a.role === 'admin'))
   const sidebarMemberAgents = computed(() => agents.value.filter(
     agent => agent.role === 'worker'
-      && agent.status !== 'dead'
       && isUnassignedAgent(agent)
   ))
-  const activeAgents = computed(() => agents.value.filter(a => a.status !== 'dead').reverse())
-  const deadAgents = computed(() => agents.value.filter(a => a.status === 'dead').reverse())
+  const activeAgents = computed(() => [...agents.value].reverse())
 
   const filteredKnowledgeBase = computed(() => {
     if (knowledgeFilter.value === 'all') return knowledgeBase.value
@@ -142,26 +65,18 @@ export const useDashboardUi = (options: UseDashboardUiOptions) => {
   })
 
   return {
-    contextMenu,
-    guidanceDialog,
     settingsOpen,
     leftCollapsed,
     rightCollapsed,
     knowledgeFilterOpen,
     knowledgeFilter,
     userMenuOpen,
-    openContextMenu,
-    closeContextMenu,
     closeSettings,
     closeKnowledgeFilter,
-    openGuidanceDialog,
-    closeGuidanceDialog,
-    submitGuidance,
     closeUserMenu,
     adminAgents,
     sidebarMemberAgents,
     activeAgents,
-    deadAgents,
     filteredKnowledgeBase,
   }
 }

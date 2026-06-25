@@ -109,7 +109,6 @@ interface AgentProps {
 
 const props = defineProps<AgentProps>()
 const emit = defineEmits<{
-  (e: 'context', payload: { agent: AgentProps['agent']; x: number; y: number }): void
   (e: 'chat', agent: AgentProps['agent']): void
   (e: 'show-tasks', agent: AgentProps['agent']): void
   (e: 'show-task-detail', payload: { agent: AgentProps['agent']; jobId: string }): void
@@ -520,7 +519,6 @@ const onCardPointerUp = (event: PointerEvent) => {
   <div 
     class="agent-card-shell relative bg-white rounded-xl p-4 transition-all duration-300 border shadow-sm hover:shadow-lg hover:-translate-y-1 w-full min-w-0 dark:bg-zinc-900/90 dark:border-zinc-700/50 backdrop-blur-sm group cursor-pointer touch-manipulation"
     :class="[cardBorderClass, cardGlowClass]"
-    @contextmenu.prevent="emit('context', { agent, x: $event.clientX, y: $event.clientY })"
     @dblclick="onCardDblClick"
     @pointerup="onCardPointerUp"
   >
@@ -710,11 +708,8 @@ const onCardPointerUp = (event: PointerEvent) => {
       </div>
     </div>
 
-    <!-- 底部操作栏 (上帝干预)。触屏无 hover，移动端常显 -->
-    <div v-if="canControl && agent.status !== 'dead'" class="flex justify-end gap-2 mt-3 pt-2 border-t border-zinc-50 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity dark:border-zinc-800">
-      <button class="text-xs text-zinc-500 hover:text-indigo-600 px-2 py-1 hover:bg-zinc-50 rounded transition-colors dark:text-zinc-400 dark:hover:text-indigo-300 dark:hover:bg-zinc-800" @click.stop="emit('context', { agent, x: $event.clientX, y: $event.clientY })">
-        指引
-      </button>
+    <!-- 底部操作栏。触屏无 hover，移动端常显 -->
+    <div v-if="canControl" class="flex justify-end gap-2 mt-3 pt-2 border-t border-zinc-50 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity dark:border-zinc-800">
       <button v-if="!isAssistantAdmin" class="text-xs text-zinc-500 hover:text-indigo-600 px-2 py-1 hover:bg-zinc-50 rounded transition-colors dark:text-zinc-400 dark:hover:text-indigo-300 dark:hover:bg-zinc-800" @click.stop="emit('show-tasks', agent)">
         任务列表
       </button>
