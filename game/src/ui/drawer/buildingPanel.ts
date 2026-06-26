@@ -9,8 +9,8 @@ export const openLibraryPanel = (
   portrait?: PortraitSpec | null,
 ) => {
   panel.openPanel({
-    title: '传承知识库',
-    subtitle: '图书馆',
+    title: '图书馆',
+    subtitle: '已生效知识',
     portrait,
     tabs: [
       {

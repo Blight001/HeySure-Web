@@ -1,7 +1,7 @@
 import type { Point } from './layout'
 import type { WorldMember, WorldWorkshop } from './store'
 
-export const LIBRARY_DOOR: Point = { x: 880, y: 510 }
+export const LIBRARY_DOOR: Point = { x: 290, y: 510 }
 export const OFFLINE_KEEP_MS = 60000
 export const INTERACT_RANGE = 96
 

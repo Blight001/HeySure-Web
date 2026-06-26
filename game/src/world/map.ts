@@ -26,26 +26,31 @@ export interface NightGlowSource extends Point {
   pulse?: number
 }
 
-export const MAIN_ROAD_LAMP_TILES = [12, 22, 31, 43, 54] as const
+export const MAIN_ROAD_LAMP_TILES = [12, 21, 29] as const
 export const WORKSHOP_STREET_LAMPS: Point[] = [
   { x: 34, y: 15 },
-  { x: 39, y: 22 },
-  { x: 45, y: 15 },
-  { x: 50, y: 22 },
+  { x: 40, y: 15 },
+  { x: 46, y: 15 },
+  { x: 52, y: 15 },
+  { x: 34, y: 22 },
+  { x: 40, y: 22 },
+  { x: 46, y: 22 },
+  { x: 52, y: 22 },
 ]
 
 export const NIGHT_GLOW_SOURCES: NightGlowSource[] = [
-  { x: 880, y: 438, color: 0xffb866, scaleX: 6, base: 0.35 },
+  { x: 290, y: 418, color: 0xffb866, scaleX: 6, base: 0.35 },
   { x: 290, y: 640, color: 0x7fd8ff, scaleX: 3.2, base: 0.4 },
 ]
 
 export const SPAWN_FENCE_XS = [160, 192, 224, 256, 288, 320, 352, 384, 416] as const
 export const SIGNPOST_POS: Point = { x: 332, y: 668 }
 export const BENCH_POSITIONS: Point[] = [
-  { x: 980, y: 520 },
-  { x: 1370, y: 520 },
-  { x: 1535, y: 710 },
-  { x: 230, y: 700 },
+  { x: 360, y: 510 },
+  ...Array.from({ length: WORKSHOP_SLOTS }, (_, i) => {
+    const pos = workshopSlotPos(i)
+    return { x: pos.x, y: pos.y + 74 }
+  }),
 ]
 
 export const BUTTERFLY_TINTS = [0xffffff, 0xff9ed2, 0x9ed2ff, 0xfff09e] as const
@@ -57,7 +62,7 @@ export const generateGroundMap = (): GroundMap => {
   const path = pathPainter(grid)
 
   paveLibraryPlaza(grid, rnd)
-  paveWorkshopPads(grid, rnd, path)
+  paveWorkshopPads(grid, rnd)
   paveRoads(path)
   plantSpawnFlowerBed(grid, rnd)
 
@@ -113,8 +118,7 @@ const pathPainter = (grid: number[][]) => (x0: number, y0: number, x1: number, y
 const paveRoads = (path: ReturnType<typeof pathPainter>) => {
   // 道路保持 2 格宽；作坊地皮另铺石板，避免整片区域都被道路吞掉。
   path(4, 22, 55, 23) // 主路（东西）
-  path(8, 19, 9, 22) // 出生地支路
-  path(26, 16, 27, 22) // 图书馆支路
+  path(8, 13, 9, 22) // 图书馆 → 出生地 → 主路
   path(30, 15, 55, 16) // 作坊街区北侧门前路
   path(30, 22, 55, 23) // 作坊街区南侧门前路
   path(30, 17, 31, 21) // 作坊街区联络巷
@@ -122,17 +126,13 @@ const paveRoads = (path: ReturnType<typeof pathPainter>) => {
 
 const paveLibraryPlaza = (grid: number[][], rnd: () => number) => {
   for (let y = 12; y <= 16; y++) {
-    for (let x = 23; x <= 30; x++) {
+    for (let x = 6; x <= 12; x++) {
       grid[y][x] = rnd() > 0.5 ? TILES.plazaA : TILES.plazaB
     }
   }
 }
 
-const paveWorkshopPads = (
-  grid: number[][],
-  rnd: () => number,
-  path: ReturnType<typeof pathPainter>,
-) => {
+const paveWorkshopPads = (grid: number[][], rnd: () => number) => {
   for (let i = 0; i < WORKSHOP_SLOTS; i++) {
     const pos = workshopSlotPos(i)
     const tx = Math.floor(pos.x / TILE)
@@ -144,10 +144,6 @@ const paveWorkshopPads = (
         }
       }
     }
-
-    const isNorthRow = i < 4
-    if (isNorthRow) path(tx - 1, ty + 3, tx + 1, ty + 4)
-    else path(tx - 1, ty + 3, tx + 1, ty + 5)
   }
 }
 
@@ -165,8 +161,8 @@ const plantSpawnFlowerBed = (grid: number[][], rnd: () => number) => {
 const scatterTrees = (grid: number[][]): Point[] => {
   const rnd = mulberry32(7)
   const blocked: Rect[] = [
-    { x: 100, y: 480, w: 400, h: 320 }, // 出生地一带
-    { x: 700, y: 250, w: 1080, h: 520 }, // 图书馆、作坊街区与主街
+    { x: 100, y: 330, w: 400, h: 470 }, // 图书馆与出生地一带
+    { x: 900, y: 250, w: 880, h: 520 }, // 作坊街区与主街
     { x: 60, y: 90, w: 360, h: 300 }, // 池塘
   ]
   const inBlocked = (px: number, py: number) =>

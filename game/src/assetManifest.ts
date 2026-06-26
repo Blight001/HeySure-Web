@@ -85,12 +85,12 @@ export const SHEETS: SheetDef[] = [
 
   // ---- 固定建筑 ----
   strip('building_spawn.png', '出生地（泉水）', 'building', 64, 64, 4),
-  strip('building_library.png', '传承知识库（图书馆）· 帧1=待审批亮灯', 'building', 96, 96, 2, 2),
+  strip('building_library.png', '图书馆 · 帧1=待审批亮灯', 'building', 96, 96, 2, 2),
 
   // ---- 动态作坊 ----
   strip('building_workshop_desktop.png', '作坊·机械坊（桌面 agent）', 'building', 64, 64, 4),
   strip('building_workshop_browser.png', '作坊·瞭望塔（浏览器 agent）', 'building', 64, 80, 4),
-  strip('building_workshop_knowledge.png', '作坊·图书馆（知识与进化）', 'building', 64, 80, 4),
+  strip('building_workshop_knowledge.png', '作坊·知识与进化', 'building', 64, 80, 4),
   strip('building_workshop_android.png', '作坊·移动信号坊（安卓 agent）', 'building', 64, 80, 4),
 
   // ---- 角色 ----

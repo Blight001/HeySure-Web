@@ -17,7 +17,7 @@ export const openWorkshopPanel = (
       ? '瞭望塔（浏览器 Agent）'
       : w.type === 'android'
         ? '移动工坊（安卓端）'
-        : '图书馆'
+        : '知识与进化作坊'
   panel.openPanel({
     title: `${typeTitle} · ${w.name}`,
     subtitle: w.lifecycle === 'dispatching' ? '执行中' : '在线',

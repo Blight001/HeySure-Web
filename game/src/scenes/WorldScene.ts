@@ -462,13 +462,13 @@ export class WorldScene extends Phaser.Scene {
     }
     // 主路灯柱（夜晚自动点亮 + 暖光光晕）
     for (const tx of MAIN_ROAD_LAMP_TILES) {
-      const lamp = deco('lamp.png', tx * TILE + 16, 21 * TILE - 2)
+      const lamp = deco('lamp.png', tx * TILE + 16, 22 * TILE - 2)
       this.lamps.push(lamp)
       this.addStreetLampGlow(lamp)
     }
-    // 作坊街区灯柱沿上下两条门前路错开，避免压住建筑和门口。
+    // 作坊街区灯柱沿两条 2 格宽道路的同一侧等距排布。
     for (const pos of WORKSHOP_STREET_LAMPS) {
-      const lamp = deco('lamp.png', pos.x * TILE + 16, pos.y * TILE + 10)
+      const lamp = deco('lamp.png', pos.x * TILE + 16, pos.y * TILE - 2)
       this.lamps.push(lamp)
       this.addStreetLampGlow(lamp)
     }

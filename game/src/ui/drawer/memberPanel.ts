@@ -16,6 +16,13 @@ const TINT_PRESETS = ['#ff9aa2', '#ffd166', '#9be564', '#6ec5ff', '#c69aff', '#f
 /** 光环颜色预设（ADD 混合发光） */
 const AURA_PRESETS = ['#ffd700', '#7fd8ff', '#c69aff', '#9bff8a', '#ff8ad8']
 
+const workshopTypeLabel = (type: WorldSnapshot['workshops'][number]['type'] | undefined): string => {
+  if (type === 'browser') return '瞭望塔'
+  if (type === 'android') return '移动工坊'
+  if (type === 'workshop') return '知识与进化作坊'
+  return '机械坊'
+}
+
 export const openMemberPanel = (
   panel: PanelController,
   m: WorldMember,
@@ -90,7 +97,7 @@ const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapsh
     const item = document.createElement('div')
     item.className = 'd-item'
     const label = document.createElement('span')
-    label.textContent = `${w?.name || deviceId}（${w?.type === 'browser' ? '瞭望塔' : '机械坊'}）`
+    label.textContent = `${w?.name || deviceId}（${workshopTypeLabel(w?.type)}）`
     const un = document.createElement('button')
     un.type = 'button'
     un.className = 'd-btn warn'
@@ -108,7 +115,7 @@ const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapsh
     sel.innerHTML =
       `<option value="">选择作坊以绑定本成员…</option>` +
       freeWorkshops
-        .map(w => `<option value="${esc(w.deviceId)}">${esc(w.name)}（${w.type === 'browser' ? '瞭望塔' : '机械坊'}${w.aiConfigId ? ' · 已有成员' : ''}）</option>`)
+        .map(w => `<option value="${esc(w.deviceId)}">${esc(w.name)}（${workshopTypeLabel(w.type)}${w.aiConfigId ? ' · 已有成员' : ''}）</option>`)
         .join('')
     const bd = document.createElement('button')
     bd.type = 'button'
