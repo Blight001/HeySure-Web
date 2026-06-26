@@ -32,6 +32,9 @@ const characterAnims: Record<string, SheetAnim> = {
   walk_up: { frames: [12, 13, 14, 15], fps: 6, repeat: true },
   stand: { frames: [0], fps: 1, repeat: false },
   idle_blink: { frames: [0, 16], fps: 2, repeat: true },
+  // 待机活动动画（利用现有帧，不需要重新生成资产）
+  look_around: { frames: [0, 4, 0, 8, 0, 12, 0], fps: 2, repeat: false },  // 环顾四方（3.5 s）
+  wave: { frames: [8, 9, 10, 9, 8, 0], fps: 4, repeat: false },             // 挥手（1.5 s）
   sit: { frames: [17], fps: 1, repeat: false },
   collapse: { frames: [18], fps: 1, repeat: false },
   lying: { frames: [19], fps: 1, repeat: false },

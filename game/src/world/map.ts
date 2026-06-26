@@ -28,6 +28,11 @@ export interface NightGlowSource extends Point {
   pulse?: number
 }
 
+const POND_X1 = 3
+const POND_X2 = 11
+const POND_Y1 = 4
+const POND_Y2 = 10
+
 const WORKSHOP_STREET = {
   left: Math.floor(workshopSlotPos(0).x / TILE) - 2,
   right: Math.floor(workshopSlotPos(WORKSHOP_COLS - 1).x / TILE) + 2,
@@ -47,47 +52,40 @@ export const WORKSHOP_STREET_LAMPS: Point[] = Array.from({ length: WORKSHOP_COLS
 
 export const NIGHT_GLOW_SOURCES: NightGlowSource[] = [
   { x: LIBRARY_DEVICE_POS.x, y: LIBRARY_DEVICE_POS.y + 8, color: 0xffb866, scaleX: 6, base: 0.35 },
-  { x: 290, y: 636, color: 0x7fd8ff, scaleX: 4.4, scaleY: 3.2, base: 0.42, pulse: 0.18 },
-  { x: 290, y: 668, color: 0x9df7d6, scaleX: 7.8, scaleY: 2.2, base: 0.2, pulse: 0.08 },
+  { x: 194, y: 732, color: 0x7fd8ff, scaleX: 4.4, scaleY: 3.2, base: 0.42, pulse: 0.18 },
+  { x: 194, y: 764, color: 0x9df7d6, scaleX: 7.8, scaleY: 2.2, base: 0.2, pulse: 0.08 },
 ]
 
-export const SIGNPOST_POS: Point = { x: 332, y: 668 }
+export const SIGNPOST_POS: Point = { x: 236, y: 764 }
 export const SPAWN_LAMP_TILES: Point[] = [
-  { x: 5, y: 20 },
-  { x: 13, y: 20 },
-  { x: 7, y: 24 },
-  { x: 11, y: 24 },
+  { x: 2, y: 23 },
+  { x: 10, y: 23 },
+  { x: 4, y: 27 },
+  { x: 8, y: 27 },
 ] as const
 export const SPAWN_BUTTERFLY_POINTS: Point[] = [
-  { x: 205, y: 592 },
-  { x: 248, y: 724 },
-  { x: 342, y: 578 },
-  { x: 395, y: 715 },
+  { x: 109, y: 688 },
+  { x: 152, y: 820 },
+  { x: 246, y: 674 },
+  { x: 299, y: 811 },
 ] as const
+// 图书馆四周装饰精简：每类仅保留一对，避免广场过于拥挤。
 export const LIBRARY_CORE_LAMP_POINTS: Point[] = [
   { x: LIBRARY_DEVICE_POS.x - 112, y: LIBRARY_DEVICE_POS.y + 40 },
   { x: LIBRARY_DEVICE_POS.x + 112, y: LIBRARY_DEVICE_POS.y + 40 },
-  { x: LIBRARY_DEVICE_POS.x - 84, y: LIBRARY_DEVICE_POS.y + 108 },
-  { x: LIBRARY_DEVICE_POS.x + 84, y: LIBRARY_DEVICE_POS.y + 108 },
 ] as const
 export const LIBRARY_SPARKLE_POINTS: Point[] = [
   { x: LIBRARY_DEVICE_POS.x - 76, y: LIBRARY_DEVICE_POS.y + 6 },
   { x: LIBRARY_DEVICE_POS.x + 76, y: LIBRARY_DEVICE_POS.y + 6 },
-  { x: LIBRARY_DEVICE_POS.x - 42, y: LIBRARY_DEVICE_POS.y + 86 },
-  { x: LIBRARY_DEVICE_POS.x + 42, y: LIBRARY_DEVICE_POS.y + 86 },
   { x: LIBRARY_DEVICE_POS.x, y: LIBRARY_DEVICE_POS.y - 84 },
 ] as const
 export const LIBRARY_OBELISK_POINTS: Point[] = [
   { x: LIBRARY_DEVICE_POS.x - 138, y: LIBRARY_DEVICE_POS.y + 54 },
   { x: LIBRARY_DEVICE_POS.x + 138, y: LIBRARY_DEVICE_POS.y + 54 },
-  { x: LIBRARY_DEVICE_POS.x - 118, y: LIBRARY_DEVICE_POS.y + 126 },
-  { x: LIBRARY_DEVICE_POS.x + 118, y: LIBRARY_DEVICE_POS.y + 126 },
 ] as const
 export const LIBRARY_BANNER_POINTS: Point[] = [
   { x: LIBRARY_DEVICE_POS.x - 86, y: LIBRARY_DEVICE_POS.y - 18 },
   { x: LIBRARY_DEVICE_POS.x + 86, y: LIBRARY_DEVICE_POS.y - 18 },
-  { x: LIBRARY_DEVICE_POS.x - 156, y: LIBRARY_DEVICE_POS.y + 92 },
-  { x: LIBRARY_DEVICE_POS.x + 156, y: LIBRARY_DEVICE_POS.y + 92 },
 ] as const
 export const LIBRARY_BOOK_STAND_POINTS: Point[] = [
   { x: LIBRARY_DEVICE_POS.x - 48, y: LIBRARY_DEVICE_POS.y + 122 },
@@ -108,10 +106,10 @@ export const BUTTERFLY_TINTS = [0xffffff, 0xff9ed2, 0x9ed2ff, 0xfff09e] as const
 export const isWorldBlocked = (p: Point): boolean => {
   const tx = Math.floor(p.x / TILE)
   const ty = Math.floor(p.y / TILE)
-  const inPond = tx >= 3 && tx <= 11 && ty >= 4 && ty <= 10
+  const inPond = tx >= POND_X1 && tx <= POND_X2 && ty >= POND_Y1 && ty <= POND_Y2
   if (inPond) return true
 
-  const inSpawnFountain = Math.hypot((p.x - 290) / 58, (p.y - 648) / 38) <= 1
+  const inSpawnFountain = Math.hypot((p.x - 194) / 58, (p.y - 744) / 38) <= 1
   if (inSpawnFountain) return true
 
   return false
@@ -158,9 +156,9 @@ const createGrassField = (rnd: () => number): number[][] => {
 
 const carvePond = (grid: number[][], rnd: () => number): Point[] => {
   const waterTiles: Point[] = []
-  for (let y = 4; y <= 10; y++) {
-    for (let x = 3; x <= 11; x++) {
-      const edge = y === 4 || y === 10 || x === 3 || x === 11
+  for (let y = POND_Y1; y <= POND_Y2; y++) {
+    for (let x = POND_X1; x <= POND_X2; x++) {
+      const edge = y === POND_Y1 || y === POND_Y2 || x === POND_X1 || x === POND_X2
       if (edge && rnd() > 0.45) continue
       grid[y][x] = rnd() > 0.5 ? TILES.waterA : TILES.waterB
       waterTiles.push({ x, y })
@@ -223,10 +221,10 @@ const paveWorkshopPads = (grid: number[][], rnd: () => number) => {
 }
 
 const decorateSpawnGround = (grid: number[][], rnd: () => number) => {
-  const cx = 9
-  const cy = 20
-  for (let y = 16; y <= 25; y++) {
-    for (let x = 4; x <= 14; x++) {
+  const cx = 6
+  const cy = 23
+  for (let y = 19; y <= 28; y++) {
+    for (let x = 1; x <= 12; x++) {
       const d = Math.hypot((x - cx) * 0.9, (y - cy) * 1.15)
       if (d <= 1.7) {
         grid[y][x] = rnd() > 0.45 ? TILES.plazaA : TILES.plazaB

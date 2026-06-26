@@ -1,9 +1,7 @@
 /**
- * 底部信息面板：点击成员/建筑后的查看 + 操作面板。
+ * 右侧信息面板：点击成员/建筑后的查看 + 操作面板。
  *
- * 游戏化改造（2026-06-13）：
- *  - 由右侧抽屉改为**底部面板**，左上角显示被点对象的"上半身"头像（角色/建筑）。
- *  - 内容按"栏目（标签页）"组织——底部高度有限，内容多时用户切标签查看，不再被截断。
+ * 布局：右侧抽屉，顶部头像 + 横排标签页 + 内容区（含可选的对话侧栏）。
  *
  * 设计原则（方案 §0①）：面板只是现有 REST 链路的调用方——
  * 启停=toggleAiRun、绑定=assignDeviceAi、审批=librarian approve/reject、
@@ -42,24 +40,22 @@ export class Drawer implements PanelController {
     this.el = document.createElement('div')
     this.el.className = 'gw-panel'
     this.el.innerHTML = `
-      <div class="gp-main">
-        <div class="gp-content">
-          <div class="gp-body"></div>
-          <div class="gp-side"></div>
-        </div>
-      </div>
       <div class="gp-rail">
-        <div class="gp-portrait">
+        <button class="gp-close" type="button">✕</button>
+        <div class="gp-head">
           <div class="gp-port-frame"></div>
           <div class="gp-port-meta">
             <div class="gp-port-name"></div>
             <div class="gp-port-sub"></div>
-            <div class="gp-port-info"></div>
           </div>
         </div>
-        <div class="gp-tabbar">
-          <div class="gp-tabs"></div>
-          <button class="gp-close" type="button">✕</button>
+        <div class="gp-port-info"></div>
+        <div class="gp-tabs"></div>
+      </div>
+      <div class="gp-main">
+        <div class="gp-content">
+          <div class="gp-body"></div>
+          <div class="gp-side"></div>
         </div>
       </div>
     `
@@ -110,7 +106,7 @@ export class Drawer implements PanelController {
     this.portraitInfo.innerHTML = ''
     this.sideEl.innerHTML = ''
     this.sideEl.classList.remove('open')
-    if (opts.portrait) this.portraitFrame.appendChild(renderPortrait(opts.portrait, 96))
+    if (opts.portrait) this.portraitFrame.appendChild(renderPortrait(opts.portrait, 52))
 
     this.tabsEl.innerHTML = ''
     this.bodyEl.innerHTML = ''

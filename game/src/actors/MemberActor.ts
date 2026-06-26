@@ -10,16 +10,20 @@ import { EMOTES } from '../assetManifest'
 import { clampToWorld, randomPointIn, type Point, type Rect } from '../world/layout'
 import { isWorldBlocked } from '../world/map'
 import type { WorldMember } from '../world/store'
+import { speechPreview } from '../world/format'
 
-const WALK_SPEED = 42 // px/s
+const WALK_SPEED = 34 // px/s（放慢步伐，整体更从容）
 const CONTROL_SPEED = 150 // px/s，玩家操控辅助管理员时的移动速度
 const ARRIVE_EPS = 4
+const STUCK_MS = 1400 // 朝目标方向超过该时长无明显靠近 → 判定被障碍挡死，换新目标
 const HITBOX_W = 44
 const HITBOX_H = 70
 const HITBOX_TOP = -68
 const TOKEN_BAR_W = 34
 const TOKEN_BAR_H = 5
 const SPEECH_W = 260
+const SHADOW_RX = 18
+const SHADOW_RY = 6
 
 const walkablePointIn = (zone: Rect): Point => {
   for (let i = 0; i < 16; i++) {
@@ -30,6 +34,10 @@ const walkablePointIn = (zone: Rect): Point => {
 }
 
 const blockedAwareStep = (from: Point, dx: number, dy: number): Point | null => {
+  // 已身处障碍内部（被拖拽丢进喷泉/水池，或异常落点）：直接朝目标迈步逃离。
+  // 否则每个微小步都仍在障碍内 → 永远 null → 永久卡死。
+  if (isWorldBlocked(from)) return clampToWorld({ x: from.x + dx, y: from.y + dy })
+
   const next = clampToWorld({ x: from.x + dx, y: from.y + dy })
   if (!isWorldBlocked(next)) return next
 
@@ -56,23 +64,14 @@ const hexToColor = (hex: string): number | null => {
   return parseInt(hex.slice(1), 16)
 }
 
-const speechPreview = (raw: string): string => {
-  const cleaned = String(raw || '')
-    .replace(/```[^\n]*\n?/g, '')
-    .replace(/<\/?think>/gi, '')
-    .replace(/__HS_MCP_STATE__=.*$/s, '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-  return cleaned
-}
-
 export class MemberActor extends Phaser.GameObjects.Container {
   readonly memberId: number
   member: WorldMember
+  private shadow: Phaser.GameObjects.Graphics
   private sprite: Phaser.GameObjects.Sprite
   private bag: Phaser.GameObjects.Image
   private tokenBar: Phaser.GameObjects.Graphics
+  private nameTag: Phaser.GameObjects.Text
   private emote: Phaser.GameObjects.Image
   private speechBubble: Phaser.GameObjects.Graphics
   private speechText: Phaser.GameObjects.Text
@@ -84,8 +83,16 @@ export class MemberActor extends Phaser.GameObjects.Container {
   private target: Point | null = null
   private via: Point | null = null
   private idleUntil = 0
+  // 进展跟踪：检测"朝目标走却被障碍长期挡住"，避免在喷泉/水池边缘原地打转
+  private progressTarget: Point | null = null
+  private progressBest = Infinity
+  private progressSince = 0
+  /** 当前待机小动作的结束时间戳（到期后换下一个活动） */
+  private idlePhaseUntil = 0
   private dying = false
   private dragging = false
+  /** Y 轴弹跳 tween（高兴/活跃待机时播放） */
+  private bobTween: Phaser.Tweens.Tween | null = null
   /** 玩家接管辅助管理员：停止自治游荡，改由 WSAD 驱动；不显示血条 */
   private controlled = false
   private stationary = false
@@ -100,6 +107,12 @@ export class MemberActor extends Phaser.GameObjects.Container {
     this.member = member
     this.skin = skin
     this.zone = zone
+
+    // 脚下椭圆阴影（最底层渲染）
+    this.shadow = scene.add.graphics()
+    this.shadow.fillStyle(0x000000, 0.2)
+    this.shadow.fillEllipse(0, 0, SHADOW_RX * 2, SHADOW_RY * 2)
+    this.add(this.shadow)
 
     // 光环垫在角色脚下（ADD 混合），由外观自定义开关
     this.aura = scene.add.image(0, -6, 'glow.png', 0)
@@ -122,6 +135,17 @@ export class MemberActor extends Phaser.GameObjects.Container {
 
     this.tokenBar = scene.add.graphics()
     this.add(this.tokenBar)
+
+    // 头顶名牌（在 emote 下方渲染，emote 会遮盖在上方）
+    this.nameTag = scene.add.text(0, -52, member.name || `#${member.id}`, {
+      fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
+      fontSize: '10px',
+      color: '#eef2ff',
+      backgroundColor: '#0f1420cc',
+      padding: { x: 4, y: 2 },
+    })
+    this.nameTag.setOrigin(0.5, 0)
+    this.add(this.nameTag)
 
     this.emote = scene.add.image(0, -84, 'emotes.png', 0)
     this.emote.setVisible(false)
@@ -167,6 +191,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
     this.dragging = true
     this.target = null
     this.via = null
+    this.stopBob()
     this.sprite.stop()
     this.sprite.setFrame(0)
     this.setAlpha(0.85)
@@ -192,6 +217,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
     if (on) {
       this.target = null
       this.via = null
+      this.stopBob()
       this.sprite.stop()
       this.sprite.setFrame(0)
       this.setAlpha(1)
@@ -213,6 +239,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
     if (on) {
       this.target = null
       this.via = null
+      this.stopBob()
       this.sprite.stop()
       this.sprite.setFrame(0)
     } else if (!this.controlled && this.member.enabled) {
@@ -242,6 +269,8 @@ export class MemberActor extends Phaser.GameObjects.Container {
       this.sprite.stop()
       this.sprite.setTexture(skin, 0)
     }
+    this.nameTag.setText(member.name || `#${member.id}`)
+    this.nameTag.setAlpha(member.enabled ? 1 : 0.55)
     this.applyAppearance(member)
     this.refreshBag()
     this.refreshEmote()
@@ -250,6 +279,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
     // 停用：原地坐下打瞌睡
     if (!member.enabled && !this.dying) {
       this.target = null
+      this.stopBob()
       this.sprite.stop()
       this.sprite.setFrame(17) // sit
       this.sprite.setAlpha(0.75)
@@ -260,6 +290,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
 
   /** 应用外观自定义（调色 / 体型 / 光环）；抽屉调参时也用于实时预览 */
   applyAppearance(a: ActorAppearance) {
+    this.stopBob() // 体型/位置变化前先停弹跳，避免 tween 与 y 赋值冲突
     const tint = hexToColor(a.tint)
     if (tint !== null) this.sprite.setTint(tint)
     else this.sprite.clearTint()
@@ -269,6 +300,10 @@ export class MemberActor extends Phaser.GameObjects.Container {
     this.sprite.y = -24 * scale // 体型变化时保持脚底贴地
     this.bag.setScale(scale)
     this.bag.y = -24 * scale + 8 // 随体型保持腰侧位置
+    // 阴影随体型缩放
+    this.shadow.clear()
+    this.shadow.fillStyle(0x000000, 0.2)
+    this.shadow.fillEllipse(0, 0, SHADOW_RX * 2 * scale, SHADOW_RY * 2 * scale)
 
     const auraColor = hexToColor(a.aura)
     this.auraOn = auraColor !== null
@@ -341,6 +376,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
   }
 
   private refreshSpeechBubble() {
+    if (Date.now() < this.speechOverrideUntil) return
     const taskRunning = this.member.taskStatus === 'running'
     const text = speechPreview(this.member.latestSpeech)
     const visible = taskRunning && !!text && this.member.enabled && !this.dying
@@ -365,6 +401,38 @@ export class MemberActor extends Phaser.GameObjects.Container {
   }
 
   private emoteOverrideUntil = 0
+  private speechOverrideUntil = 0
+
+  /**
+   * 收信时临时显示消息内容气泡（任务进行中不触发，避免覆盖推理输出）。
+   * 到期后自动恢复原气泡状态。
+   */
+  showReceivedMessage(text: string, durationMs = 2800) {
+    if (this.dying || !text.trim() || this.member.taskStatus === 'running') return
+    this.speechOverrideUntil = Date.now() + durationMs
+
+    this.speechText.setText(text)
+    const h = Math.max(28, this.speechText.height + 14)
+    const x = -SPEECH_W / 2
+    const y = -94 - h
+    this.speechText.setPosition(x + 9, y + 7)
+
+    const g = this.speechBubble
+    g.clear()
+    g.fillStyle(0xffffff, 0.97)
+    g.fillRoundedRect(x, y, SPEECH_W, h, 7)
+    g.lineStyle(2, 0x6d5bd0, 0.62)
+    g.strokeRoundedRect(x, y, SPEECH_W, h, 7)
+    g.fillStyle(0xffffff, 0.97)
+    g.fillTriangle(-8, y + h - 1, 0, y + h + 10, 8, y + h - 1)
+
+    this.speechBubble.setVisible(true)
+    this.speechText.setVisible(true)
+
+    this.scene.time.delayedCall(durationMs, () => {
+      if (this.scene) this.refreshSpeechBubble()
+    })
+  }
 
   /** 临时盖一个表情（信使送达/收信等演出），到期恢复状态表情 */
   flashEmote(kind: keyof typeof EMOTES, durationMs = 2200) {
@@ -442,14 +510,33 @@ export class MemberActor extends Phaser.GameObjects.Container {
           // 到达途经点：短暂停留后回锚区
           this.via = null
           this.target = null
-          this.idleUntil = time + 1500
+          this.idleUntil = time + 2500
         } else {
           this.target = null
-          this.idleUntil = time + 1800 + Math.random() * 5200
+          this.idleUntil = time + 4000 + Math.random() * 10000 // 4–14 s 的悠闲驻留
         }
+        this.idlePhaseUntil = 0 // 到达目的地：立即开始第一个待机活动
         this.sprite.stop()
         this.sprite.setFrame(0)
       } else {
+        // 长期无法靠近目标（被喷泉/水池挡住绕不过去）：放弃当前目标，换新点，避免卡死。
+        if (this.target !== this.progressTarget) {
+          this.progressTarget = this.target
+          this.progressBest = dist
+          this.progressSince = time
+        } else if (dist < this.progressBest - 0.5) {
+          this.progressBest = dist
+          this.progressSince = time
+        } else if (time - this.progressSince > STUCK_MS) {
+          this.target = null
+          this.progressTarget = null
+          this.via = null
+          this.idleUntil = time + 600 + Math.random() * 900
+          this.sprite.stop()
+          this.sprite.setFrame(0)
+          this.syncDepth()
+          return true
+        }
         const step = (WALK_SPEED * deltaMs) / 1000
         const np = blockedAwareStep(
           { x: this.x, y: this.y },
@@ -481,16 +568,130 @@ export class MemberActor extends Phaser.GameObjects.Container {
       }
     } else if (time >= this.idleUntil) {
       // 区内游荡：挑下一个点
+      this.stopBob()
+      this.idlePhaseUntil = 0
       this.target = walkablePointIn(this.zone)
+    } else {
+      // 待机期：循环播放小动作（仅视口内角色才切换动画）
+      if (this.isOnScreen() && time >= this.idlePhaseUntil) {
+        this.pickIdleActivity(time)
+      }
     }
     this.syncDepth()
     return true
   }
 
+  // ---------------------------------------------------------------- 待机活动系统
+
+  /** 停止 Y 轴弹跳 tween，恢复精灵到基准位置 */
+  private stopBob() {
+    if (this.bobTween) {
+      this.bobTween.stop()
+      // tween 的 onStop 回调负责把 sprite.y 归位和清空 bobTween
+    }
+  }
+
+  /** 开始一段弹跳小动作（sprite 局部 Y 轴弹跳，不影响 Container 位置） */
+  private startBob() {
+    if (this.bobTween || !this.scene || !this.active) return
+    const baseY = this.sprite.y
+    const restore = () => {
+      if (this.active) this.sprite.y = baseY
+      this.bobTween = null
+    }
+    this.bobTween = this.scene.tweens.add({
+      targets: this.sprite,
+      y: baseY - 4,
+      duration: 300,
+      yoyo: true,
+      repeat: 4,
+      ease: 'Sine.easeInOut',
+      onComplete: restore,
+      onStop: restore,
+    })
+  }
+
+  /**
+   * 根据当前成员状态与角色触发一次语境表情（bulb / magnifier / scroll）。
+   * 在坐下、环顾等动作切换时调用，增加角色个性感。
+   */
+  private triggerRoleEmote() {
+    if (this.dying || !this.member.enabled) return
+    const m = this.member
+    if (m.taskStatus === 'running') return // 任务进行中不抢占气泡
+    if (m.role === 'librarian') {
+      this.flashEmote('bulb', 1800)
+    } else if (m.role === 'assistant_admin') {
+      this.flashEmote('magnifier', 1600)
+    } else if (m.runtimeStatus === 'running') {
+      this.flashEmote('scroll', 1400)
+    } else if (m.lifecycle === 'learning' && Math.random() < 0.5) {
+      this.flashEmote('scroll', 1400)
+    }
+  }
+
+  /**
+   * 从五种待机活动中随机选一种执行：
+   *   idle_blink — 原地站立+眨眼（最常见）
+   *   look_around — 转头环顾（7 帧 / 2fps ≈ 3.5 s）
+   *   sit — 坐下小憩（2.5–5.5 s）
+   *   wave — 挥手（6 帧 / 5fps ≈ 1.2 s）
+   *   bob+blink — 原地轻跳+眨眼（快乐/活跃时）
+   */
+  private pickIdleActivity(time: number) {
+    this.stopBob()
+    const m = this.member
+    const busyWorking = m.taskStatus === 'running' || m.runtimeStatus === 'running'
+    const roll = Math.random()
+
+    if (busyWorking) {
+      // 正在工作：只用眨眼或轻跳，不坐下、不挥手
+      if (roll < 0.55) {
+        this.sprite.play(`${this.skin}:idle_blink`, true)
+        this.idlePhaseUntil = time + 3500 + Math.random() * 3000
+      } else {
+        this.sprite.play(`${this.skin}:idle_blink`, true)
+        this.startBob()
+        this.idlePhaseUntil = time + 3000 + Math.random() * 2500
+      }
+      return
+    }
+
+    // 切换活动时以 35% 概率触发角色专属表情
+    if (Math.random() < 0.35) this.triggerRoleEmote()
+
+    if (roll < 0.30) {
+      // 原地眨眼（最常见，悠然伫立 4–9 s）
+      this.sprite.play(`${this.skin}:idle_blink`, true)
+      this.idlePhaseUntil = time + 4000 + Math.random() * 5000
+    } else if (roll < 0.50) {
+      // 转头环顾四方（动画约 3.5 s，再站立一会儿，共 6–8 s）
+      this.sprite.play(`${this.skin}:look_around`, true)
+      this.idlePhaseUntil = time + 6000 + Math.random() * 2000
+    } else if (roll < 0.65) {
+      // 坐下小憩（6–13 s）
+      this.sprite.stop()
+      this.sprite.setFrame(17)
+      this.idlePhaseUntil = time + 6000 + Math.random() * 7000
+    } else if (roll < 0.80) {
+      // 挥手（动画约 1.5 s，再静立一会儿，共 4–6 s）
+      this.sprite.play(`${this.skin}:wave`, true)
+      this.idlePhaseUntil = time + 4000 + Math.random() * 2000
+    } else {
+      // 轻跳+眨眼（4–7 s）
+      this.sprite.play(`${this.skin}:idle_blink`, true)
+      this.startBob()
+      this.idlePhaseUntil = time + 4000 + Math.random() * 3000
+    }
+  }
+
+  // ---------------------------------------------------------------- 生命结束
+
   /** 死亡演出：踉跄倒地 → 渐隐移除 */
   die(onDone: () => void) {
     if (this.dying) return
     this.dying = true
+    this.stopBob()
     this.target = null
     this.emote.setFrame(EMOTES.skull)
     this.emote.setVisible(true)

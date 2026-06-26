@@ -1,5 +1,7 @@
 import { MEMBER_SKINS } from '../../assetManifest'
 import type { WorldMember, WorldSnapshot } from '../../world/store'
+import { speechPreview } from '../../world/format'
+import { MEMBER_ROLE_LABELS } from '../worldText'
 import type { PortraitSpec } from '../portrait'
 import { esc } from './dom'
 import type { AppearanceDraft, PanelController } from './types'
@@ -16,14 +18,6 @@ const TINT_PRESETS = ['#ff9aa2', '#ffd166', '#9be564', '#6ec5ff', '#c69aff', '#f
 /** 光环颜色预设（ADD 混合发光） */
 const AURA_PRESETS = ['#ffd700', '#7fd8ff', '#c69aff', '#9bff8a', '#ff8ad8']
 
-const speechPreview = (raw: string): string => String(raw || '')
-  .replace(/```[^\n]*\n?/g, '')
-  .replace(/<\/?think>/gi, '')
-  .replace(/__HS_MCP_STATE__=.*$/s, '')
-  .replace(/\r\n/g, '\n')
-  .replace(/\n{3,}/g, '\n\n')
-  .trim()
-
 const workshopTypeLabel = (type: WorldSnapshot['workshops'][number]['type'] | undefined): string => {
   if (type === 'browser') return '瞭望塔'
   if (type === 'android') return '移动工坊'
@@ -37,15 +31,9 @@ export const openMemberPanel = (
   snap: WorldSnapshot,
   portrait?: PortraitSpec | null,
 ) => {
-  const roleLabel: Record<WorldMember['role'], string> = {
-    core_admin: '核心管理员',
-    assistant_admin: '辅助管理员',
-    librarian: '图书管理员',
-    member: '数字成员',
-  }
   panel.openPanel({
     title: m.name,
-    subtitle: `${roleLabel[m.role]} · 第 ${m.generation} 代`,
+    subtitle: `${MEMBER_ROLE_LABELS[m.role]} · 第 ${m.generation} 代`,
     portrait,
     tabs: [
       { name: '派任务', build: () => memberTaskTab(panel, m) },
@@ -101,13 +89,6 @@ const renderMemberSpeech = (panel: PanelController, m: WorldMember) => {
     empty.textContent = '暂无对话内容'
     host.appendChild(empty)
   }
-
-  const chatBtn = document.createElement('button')
-  chatBtn.type = 'button'
-  chatBtn.className = 'd-btn'
-  chatBtn.textContent = '打开对话'
-  chatBtn.onclick = () => panel.actions.openChat(m.id)
-  host.appendChild(chatBtn)
 }
 
 const memberOpsTab = (panel: PanelController, m: WorldMember) => {

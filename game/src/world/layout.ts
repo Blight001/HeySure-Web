@@ -32,7 +32,8 @@ export interface FixedBuildingDef {
 }
 
 export const FIXED_BUILDINGS: FixedBuildingDef[] = [
-  { key: 'spawn', sheet: 'building_spawn.png', label: '出生地', pos: { x: 290, y: 640 }, scale: 1.7 },
+  // 出生地下移并左移到主路 T 形路口左侧，让出脚下的南北主路。
+  { key: 'spawn', sheet: 'building_spawn.png', label: '出生地', pos: { x: 194, y: 736 }, scale: 1.7 },
 ]
 
 /** 在线图书馆设备：固定放在出生地上方原知识库地块。 */
@@ -44,7 +45,7 @@ export const LIBRARY_DEVICE_SCALE = 1.7
 
 /** 角色锚区（成员在矩形内游荡） */
 export const ZONES: Record<string, Rect> = {
-  spawn: { x: 150, y: 560, w: 300, h: 230 },
+  spawn: { x: 54, y: 656, w: 300, h: 230 },
   library: { x: 190, y: 465, w: 260, h: 120 },
   // 图书馆前石板广场：核心管理员踱步区。
   plaza: { x: 170, y: 455, w: 300, h: 135 },
@@ -55,7 +56,8 @@ export const ZONES: Record<string, Rect> = {
 /** 作坊街区：6 列 x 2 排，给每座设备留出独立地皮与门口活动区。 */
 export const WORKSHOP_SLOTS = 12
 export const WORKSHOP_COLS = 6
-export const WORKSHOP_START_X = 544
+// 整条作坊街右移一格（+TILE），让上行连接路不再压到图书馆地板。
+export const WORKSHOP_START_X = 576
 export const WORKSHOP_START_Y = 385
 export const WORKSHOP_COL_GAP = 140
 export const WORKSHOP_ROW_GAP = 210

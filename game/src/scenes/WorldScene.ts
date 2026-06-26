@@ -67,7 +67,6 @@ export class WorldScene extends Phaser.Scene {
   private buildings = new Map<string, Phaser.GameObjects.Sprite>()
   private snap: WorldSnapshot | null = null
   private draggingActor: MemberActor | null = null
-  private pendingMemberClick: { memberId: number; timer: Phaser.Time.TimerEvent } | null = null
   /** 演出触发用：上一轮快照的代数 */
   private prevGeneration = new Map<number, number>()
   private bgmMuted = false
@@ -97,6 +96,16 @@ export class WorldScene extends Phaser.Scene {
    */
   private governorMode = false
   private governorId: number | null = null
+  /** 相机拖拽惯性速度（world px/frame） */
+  private camVx = 0
+  private camVy = 0
+  private camDragging = false
+  /** 成员长按计时（长按 500ms 打开聊天） */
+  private memberLongPressTimer: Phaser.Time.TimerEvent | null = null
+  private memberLongPressId: number | null = null
+  /** 拖拽落点高亮 */
+  private dragHoveredDeviceId: string | null = null
+  private dragHoveredSpawn = false
   private moveKeys!: Record<string, Phaser.Input.Keyboard.Key>
   private interactPrompt!: Phaser.GameObjects.Text
   private nearestInteractId: number | null = null
@@ -139,12 +148,13 @@ export class WorldScene extends Phaser.Scene {
     this.wireHover()
     this.wireClickAndDrag()
     this.wireGovernorControls()
+    this.createAmbientLife()
     window.addEventListener('message', this.onParentMessage)
     this.store.subscribe(snap => this.applySnapshot(snap))
     this.store.onEvent(ev => this.handleWorldEvent(ev))
     this.store.start()
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.cancelPendingMemberClick()
+      this.cancelMemberLongPress()
       window.removeEventListener('message', this.onParentMessage)
       this.store.stop()
     })
@@ -225,6 +235,56 @@ export class WorldScene extends Phaser.Scene {
         })
       }
       this.clouds = []
+    })
+  }
+
+  // ---------------------------------------------------------------- 环境生命力
+  /**
+   * 两类被动氛围事件：
+   * 1. 执行任务的成员偶尔迸出火花（任务努力感）
+   * 2. 相邻的空闲成员之间随机触发"打招呼"表情（社交感）
+   */
+  private createAmbientLife() {
+    // 任务火花：每 4.5 s 对正在执行任务的成员以 30% 概率冒出一次火花
+    this.time.addEvent({
+      delay: 4500,
+      loop: true,
+      callback: () => {
+        if (!this.introDone) return
+        for (const actor of this.actors.values()) {
+          if (!actor.member.enabled || actor.isDying) continue
+          if (actor.member.taskStatus === 'running' && Math.random() < 0.3) {
+            this.burstSparkle(
+              actor.x + (Math.random() - 0.5) * 18,
+              actor.y - 28 - Math.random() * 12,
+            )
+          }
+        }
+      },
+    })
+
+    // 社交互动：每 7 s 扫描距离小于 52px 的相邻成员对，以 20% 概率触发"打招呼"
+    this.time.addEvent({
+      delay: 7000,
+      loop: true,
+      callback: () => {
+        if (!this.introDone) return
+        const alive = [...this.actors.values()].filter(a => a.member.enabled && !a.isDying)
+        for (let i = 0; i < alive.length; i++) {
+          for (let j = i + 1; j < alive.length; j++) {
+            const a = alive[i]
+            const b = alive[j]
+            const dist = Phaser.Math.Distance.Between(a.x, a.y, b.x, b.y)
+            if (dist < 52 && Math.random() < 0.20) {
+              a.flashEmote('scroll', 1600)
+              // b 稍微延迟回应，模拟自然对话节奏
+              this.time.delayedCall(350 + Math.random() * 400, () => {
+                if (b.scene) b.flashEmote('check', 1800)
+              })
+            }
+          }
+        }
+      },
     })
   }
 
@@ -361,10 +421,12 @@ export class WorldScene extends Phaser.Scene {
       case 'ai_message': {
         const fromId = Number(ev.payload?.from_ai_config_id)
         const toId = Number(ev.payload?.to_ai_config_id)
+        const msgContent = ev.payload?.content ? String(ev.payload.content).slice(0, 120) : undefined
         this.playMessenger(
           Number.isFinite(fromId) ? this.actors.get(fromId) : undefined,
           Number.isFinite(toId) ? this.actors.get(toId) : undefined,
           String(ev.payload?.kind || 'message'),
+          msgContent,
         )
         break
       }
@@ -372,7 +434,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** AI 互发消息：信封从发信人飞向收信人（弧线），双方头顶表情 + 音效 */
-  private playMessenger(from: MemberActor | undefined, to: MemberActor | undefined, kind: string) {
+  private playMessenger(from: MemberActor | undefined, to: MemberActor | undefined, kind: string, message?: string) {
     if (!from || !to || from === to) return
     from.flashEmote('scroll', 1500)
     const envelope = this.add.image(from.x, from.y - 36, 'envelope.png', 0)
@@ -402,6 +464,7 @@ export class WorldScene extends Phaser.Scene {
         if (to.scene) {
           to.flashEmote(kind === 'reply' ? 'check' : 'alert', 2200)
           this.burstSparkle(to.x, to.y - 40)
+          if (message) to.showReceivedMessage(message, 3200)
         }
         this.playSfx('chime', 0.35)
       },
@@ -762,24 +825,29 @@ export class WorldScene extends Phaser.Scene {
     cam.centerOn(WORLD_W / 2, WORLD_H / 2)
     cam.roundPixels = true
 
-    let dragging = false
     let lastX = 0
     let lastY = 0
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (this.drawer?.isOpen) return
-      dragging = true
+      this.camDragging = true
+      this.camVx = 0
+      this.camVy = 0
       lastX = p.x
       lastY = p.y
     })
     this.input.on('pointerup', () => {
-      dragging = false
+      this.camDragging = false
     })
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       // 辅助管理员操控模式下相机跟随该角色，拖拽平移让位
-      if (!dragging || !p.isDown || this.draggingActor || this.governorMode) return
+      if (!this.camDragging || !p.isDown || this.draggingActor || this.governorMode) return
       if (this.drawer?.isOpen) return
-      cam.scrollX -= (p.x - lastX) / cam.zoom
-      cam.scrollY -= (p.y - lastY) / cam.zoom
+      const dx = (p.x - lastX) / cam.zoom
+      const dy = (p.y - lastY) / cam.zoom
+      cam.scrollX -= dx
+      cam.scrollY -= dy
+      this.camVx = -dx
+      this.camVy = -dy
       lastX = p.x
       lastY = p.y
     })
@@ -875,7 +943,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.nearestInteractId === null || !this.snap) return
     const m = this.snap.members.find(x => x.id === this.nearestInteractId)
     if (!m) return
-    this.cancelPendingMemberClick()
+    this.cancelMemberLongPress()
     this.drawer.openMember(m, this.snap, this.portraitForMember(m))
     this.playSfx('ui_click', 0.4)
   }
@@ -962,21 +1030,45 @@ export class WorldScene extends Phaser.Scene {
     this.input.on('gameobjectout', () => this.overlay.hideTooltip())
   }
 
+  private cancelMemberLongPress() {
+    this.memberLongPressTimer?.remove(false)
+    this.memberLongPressTimer = null
+    this.memberLongPressId = null
+  }
+
   private wireClickAndDrag() {
     this.input.dragDistanceThreshold = 8
 
-    // 成员单击查看信息，双击隔空对话；建筑和作坊打开对应操作抽屉。
+    // 成员按下：启动 500ms 长按计时，时间到前松手则正常开抽屉，持续按住则打开聊天
+    this.input.on(
+      'gameobjectdown',
+      (_ptr: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
+        if (!(obj instanceof MemberActor) || obj.isDying) return
+        this.cancelMemberLongPress()
+        this.memberLongPressId = obj.memberId
+        this.memberLongPressTimer = this.time.delayedCall(500, () => {
+          if (this.memberLongPressId !== obj.memberId) return
+          this.cancelMemberLongPress()
+          this.drawer.close()
+          this.openMemberChat(obj.memberId)
+          this.playSfx('ui_click', 0.5)
+        })
+      },
+    )
+
+    // 成员/建筑/作坊抬起：单击开抽屉
     this.input.on(
       'gameobjectup',
       (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-        if (this.drawer?.isOpen) return
+        // 抽屉已打开时仍允许点击其它成员/建筑切换面板（抽屉只占右侧，不挡左侧地图）
         if (this.draggingActor) return
         const dist = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY)
         if (dist >= 8 || !this.snap) return
         this.playSfx('ui_click', 0.4)
         if (obj instanceof MemberActor) {
+          this.cancelMemberLongPress()
           const m = this.snap.members.find(x => x.id === obj.memberId)
-          if (m) this.handleMemberClick(m)
+          if (m) this.drawer.openMember(m, this.snap, this.portraitForMember(m))
           return
         }
         const deviceId = obj.getData?.('deviceId') as string | undefined
@@ -989,6 +1081,22 @@ export class WorldScene extends Phaser.Scene {
         const key = obj.getData?.('buildingKey') as string | undefined
         if (key === 'library') this.drawer.openLibrary(this.snap, this.portraitForBuilding('building_library.png'))
         else if (key === 'spawn') this.drawer.openSpawn(this.snap, this.portraitForBuilding('building_spawn.png'))
+        if (key) {
+          const bSprite = this.buildings.get(key)
+          if (bSprite) {
+            const sx = bSprite.scaleX
+            const sy = bSprite.scaleY
+            this.tweens.add({
+              targets: bSprite,
+              scaleX: sx * 0.92,
+              scaleY: sy * 0.92,
+              duration: 75,
+              yoyo: true,
+              ease: 'Sine.easeOut',
+              onComplete: () => { bSprite.scaleX = sx; bSprite.scaleY = sy },
+            })
+          }
+        }
       },
     )
 
@@ -996,7 +1104,7 @@ export class WorldScene extends Phaser.Scene {
     this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
       if (this.drawer?.isOpen) return
       if (obj instanceof MemberActor && !obj.isDying) {
-        this.cancelPendingMemberClick()
+        this.cancelMemberLongPress()
         this.draggingActor = obj
         obj.beginDrag()
         this.overlay.hideTooltip()
@@ -1008,12 +1116,14 @@ export class WorldScene extends Phaser.Scene {
         if (obj instanceof MemberActor && obj === this.draggingActor) {
           obj.x = dragX
           obj.y = dragY
+          this.updateDragHighlight(dragX, dragY)
         }
       },
     )
     this.input.on('dragend', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
       if (!(obj instanceof MemberActor) || obj !== this.draggingActor) return
       this.draggingActor = null
+      this.clearDragHighlight()
       const drop = this.resolveDropTarget(obj.x, obj.y)
       obj.endDrag()
       if (!drop || !this.snap) return
@@ -1033,6 +1143,36 @@ export class WorldScene extends Phaser.Scene {
     const spawn = this.buildings.get('spawn')
     if (spawn && Phaser.Math.Distance.Between(x, y, spawn.x, spawn.y) < 90) return { kind: 'spawn' }
     return null
+  }
+
+  /** 拖拽进行中：高亮当前悬停的有效落点 */
+  private updateDragHighlight(x: number, y: number) {
+    const target = this.resolveDropTarget(x, y)
+    const newDeviceId = target?.kind === 'workshop' ? target.deviceId : null
+    const newSpawn = target?.kind === 'spawn'
+
+    if (newDeviceId !== this.dragHoveredDeviceId) {
+      if (this.dragHoveredDeviceId) this.workshops.get(this.dragHoveredDeviceId)?.sprite.clearTint()
+      this.dragHoveredDeviceId = newDeviceId
+      if (newDeviceId) this.workshops.get(newDeviceId)?.sprite.setTint(0xffd36b)
+    }
+    if (newSpawn !== this.dragHoveredSpawn) {
+      if (this.dragHoveredSpawn) this.buildings.get('spawn')?.clearTint()
+      this.dragHoveredSpawn = newSpawn
+      if (newSpawn) this.buildings.get('spawn')?.setTint(0x8feeff)
+    }
+  }
+
+  /** 拖拽结束：清除所有落点高亮 */
+  private clearDragHighlight() {
+    if (this.dragHoveredDeviceId) {
+      this.workshops.get(this.dragHoveredDeviceId)?.sprite.clearTint()
+      this.dragHoveredDeviceId = null
+    }
+    if (this.dragHoveredSpawn) {
+      this.buildings.get('spawn')?.clearTint()
+      this.dragHoveredSpawn = false
+    }
   }
 
   private tooltipFor(obj: Phaser.GameObjects.GameObject): TooltipData | null {
@@ -1219,28 +1359,6 @@ export class WorldScene extends Phaser.Scene {
 
   private updateBuildingStates(_snap: WorldSnapshot) {}
 
-  private handleMemberClick(member: WorldMember) {
-    if (this.pendingMemberClick?.memberId === member.id) {
-      this.cancelPendingMemberClick()
-      this.drawer.close()
-      this.openMemberChat(member.id)
-      return
-    }
-
-    this.cancelPendingMemberClick()
-    const timer = this.time.delayedCall(220, () => {
-      this.pendingMemberClick = null
-      const fresh = this.snap?.members.find(item => item.id === member.id)
-      if (fresh && this.snap) this.drawer.openMember(fresh, this.snap, this.portraitForMember(fresh))
-    })
-    this.pendingMemberClick = { memberId: member.id, timer }
-  }
-
-  private cancelPendingMemberClick() {
-    this.pendingMemberClick?.timer.remove(false)
-    this.pendingMemberClick = null
-  }
-
   private openMemberChat(id: number) {
     if (window.parent !== window) {
       window.parent.postMessage({ type: 'world:open-chat', aiConfigId: id }, window.location.origin)
@@ -1270,6 +1388,19 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- 主循环
   update(time: number, delta: number) {
+    // 相机惯性：松手后以 0.88/frame 指数衰减
+    if (!this.camDragging && !this.governorMode && !this.drawer?.isOpen) {
+      if (Math.abs(this.camVx) > 0.15 || Math.abs(this.camVy) > 0.15) {
+        this.cameras.main.scrollX += this.camVx
+        this.cameras.main.scrollY += this.camVy
+        this.camVx *= 0.88
+        this.camVy *= 0.88
+      } else {
+        this.camVx = 0
+        this.camVy = 0
+      }
+    }
+
     for (const actor of this.actors.values()) {
       const stationary = this.drawer.activeMemberId === actor.memberId || this.chatMemberId === actor.memberId
       actor.setStationary(stationary)
