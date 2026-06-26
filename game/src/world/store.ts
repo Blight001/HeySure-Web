@@ -87,6 +87,7 @@ type Listener = (snap: WorldSnapshot) => void
 
 const POLL_IDLE_MS = 8000
 const POLL_TASK_MS = 1200
+const PLACEHOLDER_DEVICE_COUNT = 6
 
 const num = (v: unknown, fallback = 0): number => {
   const n = Number(v)
@@ -134,6 +135,21 @@ const workshopAiConfigId = (raw: Record<string, any>): number | null => {
   }
   return null
 }
+
+const waitingWorkshop = (
+  index: number,
+  type: 'desktop' | 'browser',
+): WorldWorkshop => ({
+  deviceId: `waiting-${type}-${index + 1}`,
+  name: `${type === 'desktop' ? '桌面设备' : '浏览器设备'} ${index + 1} · 等待连接`,
+  type,
+  lifecycle: 'waiting',
+  aiConfigId: null,
+  lastError: null,
+  platform: type === 'desktop' ? 'desktop-ready' : 'browser-ready',
+  capabilities: 0,
+  online: false,
+})
 
 export class WorldStore {
   private listeners: Listener[] = []
@@ -283,8 +299,13 @@ export class WorldStore {
         online: raw.online !== false && String(raw.lifecycle || '').toLowerCase() !== 'offline',
       })
     }
+    const realIds = new Set(workshops.map(w => w.deviceId))
+    const placeholders = [
+      ...Array.from({ length: PLACEHOLDER_DEVICE_COUNT }, (_, i) => waitingWorkshop(i, 'desktop')),
+      ...Array.from({ length: PLACEHOLDER_DEVICE_COUNT }, (_, i) => waitingWorkshop(i, 'browser')),
+    ].filter(w => !realIds.has(w.deviceId))
     workshops.sort((a, b) => a.deviceId.localeCompare(b.deviceId))
-    this.snapshot.workshops = workshops
+    this.snapshot.workshops = [...workshops, ...placeholders]
     // 成员 ←→ 作坊绑定反查
     const byConfig = new Map<number, string[]>()
     for (const w of workshops) {

@@ -85,7 +85,7 @@ export const SHEETS: SheetDef[] = [
 
   // ---- 固定建筑 ----
   strip('building_spawn.png', '出生地（泉水）', 'building', 64, 64, 4),
-  strip('building_library.png', '图书馆 · 帧1=待审批亮灯', 'building', 96, 96, 2, 2),
+  strip('building_library.png', '设备·图书馆 · 帧1=在线亮灯', 'building', 96, 96, 2, 2),
 
   // ---- 动态作坊 ----
   strip('building_workshop_desktop.png', '作坊·机械坊（桌面 agent）', 'building', 64, 64, 4),
@@ -108,7 +108,9 @@ export const SHEETS: SheetDef[] = [
 
   // ---- 装饰 ----
   strip('lamp.png', '灯柱（帧1=夜晚点亮）', 'tileset', 24, 56, 2),
-  strip('fence.png', '栅栏（横栏/立柱）', 'tileset', 32, 32, 2),
+  strip('decor_library_obelisk.png', '图书馆装饰·知识方尖碑', 'tileset', 36, 64, 1),
+  strip('decor_library_banner.png', '图书馆装饰·学院旗帜', 'tileset', 28, 56, 1),
+  strip('decor_book_stand.png', '图书馆装饰·展开书台', 'tileset', 36, 36, 1),
   strip('bench.png', '长椅', 'tileset', 40, 24, 1),
   strip('signpost.png', '路牌', 'tileset', 32, 40, 1),
   strip('butterfly.png', '蝴蝶（扇翅，运行时 tint 变色）', 'effect', 16, 16, 2, 8),

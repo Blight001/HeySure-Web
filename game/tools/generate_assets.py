@@ -269,28 +269,49 @@ def gen_tree():
 
 # ================================================================ 建筑
 def gen_spawn():
-    """出生地：石环泉水 + 光柱呼吸。"""
+    """出生地：分层石台泉水 + 符文石 + 光柱呼吸。"""
     frames = []
     for f in range(4):
         c = C(32, 32)
-        # 石环
+        # 背景台阶与石台，让出生地在世界里更像一个地标。
+        c.rect(8, 23, 16, 3, STONE_D)
+        c.rect(6, 25, 20, 2, STONE)
+        c.px(6, 24, STONE_L)
+        c.px(25, 24, STONE_D)
+        c.hline(10, 22, 12, STONE_L)
+
+        # 外环符文石
+        c.disc(16, 20, 11, STONE_D)
         c.disc(16, 20, 10, STONE)
+        for a in range(0, 360, 45):
+            x = 16 + 10 * math.cos(math.radians(a))
+            y = 20 + 7 * math.sin(math.radians(a))
+            c.px(x, y, GOLD if (a + f * 45) % 90 == 0 else STONE_L)
+
+        # 水池有内外两层，水面更亮。
         c.disc(16, 20, 8, STONE_D)
-        c.disc(16, 20, 7, WATER)
+        c.disc(16, 20, 7, WATER_D)
+        c.disc(16, 19, 6, WATER)
+        c.hline(11, 17, 10, WATER_L)
+        c.hline(10, 20, 12, WATER)
         # 波光（按帧旋转）
         for i in range(3):
             a = math.radians(f * 30 + i * 120)
             c.px(16 + 4 * math.cos(a), 20 + 4 * math.sin(a) * 0.6, WATER_L)
             c.px(16 + 5 * math.cos(a + 0.8), 20 + 5 * math.sin(a + 0.8) * 0.6, WATER_L)
         # 环沿高光
-        c.px(9, 16, STONE_L)
+        c.px(8, 16, STONE_L)
+        c.px(9, 15, STONE_L)
         c.px(22, 24, STONE_L)
+        c.px(24, 21, STONE_D)
         # 光柱（高度随帧呼吸）
         glow = (200, 240, 255, 90)
         glow2 = (230, 250, 255, 130)
-        h = [10, 12, 14, 12][f]
-        c.rect(14, 18 - h, 4, h, glow)
+        h = [11, 13, 15, 13][f]
+        c.rect(13, 18 - h, 6, h, glow)
         c.rect(15, 18 - h + 2, 2, h - 2, glow2)
+        c.px(14, 18 - h + 1, FLAME_W)
+        c.px(18, 18 - h + 3, WATER_L)
         # 泉心亮点
         c.px(16, 19, FLAME_W if f % 2 else WATER_L)
         c.add_silhouette_outline()
@@ -304,22 +325,41 @@ def gen_library():
     glass = (96, 116, 156, 255)
     glass_lit = (250, 214, 120, 255)
     halo = (255, 230, 150, 160)
+    marble = (204, 204, 214, 255)
+    marble_l = (226, 226, 232, 255)
+    velvet = (126, 58, 126, 255)
+    velvet_d = (88, 42, 96, 255)
     frames = []
     for f in range(2):
         lit = f == 1
         g = glass_lit if lit else glass
         c = C(48, 48)
-        # 顶部金饰尖
-        c.vline(24, 2, 4, GOLD_D)
-        c.px(24, 1, GOLD)
+        # 顶部金饰尖与双侧小尖塔，让轮廓先读成核心地标。
+        c.vline(24, 1, 5, GOLD_D)
+        c.px(24, 0, FLAME_W if lit else GOLD)
+        for sx in (9, 39):
+            c.vline(sx, 8, 5, GOLD_D)
+            c.px(sx, 7, GOLD)
         # 青石板山形陡顶（横向石板层理 + 檐口压暗）
         for i, y in enumerate(range(6, 21)):
             half = 2 + i * 1.45
             col = SLATE_D if y >= 19 else (SLATE_L if i % 3 == 0 else SLATE)
             c.hline(24 - half, y, half * 2, col)
+            if i % 4 == 1:
+                c.px(24 - half + 2, y, SLATE_L)
+                c.px(24 + half - 3, y, SLATE_D)
         c.hline(23, 5, 3, SLATE_D)
+        c.hline(9, 17, 30, GOLD_D)
+        c.hline(11, 18, 26, GOLD)
+        # 侧翼小屋顶
+        for sx, direction in ((8, -1), (40, 1)):
+            for i, y in enumerate(range(13, 21)):
+                half = 1 + i * 0.85
+                c.hline(sx - half if direction < 0 else sx - half, y, half * 2, SLATE_D if y >= 19 else SLATE)
+            c.px(sx, 12, GOLD)
         # 石砌墙体（错缝砖纹 + 右侧背光面压暗）
         c.rect(4, 20, 40, 26, STONE_L)
+        c.rect(7, 21, 34, 3, marble_l)
         for by in range(24, 46, 4):
             c.hline(5, by, 38, STONE)
         for k, by in enumerate(range(24, 42, 4)):
@@ -332,17 +372,28 @@ def gen_library():
         c.vline(6, 20, 26, STONE_D)
         c.rect(41, 20, 3, 26, STONE)
         c.vline(41, 20, 26, STONE_D)
+        # 金边旗帜与学术徽纹，近看更有"殿堂"感。
+        for bx in (10, 36):
+            c.rect(bx, 21, 3, 7, velvet if lit else velvet_d)
+            c.px(bx + 1, 28, GOLD_D)
+            c.hline(bx, 21, 3, GOLD)
+            c.px(bx + 1, 24, GOLD)
+        c.hline(8, 31, 4, GOLD_D)
+        c.hline(36, 31, 4, GOLD_D)
         # 檐下金饰带
         c.hline(5, 20, 38, GOLD_D)
+        c.hline(6, 21, 36, GOLD)
         # 玫瑰窗（门拱正上方）：金辐条 + 金环
-        c.disc(24, 25, 3, g)
-        c.vline(24, 22, 7, GOLD_D)
-        c.hline(21, 25, 7, GOLD_D)
-        c.ring(24, 25, 3, GOLD_D)
+        c.disc(24, 26, 5, GOLD_D)
+        c.disc(24, 26, 4, g)
+        c.vline(24, 22, 9, GOLD_D)
+        c.hline(20, 26, 9, GOLD_D)
+        c.ring(24, 26, 4, GOLD)
         c.px(24, 25, GOLD)
         if lit:
-            for gx, gy in ((20, 21), (28, 21), (24, 20)):
+            for gx, gy in ((20, 21), (28, 21), (24, 20), (19, 26), (29, 26), (24, 32)):
                 c.px(gx, gy, halo)
+            c.disc(24, 26, 2, FLAME_W)
         # 罗马拱窗 x2（石拱边 + 中梃 + 窗台）
         for wx in (8, 34):
             c.hline(wx + 1, 27, 5, g)
@@ -354,6 +405,7 @@ def gen_library():
             c.vline(wx + 7, 28, 9, STONE_D)
             c.vline(wx + 3, 27, 9, STONE_D)
             c.hline(wx - 1, 36, 9, STONE)
+            c.hline(wx - 1, 37, 9, GOLD_D)
             if lit:
                 c.px(wx + 1, 29, FLAME_W)
                 c.px(wx + 5, 33, FLAME_W)
@@ -368,73 +420,111 @@ def gen_library():
         c.disc(24, 36, 3, WOOD_D)
         c.rect(21, 36, 6, 10, WOOD_D)
         c.vline(24, 33, 13, WOOD)  # 双开门中缝
+        c.hline(21, 38, 6, GOLD_D)
+        c.hline(21, 43, 6, GOLD_D)
         c.px(22, 41, GOLD)
         c.px(26, 41, GOLD)
+        # 宽台阶与中央金线，强调"核心入口"。
+        c.rect(15, 45, 18, 2, marble)
+        c.hline(17, 44, 14, marble_l)
+        c.hline(19, 46, 10, STONE_D)
+        c.vline(24, 44, 3, GOLD_D)
         c.add_silhouette_outline()
         frames.append(c)
     save_strip(frames, "building_library.png")
 
 
 def gen_workshop_desktop():
-    """桌面 agent 作坊（机械坊）：墙面大齿轮 4 帧旋转 + 火花。"""
+    """桌面 agent 作坊：模块化电脑坞，一排屏幕 + 通用接口灯 4 帧轮询。"""
+    BODY = (122, 132, 146, 255)
+    BODY_D = (86, 94, 108, 255)
+    BODY_L = (166, 176, 190, 255)
+    SCREEN = (32, 42, 58, 255)
+    CYAN = (104, 210, 236, 255)
+    AMBER = (248, 188, 82, 255)
     frames = []
     for f in range(4):
         c = C(32, 32)
-        # 烟囱
-        c.rect(8, 2, 4, 7, STONE_D)
-        c.rect(7, 2, 6, 2, STONE)
-        # 平顶
-        c.rect(4, 8, 26, 5, (84, 74, 70, 255))
-        c.hline(4, 8, 26, (104, 92, 86, 255))
-        # 墙体
-        c.rect(6, 13, 22, 15, (146, 134, 122, 255))
-        c.rect(24, 13, 4, 15, (124, 112, 102, 255))
-        c.outline(6, 13, 22, 15, WOOD_D)
-        # 门
-        c.rect(9, 18, 6, 10, WOOD_D)
-        c.px(13, 23, GOLD)
-        # 齿轮（按帧转动）
-        gx, gy = 22, 19
-        c.disc(gx, gy, 5, (172, 172, 184, 255))
-        c.disc(gx, gy, 2, (90, 90, 102, 255))
-        for i in range(8):
-            a = math.radians(i * 45 + f * 11.25)
-            c.px(gx + 6 * math.cos(a), gy + 6 * math.sin(a), (140, 140, 152, 255))
-        # 火花
-        if f in (1, 3):
-            c.px(28, 12, GOLD)
-            c.px(29, 11, FLAME_W)
+        # 轻工业底座与可移动模块轨道
+        c.rect(5, 17, 22, 11, BODY)
+        c.rect(23, 17, 4, 11, BODY_D)
+        c.hline(6, 18, 20, BODY_L)
+        c.outline(5, 17, 22, 11, OUT)
+        c.rect(7, 28, 18, 2, STONE_D)
+        c.px(9, 29, STONE_L)
+        c.px(22, 29, STONE_L)
+
+        # 三台不同形态的电脑屏幕，强调灵活接入
+        for i, x in enumerate((6, 14, 22)):
+            h = 8 if i != 1 else 10
+            y = 8 if i != 1 else 6
+            c.rect(x, y, 6, h, SCREEN)
+            c.outline(x, y, 6, h, BODY_L)
+            glow = CYAN if (f + i) % 4 in (1, 2) else (64, 112, 136, 255)
+            c.rect(x + 1, y + 2, 4, 3, glow)
+            c.hline(x + 2, y + h, 2, BODY_D)
+            c.hline(x + 1, y + h + 1, 4, BODY_D)
+
+        # 左侧通用插槽与线缆，按帧闪烁
+        for i, y in enumerate((20, 23, 26)):
+            col = AMBER if (f + i) % 4 == 0 else BODY_D
+            c.rect(8 + i * 5, y, 3, 1, col)
+        c.px(12, 19, CYAN)
+        c.px(13, 20, CYAN)
+        c.px(19, 19, AMBER)
+        c.px(20, 20, AMBER)
+
+        # 小齿轮保留“作坊”感，但退到角落不抢屏幕主题
+        gx, gy = 25, 22
+        c.disc(gx, gy, 3, STONE_L)
+        c.disc(gx, gy, 1, BODY_D)
+        for i in range(6):
+            a = math.radians(i * 60 + f * 18)
+            c.px(gx + 4 * math.cos(a), gy + 4 * math.sin(a), STONE)
         c.add_silhouette_outline()
         frames.append(c)
     save_strip(frames, "building_workshop_desktop.png")
 
 
 def gen_workshop_browser():
-    """浏览器 agent 作坊（瞭望塔）：塔顶水晶球 4 帧脉冲。"""
-    crystal = [(150, 100, 220, 255), (180, 140, 245, 255), (215, 200, 255, 255), (180, 140, 245, 255)]
+    """浏览器 agent 作坊：标签页控制塔 + 云端信标 4 帧脉冲。"""
+    crystal = [(90, 178, 220, 255), (122, 214, 248, 255), (218, 246, 255, 255), (122, 214, 248, 255)]
+    GLASS = (46, 74, 108, 255)
+    GLASS_L = (96, 184, 226, 255)
+    FRAME = (126, 136, 158, 255)
+    FRAME_D = (86, 94, 118, 255)
     frames = []
     for f in range(4):
         c = C(32, 40)
-        # 塔身
-        c.rect(10, 14, 12, 25, (150, 144, 160, 255))
-        c.rect(19, 14, 3, 25, (126, 120, 138, 255))
-        c.outline(10, 14, 12, 25, WOOD_D)
-        # 雉堞
-        for mx in (10, 14, 18):
-            c.rect(mx, 12, 2, 2, (150, 144, 160, 255))
-        c.rect(20, 12, 2, 2, (126, 120, 138, 255))
-        # 窗缝 + 门
-        c.rect(15, 20, 2, 4, (60, 58, 74, 255))
-        c.rect(13, 31, 6, 8, WOOD_D)
-        c.px(17, 35, GOLD)
-        # 水晶球 + 底座
-        c.rect(14, 10, 4, 2, STONE_D)
-        c.disc(16, 6, 4, crystal[f])
-        c.px(15, 4, FLAME_W)
-        # 光晕（亮帧）
+        # 主塔像一个竖屏浏览器窗口
+        c.rect(8, 13, 16, 25, FRAME)
+        c.rect(21, 13, 3, 25, FRAME_D)
+        c.outline(8, 13, 16, 25, OUT)
+        c.rect(10, 17, 11, 14, GLASS)
+        c.outline(10, 17, 11, 14, FRAME_D)
+        c.hline(10, 16, 11, (220, 228, 236, 255))
+
+        # 标签页与地址栏：多端通用浏览器语义
+        for i, x in enumerate((9, 14, 19)):
+            col = crystal[f] if (f + i) % 4 == 2 else FRAME_D
+            c.rect(x, 11, 4, 3, col)
+        c.rect(12, 19, 7, 1, GLASS_L if f in (1, 2) else (58, 110, 150, 255))
+        c.rect(12, 23, 5, 1, (110, 226, 180, 255))
+        c.rect(12, 27, 7, 1, GOLD)
+
+        # 云端信标与可扩展插件位
+        c.rect(13, 8, 6, 2, FRAME_D)
+        c.disc(16, 5, 4, crystal[f])
+        c.disc(13, 6, 2, crystal[f])
+        c.disc(19, 6, 2, crystal[f])
+        c.px(15, 3, FLAME_W)
+        c.rect(24, 22, 3, 7, (116, 206, 174, 255))
+        c.rect(25, 20, 1, 2, (180, 248, 220, 255))
+        c.rect(13, 32, 7, 6, WOOD_D)
+        c.px(18, 35, GOLD)
         if f == 2:
             for a in range(0, 360, 45):
-                c.px(16 + 6 * math.cos(math.radians(a)), 6 + 6 * math.sin(math.radians(a)), (220, 240, 255, 130))
+                c.px(16 + 7 * math.cos(math.radians(a)), 5 + 7 * math.sin(math.radians(a)), (220, 248, 255, 140))
         c.add_silhouette_outline()
         frames.append(c)
     save_strip(frames, "building_workshop_browser.png")
@@ -833,29 +923,69 @@ def gen_lamp():
     save_strip(frames, "lamp.png")
 
 
-def gen_fence():
-    """栅栏：帧0 横栏 / 帧1 立柱（拼线段用）。"""
-    frames = []
-    # 横栏
-    c = C(16, 16)
-    c.hline(0, 6, 16, WOOD)
-    c.hline(0, 7, 16, WOOD_D)
-    c.hline(0, 11, 16, WOOD)
-    c.hline(0, 12, 16, WOOD_D)
-    for x in (2, 13):
-        c.vline(x, 3, 11, WOOD)
-        c.vline(x + 1, 3, 11, WOOD_D)
+def gen_library_obelisk():
+    """知识方尖碑：大理石碑体 + 金色书页符文，用于塑造核心区边界感。"""
+    c = C(18, 32)
+    c.rect(6, 5, 6, 19, STONE_L)
+    c.rect(10, 5, 2, 19, STONE)
+    c.px(8, 1, GOLD)
+    c.hline(7, 2, 3, GOLD_D)
+    c.hline(6, 3, 5, STONE_L)
+    c.hline(5, 4, 7, STONE)
+    c.outline(5, 5, 8, 20, STONE_D)
+    c.hline(6, 8, 6, GOLD_D)
+    c.hline(7, 9, 4, GOLD)
+    c.px(8, 12, INDIGO)
+    c.px(9, 12, INDIGO)
+    c.hline(7, 15, 4, GOLD_D)
+    c.hline(8, 18, 2, FLAME_W)
+    c.rect(3, 24, 12, 3, STONE)
+    c.rect(1, 27, 16, 3, STONE_D)
+    c.hline(3, 26, 12, STONE_L)
+    c.hline(4, 29, 10, GOLD_D)
     c.add_silhouette_outline()
-    frames.append(c)
-    # 立柱
-    c = C(16, 16)
-    c.vline(7, 3, 11, WOOD)
-    c.vline(8, 3, 11, WOOD_D)
-    c.px(7, 2, WOOD)
-    c.px(8, 2, WOOD)
+    save_strip([c], "decor_library_obelisk.png")
+
+
+def gen_library_banner():
+    """学院金边旗帜：紫绒布 + 金色书徽，给图书馆前庭增加仪式感。"""
+    c = C(14, 28)
+    c.vline(3, 2, 23, GOLD_D)
+    c.px(3, 1, GOLD)
+    c.rect(4, 4, 8, 14, (118, 56, 136, 255))
+    c.vline(11, 4, 14, (74, 42, 102, 255))
+    c.hline(4, 4, 8, GOLD)
+    c.vline(4, 4, 14, GOLD_D)
+    c.px(5, 18, (118, 56, 136, 255))
+    c.px(6, 19, (118, 56, 136, 255))
+    c.px(10, 18, (74, 42, 102, 255))
+    c.px(9, 19, (74, 42, 102, 255))
+    # 书徽
+    c.rect(6, 9, 2, 4, PAPER)
+    c.rect(8, 9, 2, 4, PAPER)
+    c.vline(8, 9, 4, GOLD_D)
+    c.hline(6, 8, 4, GOLD)
+    c.rect(1, 25, 6, 2, STONE_D)
     c.add_silhouette_outline()
-    frames.append(c)
-    save_strip(frames, "fence.png")
+    save_strip([c], "decor_library_banner.png")
+
+
+def gen_book_stand():
+    """展开的知识书台：图书馆入口仪式物。"""
+    c = C(18, 18)
+    c.rect(7, 9, 4, 7, WOOD_D)
+    c.hline(5, 15, 8, WOOD)
+    c.rect(2, 5, 7, 5, PAPER)
+    c.rect(9, 5, 7, 5, PAPER)
+    c.vline(9, 5, 6, GOLD_D)
+    c.hline(3, 6, 4, STONE_D)
+    c.hline(11, 6, 4, STONE_D)
+    c.hline(3, 8, 4, STONE)
+    c.hline(11, 8, 4, STONE)
+    c.px(8, 4, FLAME_W)
+    c.px(9, 4, GOLD)
+    c.add_silhouette_outline()
+    save_strip([c], "decor_book_stand.png")
 
 
 def gen_bench():
@@ -1041,7 +1171,9 @@ def main():
     gen_emotes()
     gen_envelope()
     gen_lamp()
-    gen_fence()
+    gen_library_obelisk()
+    gen_library_banner()
+    gen_book_stand()
     gen_bench()
     gen_signpost()
     gen_butterfly()

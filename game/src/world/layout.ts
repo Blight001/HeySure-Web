@@ -4,10 +4,10 @@
  */
 
 export const TILE = 32
-export const MAP_W = 60
-export const MAP_H = 40
-export const WORLD_W = MAP_W * TILE // 1920
-export const WORLD_H = MAP_H * TILE // 1280
+export const MAP_W = 44
+export const MAP_H = 30
+export const WORLD_W = MAP_W * TILE // 1408
+export const WORLD_H = MAP_H * TILE // 960
 
 export interface Rect {
   x: number
@@ -22,7 +22,7 @@ export interface Point {
 }
 
 export interface FixedBuildingDef {
-  key: 'spawn' | 'library'
+  key: 'spawn'
   sheet: string
   label: string
   /** 建筑中心（世界像素） */
@@ -33,28 +33,31 @@ export interface FixedBuildingDef {
 
 export const FIXED_BUILDINGS: FixedBuildingDef[] = [
   { key: 'spawn', sheet: 'building_spawn.png', label: '出生地', pos: { x: 290, y: 640 }, scale: 1.7 },
-  { key: 'library', sheet: 'building_library.png', label: '图书馆', pos: { x: 290, y: 410 }, scale: 1.55 },
 ]
 
-/** 动态作坊（机械坊 / 瞭望塔 / 图书馆）的世界显示放大倍数 */
+/** 在线图书馆设备：固定放在出生地上方原知识库地块。 */
+export const LIBRARY_DEVICE_POS: Point = { x: 290, y: 410 }
+
+/** 动态作坊（机械坊 / 瞭望塔 / 图书馆设备）的世界显示放大倍数 */
 export const WORKSHOP_SCALE = 1.45
+export const LIBRARY_DEVICE_SCALE = 1.7
 
 /** 角色锚区（成员在矩形内游荡） */
 export const ZONES: Record<string, Rect> = {
   spawn: { x: 150, y: 560, w: 300, h: 230 },
-  library: { x: 205, y: 465, w: 230, h: 110 },
+  library: { x: 190, y: 465, w: 260, h: 120 },
   // 图书馆前石板广场：核心管理员踱步区。
-  plaza: { x: 190, y: 465, w: 260, h: 115 },
+  plaza: { x: 170, y: 455, w: 300, h: 135 },
   // 辅助管理员全图漫步（留出边缘与图书馆/作坊主街）
   wanderAll: { x: 120, y: 140, w: WORLD_W - 280, h: WORLD_H - 260 },
 }
 
-/** 作坊街区：4 列 x 2 排，给每座作坊留出独立地皮与门口活动区。 */
-export const WORKSHOP_SLOTS = 8
-export const WORKSHOP_COLS = 4
-export const WORKSHOP_START_X = 1090
+/** 作坊街区：6 列 x 2 排，给每座设备留出独立地皮与门口活动区。 */
+export const WORKSHOP_SLOTS = 12
+export const WORKSHOP_COLS = 6
+export const WORKSHOP_START_X = 544
 export const WORKSHOP_START_Y = 385
-export const WORKSHOP_COL_GAP = 180
+export const WORKSHOP_COL_GAP = 140
 export const WORKSHOP_ROW_GAP = 210
 
 export const workshopSlotPos = (i: number): Point => {

@@ -2,7 +2,9 @@ import { TILES } from '../assetManifest'
 import {
   MAP_H,
   MAP_W,
+  LIBRARY_DEVICE_POS,
   TILE,
+  WORKSHOP_COLS,
   WORKSHOP_SLOTS,
   WORLD_H,
   WORLD_W,
@@ -26,27 +28,75 @@ export interface NightGlowSource extends Point {
   pulse?: number
 }
 
-export const MAIN_ROAD_LAMP_TILES = [12, 21, 29] as const
-export const WORKSHOP_STREET_LAMPS: Point[] = [
-  { x: 34, y: 15 },
-  { x: 40, y: 15 },
-  { x: 46, y: 15 },
-  { x: 52, y: 15 },
-  { x: 34, y: 22 },
-  { x: 40, y: 22 },
-  { x: 46, y: 22 },
-  { x: 52, y: 22 },
-]
+const WORKSHOP_STREET = {
+  left: Math.floor(workshopSlotPos(0).x / TILE) - 2,
+  right: Math.floor(workshopSlotPos(WORKSHOP_COLS - 1).x / TILE) + 2,
+  upperRoadY: Math.floor(workshopSlotPos(0).y / TILE) + 3,
+  lowerRoadY: Math.floor(workshopSlotPos(WORKSHOP_COLS).y / TILE) + 4,
+  connectorX: Math.floor(workshopSlotPos(0).x / TILE) - 4,
+}
+
+export const MAIN_ROAD_LAMP_TILES = [6, WORKSHOP_STREET.connectorX] as const
+export const WORKSHOP_STREET_LAMPS: Point[] = Array.from({ length: WORKSHOP_COLS }, (_, i) => {
+  const x = Math.floor(workshopSlotPos(i).x / TILE)
+  return [
+    { x, y: WORKSHOP_STREET.upperRoadY },
+    { x, y: WORKSHOP_STREET.lowerRoadY },
+  ]
+}).flat()
 
 export const NIGHT_GLOW_SOURCES: NightGlowSource[] = [
-  { x: 290, y: 418, color: 0xffb866, scaleX: 6, base: 0.35 },
-  { x: 290, y: 640, color: 0x7fd8ff, scaleX: 3.2, base: 0.4 },
+  { x: LIBRARY_DEVICE_POS.x, y: LIBRARY_DEVICE_POS.y + 8, color: 0xffb866, scaleX: 6, base: 0.35 },
+  { x: 290, y: 636, color: 0x7fd8ff, scaleX: 4.4, scaleY: 3.2, base: 0.42, pulse: 0.18 },
+  { x: 290, y: 668, color: 0x9df7d6, scaleX: 7.8, scaleY: 2.2, base: 0.2, pulse: 0.08 },
 ]
 
-export const SPAWN_FENCE_XS = [160, 192, 224, 256, 288, 320, 352, 384, 416] as const
 export const SIGNPOST_POS: Point = { x: 332, y: 668 }
+export const SPAWN_LAMP_TILES: Point[] = [
+  { x: 5, y: 20 },
+  { x: 13, y: 20 },
+  { x: 7, y: 24 },
+  { x: 11, y: 24 },
+] as const
+export const SPAWN_BUTTERFLY_POINTS: Point[] = [
+  { x: 205, y: 592 },
+  { x: 248, y: 724 },
+  { x: 342, y: 578 },
+  { x: 395, y: 715 },
+] as const
+export const LIBRARY_CORE_LAMP_POINTS: Point[] = [
+  { x: LIBRARY_DEVICE_POS.x - 112, y: LIBRARY_DEVICE_POS.y + 40 },
+  { x: LIBRARY_DEVICE_POS.x + 112, y: LIBRARY_DEVICE_POS.y + 40 },
+  { x: LIBRARY_DEVICE_POS.x - 84, y: LIBRARY_DEVICE_POS.y + 108 },
+  { x: LIBRARY_DEVICE_POS.x + 84, y: LIBRARY_DEVICE_POS.y + 108 },
+] as const
+export const LIBRARY_SPARKLE_POINTS: Point[] = [
+  { x: LIBRARY_DEVICE_POS.x - 76, y: LIBRARY_DEVICE_POS.y + 6 },
+  { x: LIBRARY_DEVICE_POS.x + 76, y: LIBRARY_DEVICE_POS.y + 6 },
+  { x: LIBRARY_DEVICE_POS.x - 42, y: LIBRARY_DEVICE_POS.y + 86 },
+  { x: LIBRARY_DEVICE_POS.x + 42, y: LIBRARY_DEVICE_POS.y + 86 },
+  { x: LIBRARY_DEVICE_POS.x, y: LIBRARY_DEVICE_POS.y - 84 },
+] as const
+export const LIBRARY_OBELISK_POINTS: Point[] = [
+  { x: LIBRARY_DEVICE_POS.x - 138, y: LIBRARY_DEVICE_POS.y + 54 },
+  { x: LIBRARY_DEVICE_POS.x + 138, y: LIBRARY_DEVICE_POS.y + 54 },
+  { x: LIBRARY_DEVICE_POS.x - 118, y: LIBRARY_DEVICE_POS.y + 126 },
+  { x: LIBRARY_DEVICE_POS.x + 118, y: LIBRARY_DEVICE_POS.y + 126 },
+] as const
+export const LIBRARY_BANNER_POINTS: Point[] = [
+  { x: LIBRARY_DEVICE_POS.x - 86, y: LIBRARY_DEVICE_POS.y - 18 },
+  { x: LIBRARY_DEVICE_POS.x + 86, y: LIBRARY_DEVICE_POS.y - 18 },
+  { x: LIBRARY_DEVICE_POS.x - 156, y: LIBRARY_DEVICE_POS.y + 92 },
+  { x: LIBRARY_DEVICE_POS.x + 156, y: LIBRARY_DEVICE_POS.y + 92 },
+] as const
+export const LIBRARY_BOOK_STAND_POINTS: Point[] = [
+  { x: LIBRARY_DEVICE_POS.x - 48, y: LIBRARY_DEVICE_POS.y + 122 },
+  { x: LIBRARY_DEVICE_POS.x + 48, y: LIBRARY_DEVICE_POS.y + 122 },
+] as const
 export const BENCH_POSITIONS: Point[] = [
   { x: 360, y: 510 },
+  { x: 214, y: 716 },
+  { x: 398, y: 716 },
   ...Array.from({ length: WORKSHOP_SLOTS }, (_, i) => {
     const pos = workshopSlotPos(i)
     return { x: pos.x, y: pos.y + 74 }
@@ -54,6 +104,18 @@ export const BENCH_POSITIONS: Point[] = [
 ]
 
 export const BUTTERFLY_TINTS = [0xffffff, 0xff9ed2, 0x9ed2ff, 0xfff09e] as const
+
+export const isWorldBlocked = (p: Point): boolean => {
+  const tx = Math.floor(p.x / TILE)
+  const ty = Math.floor(p.y / TILE)
+  const inPond = tx >= 3 && tx <= 11 && ty >= 4 && ty <= 10
+  if (inPond) return true
+
+  const inSpawnFountain = Math.hypot((p.x - 290) / 58, (p.y - 648) / 38) <= 1
+  if (inSpawnFountain) return true
+
+  return false
+}
 
 export const generateGroundMap = (): GroundMap => {
   const rnd = mulberry32(20260611)
@@ -64,7 +126,7 @@ export const generateGroundMap = (): GroundMap => {
   paveLibraryPlaza(grid, rnd)
   paveWorkshopPads(grid, rnd)
   paveRoads(path)
-  plantSpawnFlowerBed(grid, rnd)
+  decorateSpawnGround(grid, rnd)
 
   return {
     grid,
@@ -117,18 +179,31 @@ const pathPainter = (grid: number[][]) => (x0: number, y0: number, x1: number, y
 
 const paveRoads = (path: ReturnType<typeof pathPainter>) => {
   // 道路保持 2 格宽；作坊地皮另铺石板，避免整片区域都被道路吞掉。
-  path(4, 22, 55, 23) // 主路（东西）
+  path(4, 22, WORKSHOP_STREET.right + 4, 23) // 主路（东西）
   path(8, 13, 9, 22) // 图书馆 → 出生地 → 主路
-  path(30, 15, 55, 16) // 作坊街区北侧门前路
-  path(30, 22, 55, 23) // 作坊街区南侧门前路
-  path(30, 17, 31, 21) // 作坊街区联络巷
+  path(WORKSHOP_STREET.left, WORKSHOP_STREET.upperRoadY, WORKSHOP_STREET.right, WORKSHOP_STREET.upperRoadY + 1)
+  path(WORKSHOP_STREET.left, WORKSHOP_STREET.lowerRoadY, WORKSHOP_STREET.right, WORKSHOP_STREET.lowerRoadY + 1)
+  path(WORKSHOP_STREET.connectorX, WORKSHOP_STREET.upperRoadY, WORKSHOP_STREET.connectorX + 1, WORKSHOP_STREET.lowerRoadY - 1)
+  path(WORKSHOP_STREET.connectorX + 2, WORKSHOP_STREET.upperRoadY, WORKSHOP_STREET.left - 1, WORKSHOP_STREET.upperRoadY + 1)
+  path(WORKSHOP_STREET.connectorX, 22, WORKSHOP_STREET.left - 1, 23)
 }
 
 const paveLibraryPlaza = (grid: number[][], rnd: () => number) => {
-  for (let y = 12; y <= 16; y++) {
-    for (let x = 6; x <= 12; x++) {
+  for (let y = 11; y <= 16; y++) {
+    for (let x = 5; x <= 13; x++) {
       grid[y][x] = rnd() > 0.5 ? TILES.plazaA : TILES.plazaB
     }
+  }
+  const cx = Math.floor(LIBRARY_DEVICE_POS.x / TILE)
+  const cy = Math.floor((LIBRARY_DEVICE_POS.y + 80) / TILE)
+  for (const p of [
+    { x: cx, y: cy },
+    { x: cx - 2, y: cy },
+    { x: cx + 2, y: cy },
+    { x: cx, y: cy - 2 },
+    { x: cx, y: cy + 2 },
+  ]) {
+    if (p.y >= 0 && p.y < MAP_H && p.x >= 0 && p.x < MAP_W) grid[p.y][p.x] = TILES.stone
   }
 }
 
@@ -147,14 +222,32 @@ const paveWorkshopPads = (grid: number[][], rnd: () => number) => {
   }
 }
 
-const plantSpawnFlowerBed = (grid: number[][], rnd: () => number) => {
-  for (let y = 17; y <= 23; y++) {
-    for (let x = 5; x <= 13; x++) {
-      const d = Math.hypot(x - 9, (y - 20) * 1.3)
-      if (d > 2.2 && d < 3.6 && grid[y][x] !== TILES.path) {
-        grid[y][x] = rnd() > 0.5 ? TILES.flowerRed : TILES.flowerYellow
+const decorateSpawnGround = (grid: number[][], rnd: () => number) => {
+  const cx = 9
+  const cy = 20
+  for (let y = 16; y <= 25; y++) {
+    for (let x = 4; x <= 14; x++) {
+      const d = Math.hypot((x - cx) * 0.9, (y - cy) * 1.15)
+      if (d <= 1.7) {
+        grid[y][x] = rnd() > 0.45 ? TILES.plazaA : TILES.plazaB
+      } else if (d <= 2.55) {
+        grid[y][x] = rnd() > 0.5 ? TILES.plazaB : TILES.stone
+      } else if (d <= 3.55 && grid[y][x] !== TILES.path) {
+        grid[y][x] = rnd() > 0.32 ? TILES.flowerYellow : TILES.flowerRed
+      } else if (d <= 4.65 && grid[y][x] !== TILES.path && rnd() > 0.55) {
+        grid[y][x] = rnd() > 0.55 ? TILES.tallGrass : TILES.flowerRed
       }
     }
+  }
+
+  // Four tiny stone "runes" give the spawn plaza a deliberate, hand-placed center.
+  for (const p of [
+    { x: cx, y: cy - 3 },
+    { x: cx + 3, y: cy },
+    { x: cx, y: cy + 3 },
+    { x: cx - 3, y: cy },
+  ]) {
+    if (p.y >= 0 && p.y < MAP_H && p.x >= 0 && p.x < MAP_W) grid[p.y][p.x] = TILES.stone
   }
 }
 
@@ -162,7 +255,7 @@ const scatterTrees = (grid: number[][]): Point[] => {
   const rnd = mulberry32(7)
   const blocked: Rect[] = [
     { x: 100, y: 330, w: 400, h: 470 }, // 图书馆与出生地一带
-    { x: 900, y: 250, w: 880, h: 520 }, // 作坊街区与主街
+    { x: 400, y: 250, w: 860, h: 540 }, // 作坊街区与主街
     { x: 60, y: 90, w: 360, h: 300 }, // 池塘
   ]
   const inBlocked = (px: number, py: number) =>

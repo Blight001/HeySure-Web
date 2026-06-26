@@ -11,7 +11,10 @@ import type { WorkshopView } from './types'
 import { portraitSpecFor, type PortraitSpec } from '../ui/portrait'
 import {
   FIXED_BUILDINGS,
+  LIBRARY_DEVICE_POS,
+  LIBRARY_DEVICE_SCALE,
   TILE,
+  WORKSHOP_COLS,
   WORKSHOP_SCALE,
   WORKSHOP_SLOTS,
   WORLD_H,
@@ -25,10 +28,16 @@ import {
 import {
   BENCH_POSITIONS,
   BUTTERFLY_TINTS,
+  LIBRARY_BANNER_POINTS,
+  LIBRARY_BOOK_STAND_POINTS,
+  LIBRARY_CORE_LAMP_POINTS,
+  LIBRARY_OBELISK_POINTS,
+  LIBRARY_SPARKLE_POINTS,
   MAIN_ROAD_LAMP_TILES,
   NIGHT_GLOW_SOURCES,
   SIGNPOST_POS,
-  SPAWN_FENCE_XS,
+  SPAWN_BUTTERFLY_POINTS,
+  SPAWN_LAMP_TILES,
   WORKSHOP_STREET_LAMPS,
   generateGroundMap,
 } from '../world/map'
@@ -61,7 +70,8 @@ export class WorldScene extends Phaser.Scene {
   private pendingMemberClick: { memberId: number; timer: Phaser.Time.TimerEvent } | null = null
   /** 演出触发用：上一轮快照的代数 */
   private prevGeneration = new Map<number, number>()
-  private muted = false
+  private bgmMuted = false
+  private sfxMuted = false
   private currentBgm: Phaser.Sound.BaseSound | null = null
   private currentBgmIndex = -1
   private bgmAutoplayArmed = false
@@ -194,8 +204,8 @@ export class WorldScene extends Phaser.Scene {
     const elapsed = this.time.now - this.sceneReadyAt
     this.time.delayedCall(Math.max(0, 900 - elapsed), () => {
       const cam = this.cameras.main
-      const endZoom = Phaser.Math.Clamp(Math.max(0.9, cam.zoom * 1.3), this.minZoom(), 2)
-      cam.pan(960, 620, 2200, 'Sine.easeInOut')
+      const endZoom = this.minZoom()
+      cam.pan(WORLD_W / 2, WORLD_H / 2, 2200, 'Sine.easeInOut')
       cam.zoomTo(endZoom, 2200, 'Sine.easeInOut')
       const cx = this.scale.width / 2
       const rnd = mulberry32(7)
@@ -220,29 +230,35 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- P2 氛围
   private createAudio() {
-    this.muted = localStorage.getItem('gw-muted') === '1'
-    this.sound.mute = this.muted
-    this.overlay.initMuteButton(document.body, this.muted, muted => {
-      this.muted = muted
-      this.sound.mute = muted
+    const legacyMuted = localStorage.getItem('gw-muted') === '1'
+    this.bgmMuted = (localStorage.getItem('gw-bgm-muted') ?? (legacyMuted ? '1' : '0')) === '1'
+    this.sfxMuted = (localStorage.getItem('gw-sfx-muted') ?? (legacyMuted ? '1' : '0')) === '1'
+    this.overlay.initSoundButtons(document.body, { bgmMuted: this.bgmMuted, sfxMuted: this.sfxMuted }, state => {
+      const bgmWasMuted = this.bgmMuted
+      this.bgmMuted = state.bgmMuted
+      this.sfxMuted = state.sfxMuted
       try {
-        localStorage.setItem('gw-muted', muted ? '1' : '0')
+        localStorage.setItem('gw-bgm-muted', this.bgmMuted ? '1' : '0')
+        localStorage.setItem('gw-sfx-muted', this.sfxMuted ? '1' : '0')
       } catch {
         // ignore
       }
-      if (!muted) this.startBgm()
+      if (this.bgmMuted) {
+        this.stopBgm()
+      } else if (bgmWasMuted) {
+        this.startBgm()
+      }
     })
-    if (!this.muted) this.startBgm()
+    if (!this.bgmMuted) this.startBgm()
     this.input.once('pointerdown', () => this.startBgm())
     this.input.keyboard?.once('keydown', () => this.startBgm())
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.currentBgm?.destroy()
-      this.currentBgm = null
+      this.stopBgm()
     })
   }
 
   private playSfx(key: string, volume = 0.5) {
-    if (this.muted) return
+    if (this.sfxMuted) return
     try {
       this.sound.play(key, { volume })
     } catch {
@@ -251,13 +267,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private startBgm() {
-    if (this.muted || bgmTracks.length === 0) return
+    if (this.bgmMuted || bgmTracks.length === 0) return
     if (this.currentBgm?.isPlaying || this.bgmAutoplayArmed) return
     this.playNextBgm()
   }
 
   private playNextBgm() {
-    if (this.muted || bgmTracks.length === 0) {
+    if (this.bgmMuted || bgmTracks.length === 0) {
       this.bgmAutoplayArmed = false
       return
     }
@@ -280,6 +296,12 @@ export class WorldScene extends Phaser.Scene {
       this.currentBgm.destroy()
       this.currentBgm = null
     }
+  }
+
+  private stopBgm() {
+    this.bgmAutoplayArmed = false
+    this.currentBgm?.destroy()
+    this.currentBgm = null
   }
 
   /**
@@ -452,7 +474,7 @@ export class WorldScene extends Phaser.Scene {
     })
   }
 
-  /** 装饰层：灯柱（夜晚点亮）/ 栅栏 / 长椅 / 路牌 / 蝴蝶 / 烟囱炊烟 */
+  /** 装饰层：灯柱（夜晚点亮）/ 图书馆仪式装饰 / 长椅 / 路牌 / 蝴蝶 / 烟囱炊烟 */
   private createDecor() {
     const deco = (key: string, x: number, y: number, frame = 0) => {
       const img = this.add.image(x, y, key, frame)
@@ -476,6 +498,9 @@ export class WorldScene extends Phaser.Scene {
     for (const glow of NIGHT_GLOW_SOURCES) {
       this.addNightGlow(glow.x, glow.y, glow.color, glow.scaleX, glow.base, glow.scaleY, glow.pulse)
     }
+    this.createLibraryCoreDecor(deco)
+    this.createSpawnDecor(deco)
+    this.createWorkshopBayDecor()
     // 萤火虫：夜间出没（白天 alpha=0），缓慢游移 + 呼吸闪烁
     const frnd = mulberry32(123)
     for (let i = 0; i < 14; i++) {
@@ -487,21 +512,31 @@ export class WorldScene extends Phaser.Scene {
       img.setAlpha(0)
       this.fireflies.push({ img, vx: (frnd() - 0.5) * 18, vy: (frnd() - 0.5) * 14, phase: frnd() * Math.PI * 2 })
     }
-    // 出生地栅栏（北侧半围）+ 路牌
-    for (const x of SPAWN_FENCE_XS) {
-      deco('fence.png', x, 548, x === 160 || x === 416 ? 1 : 0)
-    }
     deco('signpost.png', SIGNPOST_POS.x, SIGNPOST_POS.y)
     // 广场长椅：落在图书馆和作坊前方的石板街边。
     for (const pos of BENCH_POSITIONS) deco('bench.png', pos.x, pos.y)
     // 蝴蝶：花丛间飞舞
     const rnd = mulberry32(99)
     for (let i = 0; i < 6; i++) {
-      const sprite = this.add.sprite(200 + rnd() * 1500, 200 + rnd() * 900, 'butterfly.png', 0)
+      const sprite = this.add.sprite(160 + rnd() * (WORLD_W - 320), 160 + rnd() * (WORLD_H - 320), 'butterfly.png', 0)
       sprite.play('butterfly.png:loop')
       sprite.setTint(BUTTERFLY_TINTS[i % BUTTERFLY_TINTS.length])
       sprite.setDepth(95000)
       this.butterflies.push({ sprite, tx: sprite.x, ty: sprite.y, phase: rnd() * Math.PI * 2 })
+    }
+    for (let i = 0; i < SPAWN_BUTTERFLY_POINTS.length; i++) {
+      const pos = SPAWN_BUTTERFLY_POINTS[i]
+      const sprite = this.add.sprite(pos.x, pos.y, 'butterfly.png', 0)
+      sprite.play('butterfly.png:loop')
+      sprite.setTint(BUTTERFLY_TINTS[(i + 1) % BUTTERFLY_TINTS.length])
+      sprite.setScale(1.15)
+      sprite.setDepth(95000)
+      this.butterflies.push({
+        sprite,
+        tx: pos.x + (rnd() - 0.5) * 44,
+        ty: pos.y + (rnd() - 0.5) * 34,
+        phase: rnd() * Math.PI * 2,
+      })
     }
     // 作坊执行任务时（reconcile 标记 active）烟囱冒烟
     this.time.addEvent({
@@ -515,6 +550,162 @@ export class WorldScene extends Phaser.Scene {
         }
       },
     })
+  }
+
+  private createLibraryCoreDecor(deco: (key: string, x: number, y: number, frame?: number) => Phaser.GameObjects.Image) {
+    const center = LIBRARY_DEVICE_POS
+    const aura = this.add.image(center.x, center.y + 64, 'glow.png', 0)
+    aura.setBlendMode(Phaser.BlendModes.ADD)
+    aura.setTint(0xffdf86)
+    aura.setScale(10.8, 3.1)
+    aura.setDepth(center.y - 4)
+    aura.setAlpha(0.2)
+    this.tweens.add({
+      targets: aura,
+      alpha: 0.34,
+      scaleX: 12.2,
+      scaleY: 3.55,
+      duration: 2300,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    })
+
+    const crown = this.add.image(center.x, center.y - 72, 'glow.png', 0)
+    crown.setBlendMode(Phaser.BlendModes.ADD)
+    crown.setTint(0xfff1a6)
+    crown.setScale(2.4, 2.9)
+    crown.setDepth(center.y + 20)
+    crown.setAlpha(0.18)
+    this.tweens.add({
+      targets: crown,
+      angle: 360,
+      alpha: 0.3,
+      duration: 9000,
+      repeat: -1,
+      ease: 'Linear',
+    })
+
+    for (const pos of LIBRARY_CORE_LAMP_POINTS) {
+      const lamp = deco('lamp.png', pos.x, pos.y)
+      this.lamps.push(lamp)
+      this.addStreetLampGlow(lamp)
+    }
+
+    for (const pos of LIBRARY_OBELISK_POINTS) {
+      const obelisk = deco('decor_library_obelisk.png', pos.x, pos.y)
+      obelisk.setDepth(pos.y + 8)
+      this.addNightGlow(pos.x, pos.y - 34, 0xf6d987, 2.4, 0.26, 3.2, 0.1)
+    }
+
+    for (let i = 0; i < LIBRARY_BANNER_POINTS.length; i++) {
+      const pos = LIBRARY_BANNER_POINTS[i]
+      const banner = deco('decor_library_banner.png', pos.x, pos.y)
+      banner.setFlipX(i % 2 === 1)
+      banner.setDepth(pos.y + 6)
+    }
+
+    for (const pos of LIBRARY_BOOK_STAND_POINTS) {
+      const stand = deco('decor_book_stand.png', pos.x, pos.y)
+      stand.setDepth(pos.y + 4)
+      this.addNightGlow(pos.x, pos.y - 12, 0xfff1a6, 2.2, 0.2, 1.8, 0.08)
+    }
+
+    for (let i = 0; i < LIBRARY_SPARKLE_POINTS.length; i++) {
+      const pos = LIBRARY_SPARKLE_POINTS[i]
+      const sparkle = this.add.sprite(pos.x, pos.y, 'effect_sparkle.png', 0)
+      sparkle.setTint([0xfff09e, 0xffffff, 0xc99cff, 0x9ed2ff][i % 4])
+      sparkle.setScale(i === LIBRARY_SPARKLE_POINTS.length - 1 ? 1.15 : 0.9)
+      sparkle.setDepth(94000)
+      sparkle.setAlpha(0.76)
+      sparkle.play('effect_sparkle.png:loop')
+    }
+  }
+
+  private createSpawnDecor(deco: (key: string, x: number, y: number, frame?: number) => Phaser.GameObjects.Image) {
+    const spawn = FIXED_BUILDINGS.find(def => def.key === 'spawn')?.pos
+    if (!spawn) return
+
+    const aura = this.add.image(spawn.x, spawn.y + 32, 'glow.png', 0)
+    aura.setBlendMode(Phaser.BlendModes.ADD)
+    aura.setTint(0x8feeff)
+    aura.setScale(8.4, 2.2)
+    aura.setDepth(spawn.y - 18)
+    aura.setAlpha(0.16)
+    this.tweens.add({
+      targets: aura,
+      alpha: 0.26,
+      scaleX: 9.2,
+      scaleY: 2.5,
+      duration: 1900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    })
+
+    const inner = this.add.image(spawn.x, spawn.y - 8, 'glow.png', 0)
+    inner.setBlendMode(Phaser.BlendModes.ADD)
+    inner.setTint(0xd8fff4)
+    inner.setScale(3.8, 3)
+    inner.setDepth(spawn.y - 16)
+    inner.setAlpha(0.12)
+    this.tweens.add({
+      targets: inner,
+      angle: 360,
+      duration: 12000,
+      repeat: -1,
+      ease: 'Linear',
+    })
+
+    for (const pos of SPAWN_LAMP_TILES) {
+      const lamp = deco('lamp.png', pos.x * TILE + 16, pos.y * TILE - 2)
+      this.lamps.push(lamp)
+      this.addStreetLampGlow(lamp)
+    }
+
+    for (const p of [
+      { x: spawn.x - 70, y: spawn.y + 26, tint: 0xfff09e },
+      { x: spawn.x + 68, y: spawn.y + 24, tint: 0xff9ed2 },
+      { x: spawn.x - 34, y: spawn.y + 76, tint: 0x9ed2ff },
+      { x: spawn.x + 34, y: spawn.y + 78, tint: 0xffffff },
+    ]) {
+      const sparkle = this.add.sprite(p.x, p.y, 'effect_sparkle.png', 0)
+      sparkle.setTint(p.tint)
+      sparkle.setScale(0.85)
+      sparkle.setDepth(94000)
+      sparkle.setAlpha(0.72)
+      sparkle.play('effect_sparkle.png:loop')
+    }
+  }
+
+  private createWorkshopBayDecor() {
+    for (let i = 0; i < WORKSHOP_SLOTS; i++) {
+      const pos = workshopSlotPos(i)
+      const row = Math.floor(i / WORKSHOP_COLS)
+      const tint = row === 0 ? 0xffd36b : 0x72d8ff
+      const pad = this.add.image(pos.x, pos.y + 38, 'glow.png', 0)
+      pad.setBlendMode(Phaser.BlendModes.ADD)
+      pad.setTint(tint)
+      pad.setScale(3.4, 1.05)
+      pad.setDepth(pos.y - 8)
+      pad.setAlpha(0.12)
+      this.tweens.add({
+        targets: pad,
+        alpha: 0.22,
+        scaleX: 3.9,
+        duration: 1800 + (i % 3) * 240,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      })
+
+      const beacon = this.add.sprite(pos.x + 34, pos.y - 42, 'effect_sparkle.png', 0)
+      beacon.setTint(tint)
+      beacon.setScale(row === 0 ? 0.72 : 0.82)
+      beacon.setDepth(94000)
+      beacon.setAlpha(0.58)
+      beacon.play('effect_sparkle.png:loop')
+    }
   }
 
   /** 灯泡发光之外，再把暖光投射到灯柱周围的路面。 */
@@ -567,8 +758,8 @@ export class WorldScene extends Phaser.Scene {
   private createCamera() {
     const cam = this.cameras.main
     cam.setBounds(0, 0, WORLD_W, WORLD_H)
-    cam.setZoom(0.9)
-    cam.centerOn(960, 620)
+    cam.setZoom(this.minZoom())
+    cam.centerOn(WORLD_W / 2, WORLD_H / 2)
     cam.roundPixels = true
 
     let dragging = false
@@ -921,7 +1112,7 @@ export class WorldScene extends Phaser.Scene {
     const boundAgent = m.boundAgentIds.find(id => this.workshops.get(id)?.offlineSince === null)
     if (boundAgent !== undefined) {
       const view = this.workshops.get(boundAgent)
-      if (view) return workshopZone(view.slot)
+      if (view) return view.data.type === 'workshop' ? ZONES.library : workshopZone(view.slot)
     }
     // 已绑定作坊但全部离线时，成员回到出生地等待重连。
     const hasOfflineBinding = m.boundAgentIds.length > 0
@@ -937,8 +1128,8 @@ export class WorldScene extends Phaser.Scene {
       seen.add(w.deviceId)
       let view = this.workshops.get(w.deviceId)
       if (!view) {
-        const slot = this.claimSlot(w.deviceId)
-        const pos = workshopSlotPos(slot)
+        const slot = w.type === 'workshop' ? -1 : this.claimSlot(w.deviceId)
+        const pos = w.type === 'workshop' ? LIBRARY_DEVICE_POS : workshopSlotPos(slot)
         const sheet = workshopSheetForType(w.type)
         const taskGlow = this.add.image(pos.x, pos.y - 24, 'glow.png', 0)
         taskGlow.setBlendMode(Phaser.BlendModes.ADD)
@@ -949,7 +1140,7 @@ export class WorldScene extends Phaser.Scene {
         taskGlow.setAlpha(0)
         const sprite = this.add.sprite(pos.x, pos.y, sheet, 0)
         sprite.setOrigin(0.5, 0.6)
-        sprite.setScale(WORKSHOP_SCALE)
+        sprite.setScale(w.type === 'workshop' ? LIBRARY_DEVICE_SCALE : WORKSHOP_SCALE)
         sprite.setDepth(pos.y)
         sprite.setInteractive()
         view = {
@@ -965,7 +1156,7 @@ export class WorldScene extends Phaser.Scene {
         sprite.setData('tooltip', () => this.workshopTooltip(captured))
         sprite.setData('deviceId', w.deviceId)
         this.workshops.set(w.deviceId, view)
-        if (!w.online) sprite.setTint(0x8a8a8a)
+        if (!w.online) sprite.setTint(w.lifecycle === 'waiting' ? 0xb9c4d8 : 0x8a8a8a)
       }
       view.data = w
       if (w.online && view.offlineSince !== null) {
@@ -975,7 +1166,7 @@ export class WorldScene extends Phaser.Scene {
         view.offlineSince = Date.now()
         view.sprite.stop()
         view.sprite.setFrame(0)
-        view.sprite.setTint(0x8a8a8a)
+        view.sprite.setTint(w.lifecycle === 'waiting' ? 0xb9c4d8 : 0x8a8a8a)
       }
       // 动效：绑定成员在干活 or agent 正在执行任务
       const boundMember = snap.members.find(m => m.id === w.aiConfigId)
@@ -1026,9 +1217,7 @@ export class WorldScene extends Phaser.Scene {
     if (i >= 0) this.slotOwner[i] = null
   }
 
-  private updateBuildingStates(_snap: WorldSnapshot) {
-    this.buildings.get('library')?.setFrame(0)
-  }
+  private updateBuildingStates(_snap: WorldSnapshot) {}
 
   private handleMemberClick(member: WorldMember) {
     if (this.pendingMemberClick?.memberId === member.id) {

@@ -36,6 +36,7 @@ export interface DrawerActions {
 export interface PanelController {
   readonly actions: DrawerActions
   readonly memberInfoHost: HTMLElement
+  readonly sideHost: HTMLElement
   openPanel(opts: { title: string; subtitle?: string; portrait?: PortraitSpec | null; tabs: PanelTab[] }): void
   setActiveMemberId(id: WorldMember['id'] | null): void
   section(titleText: string): HTMLDivElement

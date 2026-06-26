@@ -39,8 +39,8 @@ export const workshopTooltipData = (
   const workshop = view.data
   if (workshop.type === 'workshop') {
     return {
-      title: '知识与进化作坊',
-      badge: view.offlineSince !== null ? '离线' : '在线',
+      title: '图书馆',
+      badge: workshop.lifecycle === 'waiting' ? '等待连接' : view.offlineSince !== null ? '离线' : '在线',
       rows: [
         { label: '形态', value: '服务端内置 · 自动上线' },
         { label: '成员', value: boundMember ? `${boundMember.name}（ID ${boundMember.id}）` : '未绑定（拖成员到此绑定）' },
@@ -52,10 +52,10 @@ export const workshopTooltipData = (
   }
   return {
     title: workshop.type === 'desktop' ? '机械坊（桌面 Agent）' : '瞭望塔（浏览器 Agent）',
-    badge: view.offlineSince !== null ? '离线' : workshop.lifecycle === 'dispatching' ? '执行中' : '在线',
+    badge: workshop.lifecycle === 'waiting' ? '等待连接' : view.offlineSince !== null ? '离线' : workshop.lifecycle === 'dispatching' ? '执行中' : '在线',
     rows: [
       { label: '设备', value: `${workshop.name}（${workshop.platform || 'unknown'}）` },
-      { label: '成员', value: boundMember ? `${boundMember.name}（ID ${boundMember.id}）` : '未分配' },
+      { label: '成员', value: workshop.lifecycle === 'waiting' ? '连接后可分配' : boundMember ? `${boundMember.name}（ID ${boundMember.id}）` : '未分配' },
       { label: '工具', value: `${workshop.capabilities} 个端侧工具` },
       { label: '错误', value: workshop.lastError || '' },
     ],
@@ -85,7 +85,7 @@ export const hudHtml = (snap: WorldSnapshot, clock: string): string => {
   if (!snap.authOk) return `<div class="h-err">${snap.lastError || '连接中…'}</div>`
 
   const alive = snap.members.filter(member => member.lifecycle !== 'dead').length
-  const online = snap.workshops.length
+  const online = snap.workshops.filter(workshop => workshop.online).length
   const running = snap.members.filter(member => member.runtimeStatus === 'running' || member.taskStatus === 'running').length
   return (
     `<div>存活成员 <b>${alive}</b> · 在线作坊 <b>${online}</b> · 干活中 <b>${running}</b></div>` +

@@ -56,15 +56,19 @@ export class Overlay {
       }
       .gw-hud .h-dim { color: #8a90a0; }
       .gw-hud .h-err { color: #e08484; }
-      .gw-mute {
+      .gw-sound-controls {
         position: fixed; left: 12px; bottom: 12px; z-index: 30; cursor: pointer;
+        display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+      }
+      .gw-sound {
         background: rgba(28, 30, 38, 0.88); border: 2px solid #4a4f5e; border-radius: 4px;
         color: #d6dae2; font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace;
         padding: 5px 10px;
+        cursor: pointer;
       }
-      .gw-mute:hover { border-color: #5a6175; }
+      .gw-sound:hover { border-color: #5a6175; }
       .gw-gov {
-        position: fixed; left: 12px; bottom: 48px; z-index: 30; cursor: pointer;
+        position: fixed; left: 12px; bottom: 54px; z-index: 30; cursor: pointer;
         background: rgba(28, 30, 38, 0.88); border: 2px solid #4a4f5e; border-radius: 4px;
         color: #d6dae2; font: 12px ui-monospace, "Cascadia Mono", Consolas, monospace;
         padding: 5px 10px;
@@ -72,7 +76,7 @@ export class Overlay {
       .gw-gov:hover { border-color: #5a6175; }
       .gw-gov.active { border-color: #f0c060; color: #f0c060; }
       .gw-gov-hint {
-        position: fixed; left: 12px; bottom: 84px; z-index: 30; display: none;
+        position: fixed; left: 12px; bottom: 90px; z-index: 30; display: none;
         background: rgba(28, 30, 38, 0.88); border: 2px solid #f0c060; border-radius: 4px;
         color: #f0e0b0; font: 11px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
         padding: 5px 10px; max-width: 220px;
@@ -127,22 +131,45 @@ export class Overlay {
     this.hud.innerHTML = html
   }
 
-  /** 左下角静音开关（P2 声音） */
-  initMuteButton(parent: HTMLElement, initialMuted: boolean, onChange: (muted: boolean) => void) {
-    const btn = document.createElement('button')
-    btn.type = 'button'
-    btn.className = 'gw-mute'
-    let muted = initialMuted
+  /** 左下角声音分类开关（背景音乐 / 音效） */
+  initSoundButtons(
+    parent: HTMLElement,
+    initial: { bgmMuted: boolean; sfxMuted: boolean },
+    onChange: (state: { bgmMuted: boolean; sfxMuted: boolean }) => void,
+  ) {
+    const wrap = document.createElement('div')
+    wrap.className = 'gw-sound-controls'
+    let bgmMuted = initial.bgmMuted
+    let sfxMuted = initial.sfxMuted
+
+    const bgmBtn = document.createElement('button')
+    bgmBtn.type = 'button'
+    bgmBtn.className = 'gw-sound'
+    const sfxBtn = document.createElement('button')
+    sfxBtn.type = 'button'
+    sfxBtn.className = 'gw-sound'
+
     const render = () => {
-      btn.textContent = muted ? '🔇 声音关' : '🔊 声音开'
+      bgmBtn.textContent = bgmMuted ? '🔇 背景声关' : '🎵 背景声开'
+      sfxBtn.textContent = sfxMuted ? '🔕 音效关' : '🔔 音效开'
     }
-    render()
-    btn.onclick = () => {
-      muted = !muted
+    const emit = () => onChange({ bgmMuted, sfxMuted })
+
+    bgmBtn.onclick = () => {
+      bgmMuted = !bgmMuted
       render()
-      onChange(muted)
+      emit()
     }
-    parent.appendChild(btn)
+    sfxBtn.onclick = () => {
+      sfxMuted = !sfxMuted
+      render()
+      emit()
+    }
+
+    render()
+    wrap.appendChild(bgmBtn)
+    wrap.appendChild(sfxBtn)
+    parent.appendChild(wrap)
   }
 
   /** 辅助管理员操控开关 + 操作提示（左下角） */

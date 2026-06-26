@@ -32,6 +32,7 @@ export class Drawer implements PanelController {
   private portraitInfo: HTMLDivElement
   private tabsEl: HTMLDivElement
   private bodyEl: HTMLDivElement
+  private sideEl: HTMLDivElement
   readonly actions: DrawerActions
 
   constructor(parent: HTMLElement, actions: DrawerActions) {
@@ -41,18 +42,25 @@ export class Drawer implements PanelController {
     this.el = document.createElement('div')
     this.el.className = 'gw-panel'
     this.el.innerHTML = `
-      <div class="gp-portrait">
-        <div class="gp-port-frame"></div>
-        <div class="gp-port-name"></div>
-        <div class="gp-port-sub"></div>
-        <div class="gp-port-info"></div>
-      </div>
       <div class="gp-main">
+        <div class="gp-content">
+          <div class="gp-body"></div>
+          <div class="gp-side"></div>
+        </div>
+      </div>
+      <div class="gp-rail">
+        <div class="gp-portrait">
+          <div class="gp-port-frame"></div>
+          <div class="gp-port-meta">
+            <div class="gp-port-name"></div>
+            <div class="gp-port-sub"></div>
+            <div class="gp-port-info"></div>
+          </div>
+        </div>
         <div class="gp-tabbar">
           <div class="gp-tabs"></div>
           <button class="gp-close" type="button">✕</button>
         </div>
-        <div class="gp-body"></div>
       </div>
     `
     parent.appendChild(this.el)
@@ -62,6 +70,7 @@ export class Drawer implements PanelController {
     this.portraitInfo = this.el.querySelector('.gp-port-info') as HTMLDivElement
     this.tabsEl = this.el.querySelector('.gp-tabs') as HTMLDivElement
     this.bodyEl = this.el.querySelector('.gp-body') as HTMLDivElement
+    this.sideEl = this.el.querySelector('.gp-side') as HTMLDivElement
     this.host = this.bodyEl
     ;(this.el.querySelector('.gp-close') as HTMLButtonElement).onclick = () => this.close()
   }
@@ -72,6 +81,8 @@ export class Drawer implements PanelController {
     this.bodyEl.innerHTML = ''
     this.tabsEl.innerHTML = ''
     this.portraitInfo.innerHTML = ''
+    this.sideEl.innerHTML = ''
+    this.sideEl.classList.remove('open')
   }
 
   get isOpen(): boolean {
@@ -80,6 +91,10 @@ export class Drawer implements PanelController {
 
   get memberInfoHost(): HTMLElement {
     return this.portraitInfo
+  }
+
+  get sideHost(): HTMLElement {
+    return this.sideEl
   }
 
   setActiveMemberId(id: WorldMember['id'] | null) {
@@ -93,7 +108,9 @@ export class Drawer implements PanelController {
     this.portraitSub.textContent = opts.subtitle || ''
     this.portraitFrame.innerHTML = ''
     this.portraitInfo.innerHTML = ''
-    if (opts.portrait) this.portraitFrame.appendChild(renderPortrait(opts.portrait))
+    this.sideEl.innerHTML = ''
+    this.sideEl.classList.remove('open')
+    if (opts.portrait) this.portraitFrame.appendChild(renderPortrait(opts.portrait, 96))
 
     this.tabsEl.innerHTML = ''
     this.bodyEl.innerHTML = ''

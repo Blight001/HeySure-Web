@@ -8,39 +8,50 @@ const DRAWER_CSS = `
     display: none; flex-direction: row; pointer-events: auto;
   }
   .gw-panel.open { display: flex; }
+  .gw-panel .gp-rail {
+    flex: 0 0 250px; min-width: 220px; max-width: 280px; border-left: 1px solid #3a3f4c;
+    display: flex; flex-direction: column; min-height: 0;
+  }
   .gw-panel .gp-portrait {
-    flex: none; width: 210px; padding: 12px 12px; border-right: 1px solid #3a3f4c;
+    flex: none; padding: 10px 12px 8px; border-bottom: 1px solid #3a3f4c;
     display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px;
-    overflow-y: auto;
+    overflow: hidden;
   }
   .gw-panel .gp-port-frame {
-    width: 84px; height: 84px; flex: none; border: 2px solid #4a4f5e; border-radius: 6px;
+    width: 106px; height: 106px; flex: none; border: 2px solid #4a4f5e; border-radius: 6px;
     background: #20232b; display: flex; align-items: center; justify-content: center; overflow: hidden;
   }
   .gw-panel .gp-port-frame canvas { image-rendering: pixelated; }
+  .gw-panel .gp-port-meta { min-width: 0; width: 100%; }
   .gw-panel .gp-port-name { color: #f0c060; font-weight: bold; font-size: 13px; word-break: break-all; }
   .gw-panel .gp-port-sub { color: #9fc6ff; font-size: 11px; }
-  .gw-panel .gp-port-info { width: 100%; margin-top: 2px; text-align: left; }
+  .gw-panel .gp-port-info { width: 100%; margin-top: 2px; text-align: left; max-height: 54px; overflow: auto; }
   .gw-panel .gp-port-info .d-row { gap: 6px; font-size: 11px; line-height: 1.45; }
   .gw-panel .gp-port-info .d-row .k { min-width: 32px; }
   .gw-panel .gp-port-info .d-bar { margin: 4px 0 6px; }
-  .gw-panel .gp-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .gw-panel .gp-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   .gw-panel .gp-tabbar {
-    display: flex; align-items: center; gap: 4px; padding: 8px 10px 0; border-bottom: 1px solid #3a3f4c;
+    display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; min-height: 0; flex: 1;
   }
-  .gw-panel .gp-tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; min-width: 0; }
+  .gw-panel .gp-tabs { display: flex; flex-direction: column; gap: 5px; flex: 1; min-height: 0; overflow-y: auto; }
   .gw-panel button.gp-tab {
-    cursor: pointer; border: 1px solid #4a4f5e; border-bottom: none; border-radius: 5px 5px 0 0;
-    background: #2b2f3a; color: #9aa0b0; padding: 4px 12px; font: inherit;
+    cursor: pointer; border: 1px solid #4a4f5e; border-radius: 4px;
+    background: #2b2f3a; color: #9aa0b0; padding: 5px 10px; font: inherit; text-align: left;
   }
   .gw-panel button.gp-tab:hover { color: #d6dae2; }
   .gw-panel button.gp-tab.active { background: #343949; color: #f0c060; }
   .gw-panel .gp-close {
     cursor: pointer; border: 1px solid #4a4f5e; border-radius: 3px;
-    background: none; color: #8a90a0; font: inherit; padding: 1px 8px; flex: none;
+    background: none; color: #8a90a0; font: inherit; padding: 2px 8px; flex: none; width: 100%;
   }
   .gw-panel .gp-close:hover { color: #d6dae2; }
-  .gw-panel .gp-body { padding: 12px 16px; overflow-y: auto; flex: 1; }
+  .gw-panel .gp-content { display: flex; flex: 1; min-height: 0; }
+  .gw-panel .gp-body { padding: 12px 16px; overflow-y: auto; flex: 1; min-width: 0; }
+  .gw-panel .gp-side {
+    display: none; flex: 0 0 32%; min-width: 260px; max-width: 460px;
+    border-left: 1px solid #3a3f4c; padding: 12px 14px; overflow-y: auto;
+  }
+  .gw-panel .gp-side.open { display: block; }
   .gw-panel .d-sec { margin-bottom: 14px; }
   .gw-panel .d-sec-title { color: #9fc6ff; margin-bottom: 4px; }
   .gw-panel .d-row { display: flex; gap: 8px; }
@@ -74,6 +85,7 @@ const DRAWER_CSS = `
     background: #20232b; border: 1px solid #343949; border-radius: 4px;
     padding: 6px 8px; margin-top: 4px; color: #cdd3dd;
   }
+  .gw-panel .gp-side .d-talk { max-height: none; margin-bottom: 8px; }
   .gw-panel label.d-check {
     display: flex; align-items: flex-start; gap: 6px; cursor: pointer;
     border: 1px solid #343949; border-radius: 4px; padding: 4px 6px; margin: 4px 0;

@@ -1,5 +1,5 @@
 /**
- * 头像（上半身）渲染：把角色 / 建筑 spritesheet 的某一帧裁出上半身，
+ * 头像渲染：把角色 / 建筑 spritesheet 的某一帧完整裁出，
  * 放大画进一个像素风 canvas，供底部信息面板左上角显示。
  *
  * 像素资产很小（角色 32x48 / 建筑 64~96），直接用 canvas drawImage 裁剪 + 整数放大，
@@ -29,9 +29,7 @@ const loadImage = (url: string): HTMLImageElement => {
 }
 
 /**
- * 由 sheet 文件名 + 帧号算出"上半身"裁剪区域。
- * - character：取上 ~64%（头 + 胸腹），略去腿脚。
- * - building：取上 ~62%（屋顶 + 上层立面）。
+ * 由 sheet 文件名 + 帧号算出完整帧裁剪区域。
  */
 export const portraitSpecFor = (
   resolveUrl: (file: string) => string,
@@ -45,8 +43,8 @@ export const portraitSpecFor = (
   const cols = def?.columns ?? 1
   const sx = (frame % cols) * fw
   const sy = Math.floor(frame / cols) * fh
-  const bodyFrac = kind === 'character' ? 0.64 : 0.62
-  return { url: resolveUrl(sheetFile), sx, sy, sw: fw, sh: Math.max(1, Math.round(fh * bodyFrac)) }
+  void kind
+  return { url: resolveUrl(sheetFile), sx, sy, sw: fw, sh: fh }
 }
 
 /** 渲染一个固定边长的像素头像 canvas（异步：图片就绪后自动绘制）。 */

@@ -16,10 +16,18 @@ const TINT_PRESETS = ['#ff9aa2', '#ffd166', '#9be564', '#6ec5ff', '#c69aff', '#f
 /** 光环颜色预设（ADD 混合发光） */
 const AURA_PRESETS = ['#ffd700', '#7fd8ff', '#c69aff', '#9bff8a', '#ff8ad8']
 
+const speechPreview = (raw: string): string => String(raw || '')
+  .replace(/```[^\n]*\n?/g, '')
+  .replace(/<\/?think>/gi, '')
+  .replace(/__HS_MCP_STATE__=.*$/s, '')
+  .replace(/\r\n/g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim()
+
 const workshopTypeLabel = (type: WorldSnapshot['workshops'][number]['type'] | undefined): string => {
   if (type === 'browser') return '瞭望塔'
   if (type === 'android') return '移动工坊'
-  if (type === 'workshop') return '知识与进化作坊'
+  if (type === 'workshop') return '图书馆'
   return '机械坊'
 }
 
@@ -47,6 +55,7 @@ export const openMemberPanel = (
     ],
   })
   renderMemberInfo(panel, m)
+  renderMemberSpeech(panel, m)
   panel.setActiveMemberId(m.id)
 }
 
@@ -69,6 +78,36 @@ const renderMemberInfo = (panel: PanelController, m: WorldMember) => {
     ['项目', m.projectName],
     ['模型', m.model],
   ])
+}
+
+const renderMemberSpeech = (panel: PanelController, m: WorldMember) => {
+  const host = panel.sideHost
+  host.innerHTML = ''
+  host.classList.add('open')
+  const title = document.createElement('div')
+  title.className = 'd-sec-title'
+  title.textContent = '对话内容'
+  host.appendChild(title)
+
+  const text = speechPreview(m.latestSpeech)
+  if (text) {
+    const pre = document.createElement('div')
+    pre.className = 'd-pre d-talk'
+    pre.textContent = text
+    host.appendChild(pre)
+  } else {
+    const empty = document.createElement('div')
+    empty.className = 'd-dim'
+    empty.textContent = '暂无对话内容'
+    host.appendChild(empty)
+  }
+
+  const chatBtn = document.createElement('button')
+  chatBtn.type = 'button'
+  chatBtn.className = 'd-btn'
+  chatBtn.textContent = '打开对话'
+  chatBtn.onclick = () => panel.actions.openChat(m.id)
+  host.appendChild(chatBtn)
 }
 
 const memberOpsTab = (panel: PanelController, m: WorldMember) => {
@@ -108,7 +147,7 @@ const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapsh
     item.appendChild(label)
     bind.appendChild(item)
   }
-  const freeWorkshops = snap.workshops.filter(w => !m.boundAgentIds.includes(w.deviceId))
+  const freeWorkshops = snap.workshops.filter(w => w.online && !m.boundAgentIds.includes(w.deviceId))
   if (freeWorkshops.length) {
     const sel = document.createElement('select')
     sel.className = 'd-sel'

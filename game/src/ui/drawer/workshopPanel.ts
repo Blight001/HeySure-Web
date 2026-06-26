@@ -17,10 +17,10 @@ export const openWorkshopPanel = (
       ? '瞭望塔（浏览器 Agent）'
       : w.type === 'android'
         ? '移动工坊（安卓端）'
-        : '知识与进化作坊'
+        : '图书馆'
   panel.openPanel({
     title: `${typeTitle} · ${w.name}`,
-    subtitle: w.lifecycle === 'dispatching' ? '执行中' : '在线',
+    subtitle: w.lifecycle === 'waiting' ? '等待连接' : w.lifecycle === 'dispatching' ? '执行中' : w.online ? '在线' : '离线',
     portrait,
     tabs: [
       {
@@ -30,13 +30,19 @@ export const openWorkshopPanel = (
           panel.rows(info, [
             ['名称', w.name],
             ['平台', w.platform || 'unknown'],
-            ['状态', w.lifecycle === 'dispatching' ? '执行中' : '在线'],
+            ['状态', w.lifecycle === 'waiting' ? '等待连接' : w.lifecycle === 'dispatching' ? '执行中' : w.online ? '在线' : '离线'],
             ['工具', `${w.capabilities} 个端侧工具`],
             ['错误', w.lastError || ''],
           ])
+          if (w.lifecycle === 'waiting') {
+            const hint = document.createElement('div')
+            hint.className = 'd-dim'
+            hint.textContent = '这是通用设备插槽：桌面端或浏览器端 Agent 连接后，会自动替换为真实设备。'
+            info.appendChild(hint)
+          }
         },
       },
-      {
+      ...(w.lifecycle === 'waiting' ? [] : [{
         name: '分配成员',
         build: () => {
           const assign = panel.section('分配成员')
@@ -67,8 +73,8 @@ export const openWorkshopPanel = (
             assign.appendChild(hint)
           }
         },
-      },
-      { name: 'MCP 权限', build: () => mcpScopeSection(panel, w.deviceId) },
+      }]),
+      ...(w.lifecycle === 'waiting' ? [] : [{ name: 'MCP 权限', build: () => mcpScopeSection(panel, w.deviceId) }]),
     ],
   })
 }

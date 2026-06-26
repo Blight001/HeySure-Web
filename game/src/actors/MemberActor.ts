@@ -8,6 +8,7 @@
 import Phaser from 'phaser'
 import { EMOTES } from '../assetManifest'
 import { clampToWorld, randomPointIn, type Point, type Rect } from '../world/layout'
+import { isWorldBlocked } from '../world/map'
 import type { WorldMember } from '../world/store'
 
 const WALK_SPEED = 42 // px/s
@@ -19,6 +20,27 @@ const HITBOX_TOP = -68
 const TOKEN_BAR_W = 34
 const TOKEN_BAR_H = 5
 const SPEECH_W = 260
+
+const walkablePointIn = (zone: Rect): Point => {
+  for (let i = 0; i < 16; i++) {
+    const p = clampToWorld(randomPointIn(zone))
+    if (!isWorldBlocked(p)) return p
+  }
+  return clampToWorld(randomPointIn(zone))
+}
+
+const blockedAwareStep = (from: Point, dx: number, dy: number): Point | null => {
+  const next = clampToWorld({ x: from.x + dx, y: from.y + dy })
+  if (!isWorldBlocked(next)) return next
+
+  const slideX = clampToWorld({ x: from.x + dx, y: from.y })
+  if (!isWorldBlocked(slideX)) return slideX
+
+  const slideY = clampToWorld({ x: from.x, y: from.y + dy })
+  if (!isWorldBlocked(slideY)) return slideY
+
+  return null
+}
 
 export type EmoteKind = keyof typeof EMOTES | null
 
@@ -72,7 +94,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
   private controlFacing: 'down' | 'up' | 'left' | 'right' = 'down'
 
   constructor(scene: Phaser.Scene, member: WorldMember, skin: string, zone: Rect) {
-    const start = randomPointIn(zone)
+    const start = walkablePointIn(zone)
     super(scene, start.x, start.y)
     this.memberId = member.id
     this.member = member
@@ -154,7 +176,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
     this.dragging = false
     this.setAlpha(this.member.enabled ? 1 : 0.75)
     // 回到锚区（从拖放点走回去，调度可见）
-    this.target = clampToWorld(randomPointIn(this.zone))
+    this.target = walkablePointIn(this.zone)
   }
 
   get isDragging(): boolean {
@@ -174,7 +196,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
       this.sprite.setFrame(0)
       this.setAlpha(1)
     } else {
-      this.target = clampToWorld(randomPointIn(this.zone))
+      this.target = walkablePointIn(this.zone)
       this.idleUntil = 0
     }
     this.refreshTokenBar()
@@ -194,7 +216,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
       this.sprite.stop()
       this.sprite.setFrame(0)
     } else if (!this.controlled && this.member.enabled) {
-      this.target = clampToWorld(randomPointIn(this.zone))
+      this.target = walkablePointIn(this.zone)
       this.idleUntil = 0
     }
   }
@@ -273,7 +295,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
     // 玩家接管时不被锚区拉走
     if (this.controlled || this.stationary) return
     // 锚区变化：走过去（不瞬移，让调度可见）
-    this.target = clampToWorld(randomPointIn(zone))
+    this.target = walkablePointIn(zone)
     this.idleUntil = 0
   }
 
@@ -378,12 +400,15 @@ export class MemberActor extends Phaser.GameObjects.Container {
       if (this.controlVx !== 0 || this.controlVy !== 0) {
         const len = Math.hypot(this.controlVx, this.controlVy) || 1
         const step = (CONTROL_SPEED * deltaMs) / 1000
-        const np = clampToWorld({
-          x: this.x + (this.controlVx / len) * step,
-          y: this.y + (this.controlVy / len) * step,
-        })
-        this.x = np.x
-        this.y = np.y
+        const np = blockedAwareStep(
+          { x: this.x, y: this.y },
+          (this.controlVx / len) * step,
+          (this.controlVy / len) * step,
+        )
+        if (np) {
+          this.x = np.x
+          this.y = np.y
+        }
         this.controlFacing = Math.abs(this.controlVx) > Math.abs(this.controlVy)
           ? (this.controlVx > 0 ? 'right' : 'left')
           : (this.controlVy > 0 ? 'down' : 'up')
@@ -426,23 +451,37 @@ export class MemberActor extends Phaser.GameObjects.Container {
         this.sprite.setFrame(0)
       } else {
         const step = (WALK_SPEED * deltaMs) / 1000
-        this.x += (dx / dist) * Math.min(step, dist)
-        this.y += (dy / dist) * Math.min(step, dist)
+        const np = blockedAwareStep(
+          { x: this.x, y: this.y },
+          (dx / dist) * Math.min(step, dist),
+          (dy / dist) * Math.min(step, dist),
+        )
+        let moved = false
+        if (np) {
+          this.x = np.x
+          this.y = np.y
+          moved = true
+        } else {
+          this.target = null
+          this.idleUntil = time + 800 + Math.random() * 1200
+          this.sprite.stop()
+          this.sprite.setFrame(0)
+        }
         // 离屏裁剪：视口外只移动坐标不跑动画（100+ 成员时省 CPU）
-        if (this.isOnScreen()) {
+        if (moved && this.isOnScreen()) {
           const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up'
           const animKey = `${this.skin}:walk_${dir}`
           if (this.sprite.anims.currentAnim?.key !== animKey || !this.sprite.anims.isPlaying) {
             this.sprite.play(animKey)
           }
-        } else if (this.sprite.anims.isPlaying) {
+        } else if (!moved || this.sprite.anims.isPlaying) {
           this.sprite.stop()
           this.sprite.setFrame(0)
         }
       }
     } else if (time >= this.idleUntil) {
       // 区内游荡：挑下一个点
-      this.target = clampToWorld(randomPointIn(this.zone))
+      this.target = walkablePointIn(this.zone)
     }
     this.syncDepth()
     return true
