@@ -13,7 +13,7 @@ import { get, getAuthToken } from '@/api/http'
 import { me } from '@/api/auth'
 import { listAiCards } from '@/api/ai'
 import { listConnectedDevices } from '@/api/devices'
-import { listEntries, readEntry, type KnowledgeEntryItem } from '@/api/librarian'
+import { listEntries, type KnowledgeEntryItem } from '@/api/librarian'
 import { listWorldActorMeta, type WorldActorAppearance } from '@/api/world'
 
 /** 服务端直推的世界事件（P2）：演出零延迟触发，权威状态仍以 refresh 为准 */
@@ -87,7 +87,6 @@ type Listener = (snap: WorldSnapshot) => void
 
 const POLL_IDLE_MS = 8000
 const POLL_TASK_MS = 1200
-const PLACEHOLDER_DEVICE_COUNT = 6
 
 const num = (v: unknown, fallback = 0): number => {
   const n = Number(v)
@@ -136,20 +135,6 @@ const workshopAiConfigId = (raw: Record<string, any>): number | null => {
   return null
 }
 
-const waitingWorkshop = (
-  index: number,
-  type: 'desktop' | 'browser',
-): WorldWorkshop => ({
-  deviceId: `waiting-${type}-${index + 1}`,
-  name: `${type === 'desktop' ? '桌面设备' : '浏览器设备'} ${index + 1} · 等待连接`,
-  type,
-  lifecycle: 'waiting',
-  aiConfigId: null,
-  lastError: null,
-  platform: type === 'desktop' ? 'desktop-ready' : 'browser-ready',
-  capabilities: 0,
-  online: false,
-})
 
 export class WorldStore {
   private listeners: Listener[] = []
@@ -299,13 +284,9 @@ export class WorldStore {
         online: raw.online !== false && String(raw.lifecycle || '').toLowerCase() !== 'offline',
       })
     }
-    const realIds = new Set(workshops.map(w => w.deviceId))
-    const placeholders = [
-      ...Array.from({ length: PLACEHOLDER_DEVICE_COUNT }, (_, i) => waitingWorkshop(i, 'desktop')),
-      ...Array.from({ length: PLACEHOLDER_DEVICE_COUNT }, (_, i) => waitingWorkshop(i, 'browser')),
-    ].filter(w => !realIds.has(w.deviceId))
+    // 不再预留占位作坊：设备连上才显示一栋建筑，空地皮保持空着。
     workshops.sort((a, b) => a.deviceId.localeCompare(b.deviceId))
-    this.snapshot.workshops = [...workshops, ...placeholders]
+    this.snapshot.workshops = workshops
     // 成员 ←→ 作坊绑定反查
     const byConfig = new Map<number, string[]>()
     for (const w of workshops) {
@@ -337,17 +318,10 @@ export class WorldStore {
     const token = getAuthToken()
     if (!token) return
     try {
+      // 列表已返回面板所需的全部字段（标题/范围/置信度/触发词/摘要），
+      // 面板正文用 body || summary 兜底，无需对每条再发一次 readEntry（消除 N+1）。
       const entries = await listEntries(token, { status: 'active' })
-      const baseItems = entries.items ?? []
-      this.snapshot.knowledgeItems = await Promise.all(
-        baseItems.map(async item => {
-          try {
-            return await readEntry(token, item.memory_id)
-          } catch {
-            return item
-          }
-        }),
-      )
+      this.snapshot.knowledgeItems = entries.items ?? []
       this.snapshot.knowledgeActive = this.snapshot.knowledgeItems.length
     } catch {
       // best-effort：知识计数失败不阻塞世界

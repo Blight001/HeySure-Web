@@ -107,6 +107,13 @@ const memberOpsTab = (panel: PanelController, m: WorldMember) => {
   chatBtn.textContent = '打开对话'
   chatBtn.onclick = () => panel.actions.openChat(m.id)
   ops.appendChild(chatBtn)
+  const locateBtn = document.createElement('button')
+  locateBtn.type = 'button'
+  locateBtn.className = 'd-btn'
+  locateBtn.textContent = '📍 地图定位'
+  locateBtn.title = '将镜头移到该成员位置'
+  locateBtn.onclick = () => panel.actions.focusMember(m.id)
+  ops.appendChild(locateBtn)
 }
 
 const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapshot) => {

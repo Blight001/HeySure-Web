@@ -24,6 +24,13 @@ const TOKEN_BAR_H = 5
 const SPEECH_W = 260
 const SHADOW_RX = 18
 const SHADOW_RY = 6
+// 挎包腰侧定位（scale=1 基准）：
+//   SIDE_X   — 正/背面（down/up）时挂在腰侧的横向偏移
+//   PROFILE_X— 侧面（left/right）时身体很窄，挎包与身体重叠，仅做小幅偏移点出近侧胯
+//   DROP_Y   — 相对精灵中心的下垂量
+const BAG_SIDE_X = 11
+const BAG_PROFILE_X = 3
+const BAG_DROP_Y = 8
 
 const walkablePointIn = (zone: Rect): Point => {
   for (let i = 0; i < 16; i++) {
@@ -67,9 +74,18 @@ const hexToColor = (hex: string): number | null => {
 export class MemberActor extends Phaser.GameObjects.Container {
   readonly memberId: number
   member: WorldMember
+  /** 上一次渲染所依据的成员数据：用于 setMember 跳过无变化的 Graphics 重绘 */
+  private prevRender: WorldMember | null = null
   private shadow: Phaser.GameObjects.Graphics
   private sprite: Phaser.GameObjects.Sprite
   private bag: Phaser.GameObjects.Image
+  /**
+   * 工具箱夜间光晕：scene 级对象（非 Container 子节点），depth 高于夜幕遮罩
+   * (150000) 才能在夜里照亮四周；每帧跟随角色腰侧，白天隐藏。
+   */
+  private bagGlow: Phaser.GameObjects.Image
+  /** 当前世界夜色程度（0=白天，1=深夜），由场景每帧下发 */
+  private nightness = 0
   private tokenBar: Phaser.GameObjects.Graphics
   private nameTag: Phaser.GameObjects.Text
   private emote: Phaser.GameObjects.Image
@@ -99,6 +115,8 @@ export class MemberActor extends Phaser.GameObjects.Container {
   private controlVx = 0
   private controlVy = 0
   private controlFacing: 'down' | 'up' | 'left' | 'right' = 'down'
+  /** 角色当前朝向：驱动挎包挂在身体哪一侧（转身时同步切换） */
+  private facing: 'down' | 'up' | 'left' | 'right' = 'down'
 
   constructor(scene: Phaser.Scene, member: WorldMember, skin: string, zone: Rect) {
     const start = walkablePointIn(zone)
@@ -124,11 +142,20 @@ export class MemberActor extends Phaser.GameObjects.Container {
     this.sprite.setOrigin(0.5, 0.5)
     this.add(this.sprite)
 
-    // 工具箱挎包（悬挂在角色右侧，绑定工具箱时显示）
-    this.bag = scene.add.image(5, -18, 'effect_toolbox_bag.png', 0)
-    this.bag.setOrigin(0, 0.5)
+    // 工具箱挎包（挂在角色腰侧，绑定工具箱时显示）。中心 origin 便于随朝向左右镜像。
+    this.bag = scene.add.image(BAG_SIDE_X, -24 + BAG_DROP_Y, 'effect_toolbox_bag.png', 0)
+    this.bag.setOrigin(0.5, 0.5)
     this.bag.setVisible(false)
     this.add(this.bag)
+
+    // 工具箱暖光：跟随角色的独立 scene 对象，盖在夜幕之上照亮四周
+    this.bagGlow = scene.add.image(start.x, start.y, 'glow.png', 0)
+    this.bagGlow.setBlendMode(Phaser.BlendModes.ADD)
+    this.bagGlow.setTint(0xffcf8a)
+    this.bagGlow.setScale(3.0, 2.1)
+    this.bagGlow.setDepth(155050)
+    this.bagGlow.setAlpha(0)
+    this.bagGlow.setVisible(false)
 
     this.applyAppearance(member)
     this.refreshBag()
@@ -263,18 +290,29 @@ export class MemberActor extends Phaser.GameObjects.Container {
   }
 
   setMember(member: WorldMember, skin: string) {
+    // 轮询频繁（任务中每 1.2s），多数字段不变：逐项脏检查，跳过昂贵的 Graphics 重绘。
+    const prev = this.prevRender
+    this.prevRender = member
     this.member = member
     if (skin !== this.skin) {
       this.skin = skin
       this.sprite.stop()
       this.sprite.setTexture(skin, 0)
     }
-    this.nameTag.setText(member.name || `#${member.id}`)
-    this.nameTag.setAlpha(member.enabled ? 1 : 0.55)
-    this.applyAppearance(member)
+    if (!prev || prev.name !== member.name || prev.enabled !== member.enabled) {
+      this.nameTag.setText(member.name || `#${member.id}`)
+      this.nameTag.setAlpha(member.enabled ? 1 : 0.55)
+    }
+    // 外观（调色/体型/光环）变化才重绘阴影/缩放/光环（applyAppearance 含 stopBob，跳过可保留弹跳）
+    if (!prev || prev.tint !== member.tint || prev.scale !== member.scale || prev.aura !== member.aura) {
+      this.applyAppearance(member)
+    }
     this.refreshBag()
     this.refreshEmote()
-    this.refreshTokenBar()
+    // 血条仅在 token 用量/上限变化时重绘
+    if (!prev || prev.tokensUsed !== member.tokensUsed || prev.tokenLimit !== member.tokenLimit) {
+      this.refreshTokenBar()
+    }
     this.refreshSpeechBubble()
     // 停用：原地坐下打瞌睡
     if (!member.enabled && !this.dying) {
@@ -299,7 +337,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
     this.sprite.setScale(scale)
     this.sprite.y = -24 * scale // 体型变化时保持脚底贴地
     this.bag.setScale(scale)
-    this.bag.y = -24 * scale + 8 // 随体型保持腰侧位置
+    this.applyBagSide() // 随体型/朝向更新挎包横向偏移与镜像
     // 阴影随体型缩放
     this.shadow.clear()
     this.shadow.fillStyle(0x000000, 0.2)
@@ -314,6 +352,15 @@ export class MemberActor extends Phaser.GameObjects.Container {
     } else {
       this.aura.setVisible(false)
     }
+  }
+
+  /**
+   * 抽屉外观预览（未落库）：套用调色/体型/光环并使渲染缓存失效，
+   * 确保下次快照即便字段未变也会重绘，恢复已保存外观。
+   */
+  previewAppearance(a: ActorAppearance) {
+    this.applyAppearance(a)
+    this.prevRender = null
   }
 
   /** 预览皮肤贴图（抽屉换肤未保存时的所见即所得） */
@@ -336,6 +383,47 @@ export class MemberActor extends Phaser.GameObjects.Container {
 
   private refreshBag() {
     this.bag.setVisible(!!this.member.hasToolbox && this.member.enabled && !this.dying)
+  }
+
+  /** 转身：更新朝向并把挎包挂到对应身体侧（仅在朝向变化时重排，避免每帧抖动）。 */
+  private setFacing(dir: 'down' | 'up' | 'left' | 'right') {
+    if (this.facing === dir) return
+    this.facing = dir
+    this.applyBagSide()
+  }
+
+  /**
+   * 依据朝向决定挎包挂在身体哪一侧：
+   *   down  — 正面：挂右胯，偏到腰侧
+   *   up    — 背面：收拢到背后偏左、置于精灵之下
+   *   left  — 侧面朝左：与身体重叠，水平镜像，仅小幅偏向近侧胯
+   *   right — 侧面朝右：与身体重叠，仅小幅偏向近侧胯
+   * 侧面时身体很窄，挎包必须与人物重叠显示在侧边，而不是浮在前/后方。
+   */
+  private applyBagSide() {
+    const scale = this.sprite.scaleX || 1
+    switch (this.facing) {
+      case 'left':
+        this.bag.x = -BAG_PROFILE_X * scale
+        this.bag.setFlipX(true)
+        this.moveAbove(this.bag, this.sprite)
+        break
+      case 'right':
+        this.bag.x = BAG_PROFILE_X * scale
+        this.bag.setFlipX(false)
+        this.moveAbove(this.bag, this.sprite)
+        break
+      case 'up':
+        this.bag.x = -BAG_SIDE_X * 0.55 * scale
+        this.bag.setFlipX(false)
+        this.moveBelow(this.bag, this.sprite) // 背面：挎包藏到精灵身后
+        break
+      default: // down
+        this.bag.x = BAG_SIDE_X * scale
+        this.bag.setFlipX(false)
+        this.moveAbove(this.bag, this.sprite)
+        break
+    }
   }
 
   private refreshEmote() {
@@ -434,6 +522,27 @@ export class MemberActor extends Phaser.GameObjects.Container {
     })
   }
 
+  /** 点击即时视觉反馈：精灵快速压缩再弹回，给点击一种手感 */
+  flashClick() {
+    if (this.dying || !this.scene || !this.active) return
+    const baseScaleX = this.sprite.scaleX
+    const baseScaleY = this.sprite.scaleY
+    this.scene.tweens.add({
+      targets: this.sprite,
+      scaleX: baseScaleX * 0.80,
+      scaleY: baseScaleY * 0.80,
+      duration: 55,
+      yoyo: true,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        if (this.active) {
+          this.sprite.scaleX = baseScaleX
+          this.sprite.scaleY = baseScaleY
+        }
+      },
+    })
+  }
+
   /** 临时盖一个表情（信使送达/收信等演出），到期恢复状态表情 */
   flashEmote(kind: keyof typeof EMOTES, durationMs = 2200) {
     if (this.dying) return
@@ -455,8 +564,50 @@ export class MemberActor extends Phaser.GameObjects.Container {
     }
   }
 
+  /** 场景每帧下发当前夜色程度（0=白天 → 1=深夜），驱动工具箱夜间发光 */
+  setNightness(n: number) {
+    this.nightness = n
+  }
+
+  /**
+   * 由当前显示的精灵帧推断身体朝向（帧布局：4-7 左 / 8-11 右 / 12-15 上 / 其余正面）。
+   * 待机动作 look_around、wave 会复用这些方向帧让身体转向，据此同步挎包侧别。
+   */
+  private facingFromFrame(frame: number): 'down' | 'up' | 'left' | 'right' {
+    if (frame >= 4 && frame <= 7) return 'left'
+    if (frame >= 8 && frame <= 11) return 'right'
+    if (frame >= 12 && frame <= 15) return 'up'
+    return 'down'
+  }
+
+  /**
+   * 挎包每帧跟随精灵：依当前帧同步朝向（含待机 look_around/wave 的转身），
+   * 并跟随精灵的 Y（弹跳/坐下等待机动作）做同步，不再僵直悬空。
+   */
+  private syncBag() {
+    if (!this.bag.visible) return
+    const frame = Number(this.sprite.frame?.name)
+    if (Number.isFinite(frame)) this.setFacing(this.facingFromFrame(frame))
+    this.bag.y = this.sprite.y + BAG_DROP_Y * this.sprite.scaleX
+  }
+
+  /** 工具箱夜间光晕：跟随挎包当前腰侧位置、随夜色与呼吸脉动；白天/无工具箱时熄灭 */
+  private refreshBagGlow(time: number) {
+    const lit = this.member.hasToolbox && this.member.enabled && !this.dying && this.nightness > 0.3
+    if (!lit) {
+      if (this.bagGlow.visible) this.bagGlow.setVisible(false)
+      return
+    }
+    this.bagGlow.setVisible(true)
+    this.bagGlow.setPosition(this.x + this.bag.x, this.y + this.bag.y)
+    const pulse = 0.5 + 0.5 * Math.sin(time / 460 + this.auraPhase)
+    this.bagGlow.setAlpha(this.nightness * (0.55 + 0.25 * pulse))
+  }
+
   /** 每帧推进；返回 false 表示已销毁 */
   tick(time: number, deltaMs: number): boolean {
+    this.syncBag()
+    this.refreshBagGlow(time)
     // 光环呼吸（独立于行走状态机，停用/拖拽时也生效）
     if (this.auraOn) this.aura.setAlpha(0.42 + 0.16 * Math.sin(time / 420 + this.auraPhase))
     if (this.dying || this.dragging) {
@@ -480,6 +631,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
         this.controlFacing = Math.abs(this.controlVx) > Math.abs(this.controlVy)
           ? (this.controlVx > 0 ? 'right' : 'left')
           : (this.controlVy > 0 ? 'down' : 'up')
+        this.setFacing(this.controlFacing)
         const animKey = `${this.skin}:walk_${this.controlFacing}`
         if (this.sprite.anims.currentAnim?.key !== animKey || !this.sprite.anims.isPlaying) {
           this.sprite.play(animKey)
@@ -557,6 +709,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
         // 离屏裁剪：视口外只移动坐标不跑动画（100+ 成员时省 CPU）
         if (moved && this.isOnScreen()) {
           const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up'
+          this.setFacing(dir)
           const animKey = `${this.skin}:walk_${dir}`
           if (this.sprite.anims.currentAnim?.key !== animKey || !this.sprite.anims.isPlaying) {
             this.sprite.play(animKey)
@@ -716,5 +869,11 @@ export class MemberActor extends Phaser.GameObjects.Container {
         },
       })
     })
+  }
+
+  /** 销毁时一并清理跟随的工具箱光晕（scene 级对象，不随 Container 自动回收） */
+  destroy(fromScene?: boolean) {
+    this.bagGlow?.destroy()
+    super.destroy(fromScene)
   }
 }

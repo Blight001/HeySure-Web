@@ -25,6 +25,12 @@ export class Overlay {
   private hud: HTMLDivElement
   private govBtn: HTMLButtonElement | null = null
   private govHint: HTMLDivElement | null = null
+  private loadingHintEl: HTMLDivElement | null = null
+  private bgmBtn: HTMLButtonElement | null = null
+  private sfxBtn: HTMLButtonElement | null = null
+  private bgmMuted = false
+  private sfxMuted = false
+  private soundOnChange: ((state: { bgmMuted: boolean; sfxMuted: boolean }) => void) | null = null
   private readonly govHintDefault = 'WASD 移动辅助管理员 · 走到 AI 旁按 <b>F</b> 交互 · 再次点击退出'
 
   constructor(parent: HTMLElement) {
@@ -53,6 +59,7 @@ export class Overlay {
         background: rgba(28, 30, 38, 0.88); border: 2px solid #4a4f5e; border-radius: 4px;
         color: #d6dae2; font: 12px/1.7 ui-monospace, "Cascadia Mono", Consolas, monospace;
         padding: 8px 12px; max-width: 320px; text-align: right;
+        transition: border-color 0.6s, color 0.6s;
       }
       .gw-hud .h-dim { color: #8a90a0; }
       .gw-hud .h-err { color: #e08484; }
@@ -82,8 +89,34 @@ export class Overlay {
         padding: 5px 10px; max-width: 220px;
       }
       .gw-gov-hint.show { display: block; }
+      /* G 键常驻小提示（始终显示，操控激活时隐藏） */
+      .gw-gov-idle-tip {
+        position: fixed; left: 12px; bottom: 90px; z-index: 30;
+        color: #6a7080; font: 10px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace;
+        pointer-events: none; transition: opacity 0.3s;
+      }
+      .gw-gov-idle-tip.hidden { opacity: 0; }
+      /* 加载提示 */
+      .gw-loading-hint {
+        position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        z-index: 450000;
+        color: #b0b8c8; font: 13px/1 ui-monospace, "Cascadia Mono", Consolas, monospace;
+        pointer-events: none; letter-spacing: 0.06em;
+        opacity: 1; transition: opacity 0.8s;
+      }
+      .gw-loading-hint.fade { opacity: 0; }
+      /* 边缘暗角 */
+      .gw-vignette {
+        position: fixed; inset: 0; z-index: 19; pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.32) 100%);
+      }
     `
     document.head.appendChild(style)
+
+    // 边缘暗角（始终可见，增加地图边界感）
+    const vignette = document.createElement('div')
+    vignette.className = 'gw-vignette'
+    parent.appendChild(vignette)
 
     this.tooltip = document.createElement('div')
     this.tooltip.className = 'gw-tooltip'
@@ -131,6 +164,37 @@ export class Overlay {
     this.hud.innerHTML = html
   }
 
+  /** 夜间对比度自适应：nightness 越大，HUD 边框/文字越亮 */
+  setNightness(nightness: number) {
+    if (nightness > 0.4) {
+      const brightness = 1 + nightness * 0.35
+      this.hud.style.filter = `brightness(${brightness.toFixed(2)})`
+      this.hud.style.borderColor = nightness > 0.6 ? '#6a7090' : '#4a4f5e'
+    } else {
+      this.hud.style.filter = ''
+      this.hud.style.borderColor = ''
+    }
+  }
+
+  /** 云层揭幕等待期显示"正在连接世界..."提示 */
+  showLoadingHint() {
+    if (this.loadingHintEl) return
+    const el = document.createElement('div')
+    el.className = 'gw-loading-hint'
+    el.textContent = '正在连接世界...'
+    document.body.appendChild(el)
+    this.loadingHintEl = el
+  }
+
+  /** 揭幕后淡出并移除加载提示 */
+  hideLoadingHint() {
+    if (!this.loadingHintEl) return
+    const el = this.loadingHintEl
+    this.loadingHintEl = null
+    el.classList.add('fade')
+    window.setTimeout(() => el.remove(), 900)
+  }
+
   /** 左下角声音分类开关（背景音乐 / 音效） */
   initSoundButtons(
     parent: HTMLElement,
@@ -139,29 +203,32 @@ export class Overlay {
   ) {
     const wrap = document.createElement('div')
     wrap.className = 'gw-sound-controls'
-    let bgmMuted = initial.bgmMuted
-    let sfxMuted = initial.sfxMuted
+    this.bgmMuted = initial.bgmMuted
+    this.sfxMuted = initial.sfxMuted
+    this.soundOnChange = onChange
 
     const bgmBtn = document.createElement('button')
     bgmBtn.type = 'button'
     bgmBtn.className = 'gw-sound'
+    this.bgmBtn = bgmBtn
     const sfxBtn = document.createElement('button')
     sfxBtn.type = 'button'
     sfxBtn.className = 'gw-sound'
+    this.sfxBtn = sfxBtn
 
     const render = () => {
-      bgmBtn.textContent = bgmMuted ? '🔇 背景声关' : '🎵 背景声开'
-      sfxBtn.textContent = sfxMuted ? '🔕 音效关' : '🔔 音效开'
+      bgmBtn.textContent = this.bgmMuted ? '🔇 背景声关' : '🎵 背景声开'
+      sfxBtn.textContent = this.sfxMuted ? '🔕 音效关' : '🔔 音效开'
     }
-    const emit = () => onChange({ bgmMuted, sfxMuted })
+    const emit = () => onChange({ bgmMuted: this.bgmMuted, sfxMuted: this.sfxMuted })
 
     bgmBtn.onclick = () => {
-      bgmMuted = !bgmMuted
+      this.bgmMuted = !this.bgmMuted
       render()
       emit()
     }
     sfxBtn.onclick = () => {
-      sfxMuted = !sfxMuted
+      this.sfxMuted = !this.sfxMuted
       render()
       emit()
     }
@@ -172,8 +239,25 @@ export class Overlay {
     parent.appendChild(wrap)
   }
 
+  /** M 键：同时切换背景声和音效（全静音/全开） */
+  toggleMasterMute() {
+    if (!this.bgmBtn || !this.sfxBtn || !this.soundOnChange) return
+    const newMuted = !(this.bgmMuted && this.sfxMuted)
+    this.bgmMuted = newMuted
+    this.sfxMuted = newMuted
+    this.bgmBtn.textContent = this.bgmMuted ? '🔇 背景声关' : '🎵 背景声开'
+    this.sfxBtn.textContent = this.sfxMuted ? '🔕 音效关' : '🔔 音效开'
+    this.soundOnChange({ bgmMuted: this.bgmMuted, sfxMuted: this.sfxMuted })
+  }
+
   /** 辅助管理员操控开关 + 操作提示（左下角） */
   initGovernorButton(parent: HTMLElement, initialActive: boolean, onChange: (active: boolean) => void) {
+    // G 键常驻提示（未进入操控模式时显示）
+    const idleTip = document.createElement('div')
+    idleTip.className = 'gw-gov-idle-tip'
+    idleTip.textContent = '按 G 可操控辅助管理员 · M 键静音'
+    parent.appendChild(idleTip)
+
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'gw-gov'
@@ -182,13 +266,13 @@ export class Overlay {
     hint.className = 'gw-gov-hint'
     hint.innerHTML = this.govHintDefault
     this.govHint = hint
-    this.setGovernorActive(initialActive)
+    this.setGovernorActive(initialActive, idleTip)
     btn.onclick = () => onChange(!btn.classList.contains('active'))
     parent.appendChild(btn)
     parent.appendChild(hint)
   }
 
-  setGovernorActive(active: boolean) {
+  setGovernorActive(active: boolean, idleTip?: HTMLElement) {
     if (this.govBtn) {
       this.govBtn.classList.toggle('active', active)
       this.govBtn.textContent = active ? '🚪 退出操控' : '🎮 操控辅助管理员'
@@ -197,6 +281,9 @@ export class Overlay {
       this.govHint.innerHTML = this.govHintDefault
       this.govHint.classList.toggle('show', active)
     }
+    // 操控激活时隐藏常驻提示，退出时恢复
+    const tip = idleTip ?? (document.querySelector('.gw-gov-idle-tip') as HTMLElement | null)
+    if (tip) tip.classList.toggle('hidden', active)
   }
 
   /** 临时提示（如"无辅助管理员可操控"），2.5s 后恢复默认 */

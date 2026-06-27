@@ -1,5 +1,6 @@
 import { TILES } from '../assetManifest'
 import {
+  FIXED_BUILDINGS,
   MAP_H,
   MAP_W,
   LIBRARY_DEVICE_POS,
@@ -32,6 +33,32 @@ const POND_X1 = 3
 const POND_X2 = 11
 const POND_Y1 = 4
 const POND_Y2 = 10
+
+// 出生地泉水建筑贴图（64×64）的固定显示尺寸，用于推导寻路碰撞盒
+const SPAWN_BUILDING_FRAME = 64
+// 碰撞盒比贴图略收一点：底座圆角/顶部尖塔留作可踩的草地与遮挡，
+// 但泉池上方那段（原先只挡椭圆水池、露出的空当）必须封死，
+// 否则随机寻路会把目标点丢进建筑内部，角色走进去站住看似"卡死"。
+const SPAWN_HALF_W = 46
+const SPAWN_TOP_INSET = 14 // 顶部尖塔留白
+const SPAWN_BOTTOM_INSET = 0
+
+// 出生地建筑实心footprint（覆盖整座泉水基座，而非仅水池椭圆）
+const spawnBuildingRect = (): Rect | null => {
+  const def = FIXED_BUILDINGS.find(b => b.key === 'spawn')
+  if (!def) return null
+  const h = SPAWN_BUILDING_FRAME * def.scale
+  const top = def.pos.y - h * 0.55 // sprite origin (0.5, 0.55)
+  const bottom = def.pos.y + h * 0.45
+  return {
+    x: def.pos.x - SPAWN_HALF_W,
+    y: top + SPAWN_TOP_INSET,
+    w: SPAWN_HALF_W * 2,
+    h: bottom - top - SPAWN_TOP_INSET - SPAWN_BOTTOM_INSET,
+  }
+}
+
+const SPAWN_BUILDING_RECT = spawnBuildingRect()
 
 const WORKSHOP_STREET = {
   left: Math.floor(workshopSlotPos(0).x / TILE) - 2,
@@ -109,8 +136,10 @@ export const isWorldBlocked = (p: Point): boolean => {
   const inPond = tx >= POND_X1 && tx <= POND_X2 && ty >= POND_Y1 && ty <= POND_Y2
   if (inPond) return true
 
-  const inSpawnFountain = Math.hypot((p.x - 194) / 58, (p.y - 744) / 38) <= 1
-  if (inSpawnFountain) return true
+  // 出生地：封死整座泉水建筑footprint（含水池上方原本露出的空当），
+  // 否则随机寻路会把游荡目标点丢进建筑内部导致角色"走进去卡死"。
+  const r = SPAWN_BUILDING_RECT
+  if (r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return true
 
   return false
 }

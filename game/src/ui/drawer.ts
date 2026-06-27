@@ -161,7 +161,7 @@ export class Drawer implements PanelController {
     return fb
   }
 
-  /** 包装动作：禁用按钮 → 执行 → 报错/成功反馈；返回是否成功 */
+  /** 包装动作：禁用按钮 → 执行 → 报错/成功反馈；成功消息 3s 后自动淡出；返回是否成功 */
   async runAction(btn: HTMLButtonElement | null, fb: HTMLElement, fn: () => Promise<void>, okMsg = '已完成'): Promise<boolean> {
     if (btn) btn.disabled = true
     fb.className = 'd-dim'
@@ -170,6 +170,12 @@ export class Drawer implements PanelController {
       await fn()
       fb.className = 'd-okmsg'
       fb.textContent = okMsg
+      window.setTimeout(() => {
+        if (fb.textContent === okMsg) {
+          fb.textContent = ''
+          fb.className = ''
+        }
+      }, 3000)
       return true
     } catch (err) {
       fb.className = 'd-err'
