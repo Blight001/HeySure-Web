@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMessage } from '@/composables/useMessage'
 import ChatHeader from './ChatHeader.vue'
 import ChatConversationView from './ChatConversationView.vue'
-import TaskProgressPanel from './TaskProgressPanel.vue'
 import ChatInput from './ChatInput.vue'
 import { parseChatResponseInline, type ActionBlock, type InlineContent as InlineContentType } from '@/utils/chatParser'
 import { isSameAssistantVisibleReply, normalizeAssistantReplyText } from '@/utils/chatReplyCompare'
@@ -69,6 +68,8 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'update:selectedFiles', value: string[]): void
+  (e: 'update:currentSessionId', value: string): void
+  (e: 'taskPlanRefresh', value: number): void
   (e: 'refreshFiles'): void
   (e: 'totalChatTokensUpdate', value: number): void
   (e: 'open-settings'): void
@@ -113,12 +114,20 @@ let lastRealtimeTokenSyncAt = 0
 let lastExternalRunCheckAt = 0
 const chatScrollRef = ref<HTMLElement | null>(null)
 const stickToBottom = ref(true)
+// History is paged: load the latest page on open, then prepend older pages as the
+// user scrolls up. Avoids materializing an entire long conversation at once.
+const HISTORY_PAGE_SIZE = 30
+const hasMoreHistory = ref(false)
+const loadingOlder = ref(false)
 let lastProgrammaticScrollTs = 0
 const PROGRAMMATIC_SCROLL_GRACE_MS = 260
 const currentSessionId = ref<string>('')
 // Bumped to make the task-progress panel (now header) refetch (session switch / run finish).
 const taskPlanRefreshSignal = ref(0)
-const bumpTaskPlan = () => { taskPlanRefreshSignal.value += 1 }
+const bumpTaskPlan = () => {
+  taskPlanRefreshSignal.value += 1
+  emit('taskPlanRefresh', taskPlanRefreshSignal.value)
+}
 const sessionList = ref<SessionItem[]>([])
 const appliedEdits = ref<Set<string>>(new Set())
 const appliedSignatures = ref<Set<string>>(new Set())
@@ -661,8 +670,14 @@ const updateStickFromScroll = () => {
   }
 }
 
+const LOAD_OLDER_THRESHOLD_PX = 120
+
 const handleScroll = () => {
   updateStickFromScroll()
+  const el = chatScrollRef.value
+  if (el && el.scrollTop <= LOAD_OLDER_THRESHOLD_PX) {
+    void loadOlderHistory()
+  }
 }
 
 const handleWheel = () => {
@@ -744,6 +759,54 @@ const getLastMessageId = () => {
   const ids = chatMessages.value.map(m => Number(m.id || 0)).filter(v => Number.isFinite(v) && v > 0)
   if (!ids.length) return 0
   return Math.max(...ids)
+}
+
+const getFirstMessageId = () => {
+  const ids = chatMessages.value.map(m => Number(m.id || 0)).filter(v => Number.isFinite(v) && v > 0)
+  if (!ids.length) return 0
+  return Math.min(...ids)
+}
+
+// Prepend an older page (scroll-up) while keeping the viewport visually anchored.
+const loadOlderHistory = async () => {
+  if (loadingOlder.value || !hasMoreHistory.value) return
+  if (!getAuthToken() || !currentSessionId.value) return
+  const beforeId = getFirstMessageId()
+  if (!beforeId) return
+  const sid = currentSessionId.value
+  loadingOlder.value = true
+  const el = chatScrollRef.value
+  const prevHeight = el ? el.scrollHeight : 0
+  const prevTop = el ? el.scrollTop : 0
+  let older
+  try {
+    older = await chatApi.getChatHistory(chatCtx.value, sid, {
+      beforeId,
+      limit: HISTORY_PAGE_SIZE,
+    })
+  } catch {
+    loadingOlder.value = false
+    return
+  }
+  // Bail if the user switched sessions while this page was in flight.
+  if (currentSessionId.value !== sid) {
+    loadingOlder.value = false
+    return
+  }
+  const olderMapped = mapHistoryMessages(Array.isArray(older) ? older : [])
+  hasMoreHistory.value = olderMapped.length >= HISTORY_PAGE_SIZE
+  if (olderMapped.length > 0) {
+    chatMessages.value = [...olderMapped, ...chatMessages.value]
+    restoreActionStatesFromHistory(chatMessages.value)
+    await nextTick()
+    const elAfter = chatScrollRef.value
+    if (elAfter) {
+      // Keep the previously-visible message under the cursor in place.
+      lastProgrammaticScrollTs = Date.now()
+      elAfter.scrollTop = elAfter.scrollHeight - prevHeight + prevTop
+    }
+  }
+  loadingOlder.value = false
 }
 
 const hasAssistantMessageWithContent = (content: string) => {
@@ -1044,11 +1107,13 @@ const reloadCurrentHistorySnapshot = async () => {
   if (!getAuthToken() || !currentSessionId.value) return
   let history
   try {
-    history = await chatApi.getChatHistory(chatCtx.value, currentSessionId.value)
+    history = await chatApi.getChatHistory(chatCtx.value, currentSessionId.value, { limit: HISTORY_PAGE_SIZE })
   } catch {
     return
   }
-  chatMessages.value = mapHistoryMessages(history)
+  const mapped = mapHistoryMessages(history)
+  hasMoreHistory.value = mapped.length >= HISTORY_PAGE_SIZE
+  chatMessages.value = mapped
   restoreActionStatesFromHistory(chatMessages.value)
   await loadTotalTokens()
   stickToBottom.value = true
@@ -1064,21 +1129,26 @@ const refreshTokensDuringRunIfNeeded = async (force = false) => {
 
 const loadChatHistory = async (sid: string) => {
   if (!getAuthToken() || !sid) return
+  loadingOlder.value = false
   let history
   try {
-    history = await chatApi.getChatHistory(chatCtx.value, sid)
+    history = await chatApi.getChatHistory(chatCtx.value, sid, { limit: HISTORY_PAGE_SIZE })
   } catch {
     return
   }
-  chatMessages.value = mapHistoryMessages(history)
+  const mapped = mapHistoryMessages(history)
+  hasMoreHistory.value = mapped.length >= HISTORY_PAGE_SIZE
+  chatMessages.value = mapped
   restoreActionStatesFromHistory(chatMessages.value)
-  currentSessionId.value = sid
-  await loadTotalTokens()
   stickToBottom.value = true
   await scrollToBottom()
-  await checkActiveRun()
-  startSessionSyncPolling()
-  await loadEffectiveSystemPromptPreview()
+  // Setting currentSessionId triggers the session-change watcher, which owns the
+  // streaming-resume + polling + prompt-preview side effects — no need to repeat
+  // them here. Keeping them out lets the message list paint without blocking on
+  // those (heavier) requests when re-opening a record.
+  currentSessionId.value = sid
+  // Token total is a header stat, not part of the conversation render — defer it.
+  void loadTotalTokens()
 }
 
 const fetchRunHistoryIncrementalOnce = async () => {
@@ -1575,8 +1645,10 @@ const initializeSessions = async () => {
   currentMcpTool.value = ''
   clearLiveAssistantView()
   isTyping.value = false
-  await loadConfiguredFrontPrompt()
-  await loadFrontPromptToolSchemas()
+  // These only feed the "前置 Prompt" hover panel — load them in the background
+  // so the session list + conversation can render first.
+  void loadConfiguredFrontPrompt()
+  void loadFrontPromptToolSchemas()
   await loadSessions()
   if (sessionList.value.length === 0) {
     await createSession('默认会话')
@@ -1588,7 +1660,8 @@ const initializeSessions = async () => {
   if (currentSessionId.value) {
     await loadChatHistory(currentSessionId.value)
   }
-  await loadEffectiveSystemPromptPreview()
+  // Setting currentSessionId above triggers the session-change watcher, which
+  // loads the system-prompt preview — no separate call needed here.
 }
 
 watch(() => [props.aiConfigId, preferredInitialSessionId.value] as const, async () => {
@@ -1606,6 +1679,7 @@ watch(() => [props.aiConfigId, preferredInitialSessionId.value] as const, async 
 }, { immediate: false })
 
 watch(currentSessionId, async (sid, oldSid) => {
+  emit('update:currentSessionId', sid || '')
   if (!sid || sid === oldSid) return
   stopRunPolling()
   stopSessionSyncPolling()
@@ -1638,6 +1712,8 @@ watch(chatScrollRef, (newEl, oldEl) => {
 
 onMounted(async () => {
   await initializeSessions()
+  emit('update:currentSessionId', currentSessionId.value || '')
+  emit('taskPlanRefresh', taskPlanRefreshSignal.value)
   await nextTick()
   const el = chatScrollRef.value
   if (el) {
@@ -1672,13 +1748,6 @@ onBeforeUnmount(() => {
           @batch-delete="deleteSessions"
           @rename="renameSession"
           @toggle-forward="toggleSessionForwardToBot"
-        />
-        <!-- 任务流程：显示在标题边上，从左到右只展示阶段标题 + 状态 -->
-        <TaskProgressPanel
-          :configId="props.aiConfigId"
-          :sessionId="currentSessionId"
-          :refreshSignal="taskPlanRefreshSignal"
-          header
         />
       </div>
       <div class="flex items-center gap-1 sm:gap-2 shrink-0">

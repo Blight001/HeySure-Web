@@ -28,6 +28,7 @@ const SystemSettingsPanel = defineAsyncComponent(() => import('./panels/SystemSe
 const LeftSidebarPanel = defineAsyncComponent(() => import('./panels/LeftSidebarPanel.vue'))
 const WorldArenaPanel = defineAsyncComponent(() => import('./panels/WorldArenaPanel.vue'))
 const ChatInterface = defineAsyncComponent(() => import('@/components/chat/ChatInterface.vue'))
+const TaskProgressPanel = defineAsyncComponent(() => import('@/components/chat/TaskProgressPanel.vue'))
 const McpToolsModal = defineAsyncComponent(() => import('./modals/McpToolsModal.vue'))
 const DeviceDynamicToolsModal = defineAsyncComponent(() => import('./modals/DeviceDynamicToolsModal.vue'))
 const TaskManagementModal = defineAsyncComponent(() => import('./modals/TaskManagementModal.vue'))
@@ -63,6 +64,8 @@ const chatModalOpen = ref(false)
 const chatTarget = ref<Agent | null>(null)
 const agentChatZIndex = usePopupZIndex(() => chatModalOpen.value && !!chatTarget.value)
 const chatInitialSessionId = ref('')
+const chatCurrentSessionId = ref('')
+const chatTaskPlanRefreshSignal = ref(0)
 const adminModalOpen = ref(false)
 const isAdminUser = computed(() => ['owner', 'admin'].includes(props.currentUser?.role || ''))
 let dashboardRefreshTimer: number | null = null
@@ -271,6 +274,8 @@ const openAgentChat = (agent: Agent) => {
   if (!agent.aiConfigId) return
   chatTarget.value = agent
   chatInitialSessionId.value = ''
+  chatCurrentSessionId.value = ''
+  chatTaskPlanRefreshSignal.value = 0
   chatModalOpen.value = true
 }
 
@@ -283,6 +288,8 @@ const onWorldOpenChat = (aiConfigId: number) => {
 const closeAgentChat = () => {
   chatModalOpen.value = false
   chatInitialSessionId.value = ''
+  chatCurrentSessionId.value = ''
+  chatTaskPlanRefreshSignal.value = 0
 }
 
 const chatTargetAiKind = computed<'assistant' | 'core'>(() => {
@@ -293,6 +300,8 @@ const openAgentTaskDetail = (agent: Agent, jobId: string, sessionId?: string) =>
   if (!agent.aiConfigId || !jobId) return
   chatTarget.value = agent
   chatInitialSessionId.value = String(sessionId || `session_task_${jobId}`).trim()
+  chatCurrentSessionId.value = ''
+  chatTaskPlanRefreshSignal.value = 0
   chatModalOpen.value = true
 }
 
@@ -587,12 +596,22 @@ onUnmounted(() => {
       <Transition name="fade">
         <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
           <div class="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl border-0 sm:border border-zinc-200 dark:border-zinc-700 shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
-            <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
-              <div>
-                <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">与 {{ chatTarget.name }} 对话</div>
+            <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
+              <div class="min-w-0 flex-1">
+                <div class="flex min-w-0 items-center gap-2">
+                  <div class="shrink-0 text-sm font-semibold text-zinc-800 dark:text-zinc-100">与 {{ chatTarget.name }} 对话</div>
+                  <div class="min-w-0 flex-1">
+                    <TaskProgressPanel
+                      :configId="chatTarget.aiConfigId"
+                      :sessionId="chatCurrentSessionId"
+                      :refreshSignal="chatTaskPlanRefreshSignal"
+                      header
+                    />
+                  </div>
+                </div>
                 <div class="text-xs text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
               </div>
-              <button class="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300" @click="closeAgentChat">关闭</button>
+              <button class="shrink-0 text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300" @click="closeAgentChat">关闭</button>
             </div>
             <div class="flex-1 min-h-0 p-2">
               <ChatInterface
@@ -606,6 +625,8 @@ onUnmounted(() => {
                 :selectedFiles="selectedFiles"
                 :allFiles="allFiles"
                 @update:selectedFiles="selectedFiles = $event"
+                @update:currentSessionId="chatCurrentSessionId = $event"
+                @taskPlanRefresh="chatTaskPlanRefreshSignal = $event"
                 @open-settings="chatTarget && openAgentSettings(chatTarget)"
                 @totalChatTokensUpdate="syncChatTokensToAgents"
                 @refreshFiles="loadProjectContext"

@@ -70,12 +70,14 @@ export const getChatTotalTokens = (ctx: AiContext) =>
 export const getChatHistory = (
   ctx: AiContext,
   sessionId: string,
-  options: { afterId?: number } = {},
+  options: { afterId?: number; beforeId?: number; limit?: number } = {},
 ) =>
   get<any[]>('/api/chat/history', {
     query: queryForAi(ctx, {
       session_id: sessionId,
       after_id: options.afterId !== undefined ? String(options.afterId) : undefined,
+      before_id: options.beforeId !== undefined ? String(options.beforeId) : undefined,
+      limit: options.limit !== undefined ? String(options.limit) : undefined,
     }),
     fallbackError: '会话历史加载失败',
   })

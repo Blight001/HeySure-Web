@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import type { AppIconName } from '@/components/common/AppIcon.vue'
+import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
 
 interface AgentTaskSnapshot {
   jobId: string
@@ -471,6 +472,8 @@ const taskStatusClass = (raw?: string) => {
   return 'border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
 }
 
+const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' } | null>(null)
+
 const DOUBLE_TAP_DELAY = 320
 let lastTouchTapAt = 0
 
@@ -713,10 +716,24 @@ const onCardPointerUp = (event: PointerEvent) => {
       <button v-if="!isAssistantAdmin" class="text-xs text-zinc-500 hover:text-indigo-600 px-2 py-1 hover:bg-zinc-50 rounded transition-colors dark:text-zinc-400 dark:hover:text-indigo-300 dark:hover:bg-zinc-800" @click.stop="emit('show-tasks', agent)">
         任务列表
       </button>
+      <button v-if="agent.androidAgentConnected" class="text-xs text-teal-600 hover:text-teal-700 px-2 py-1 hover:bg-teal-50 rounded transition-colors dark:text-teal-300 dark:hover:text-teal-200 dark:hover:bg-teal-500/10" title="实时查看并控制该安卓设备" @click.stop="rcTarget = { deviceId: agent.androidAgentId || '', name: agent.androidAgentName || agent.name, mode: 'android' }">
+        远程控制
+      </button>
+      <button v-if="agent.desktopAgentConnected" class="text-xs text-sky-600 hover:text-sky-700 px-2 py-1 hover:bg-sky-50 rounded transition-colors dark:text-sky-300 dark:hover:text-sky-200 dark:hover:bg-sky-500/10" title="实时查看并控制该桌面设备" @click.stop="rcTarget = { deviceId: agent.desktopAgentId || '', name: agent.desktopAgentName || agent.name, mode: 'desktop' }">
+        桌面控制
+      </button>
       <button class="text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors dark:text-red-300 dark:hover:text-red-200 dark:hover:bg-red-500/10" @click.stop="emit('chat', agent)">
         与此 AI 对话
       </button>
     </div>
+
+    <RemoteControlModal
+      v-if="rcTarget"
+      :device-id="rcTarget.deviceId"
+      :device-name="rcTarget.name"
+      :mode="rcTarget.mode"
+      @close="rcTarget = null"
+    />
   </div>
 </template>
 
