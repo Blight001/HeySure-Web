@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { getMcpToolZhLabel, groupMcpToolsBySource } from '@/utils/mcpTools'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { useUiEffects } from '@/composables/useUiEffects'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { McpRoleMeta, ModelPreset } from '@/types'
 
 interface Props {
@@ -178,6 +179,11 @@ type SettingsDialog = '' | 'models' | 'roles'
 const settingsDialog = ref<SettingsDialog>('')
 const selectedRole = ref('')
 
+// 弹窗自动置顶：每个 overlay 各领一个自增 z-index，后开者居上
+const mainZIndex = usePopupZIndex(() => props.show)
+const settingsDialogZIndex = usePopupZIndex(() => !!settingsDialog.value)
+const roleDialogZIndex = usePopupZIndex(() => settingsDialog.value === 'roles' && !!selectedRole.value)
+
 const openSettingsDialog = (name: Exclude<SettingsDialog, ''>) => {
   settingsDialog.value = name
   selectedRole.value = ''
@@ -217,7 +223,7 @@ const openExtensionTestPage = () => {
 
 <template>
   <Transition name="fade">
-    <div v-if="show" class="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center backdrop-blur-sm p-4" @click="emit('update:show', false)">
+    <div v-if="show" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm p-4" @click="emit('update:show', false)">
       <div class="bg-white rounded-2xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-y-auto p-5 sm:p-6 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800" @click.stop>
         <div class="flex items-center justify-between mb-6">
           <h3 class="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -352,7 +358,8 @@ const openExtensionTestPage = () => {
       <Transition name="fade">
         <div
           v-if="settingsDialog"
-          class="fixed inset-0 z-[70] bg-black/45 flex items-center justify-center p-4 backdrop-blur-sm"
+          :style="{ zIndex: settingsDialogZIndex }"
+          class="fixed inset-0 bg-black/45 flex items-center justify-center p-4 backdrop-blur-sm"
           @click.stop="closeSettingsDialog"
         >
           <div
@@ -492,7 +499,8 @@ const openExtensionTestPage = () => {
           <Transition name="fade">
             <div
               v-if="settingsDialog === 'roles' && selectedRole"
-              class="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4 backdrop-blur-sm"
+              :style="{ zIndex: roleDialogZIndex }"
+              class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 backdrop-blur-sm"
               @click.stop="selectedRole = ''"
             >
               <div

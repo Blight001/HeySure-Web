@@ -9,6 +9,7 @@ import type {
 import { listMcpTools, callMcpTool } from '@/api/mcp'
 import type { User, UserRole } from '@/types'
 import { resolveAvatarUrl } from '@/utils/avatar'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { AdminModalTab as Tab, AdminMcpParamRow } from '@/types/admin'
 import {
   ADMIN_ACTION_LABELS,
@@ -795,6 +796,74 @@ const runDbCleanup = async () => {
   }
 }
 
+// ---- Database export / import (full backup & restore) ----
+const dbExportBusy = ref(false)
+const dbExportIncludeMedia = ref(true)
+
+const runDbExport = async () => {
+  if (dbExportBusy.value) return
+  dbExportBusy.value = true
+  try {
+    await adminApi.exportDatabase(dbExportIncludeMedia.value)
+  } catch (err) {
+    await alert({ message: (err as Error).message, type: 'error' })
+  } finally {
+    dbExportBusy.value = false
+  }
+}
+
+const dbImportOpen = ref(false)
+const dbImportBusy = ref(false)
+const dbImportResult = ref<adminApi.DbImportResult | null>(null)
+const dbImportFile = ref<File | null>(null)
+const dbImportForm = ref<{ account: string; password: string }>({ account: '', password: '' })
+
+const openDbImport = () => {
+  dbImportResult.value = null
+  dbImportFile.value = null
+  dbImportForm.value = { account: props.currentUser?.account || '', password: '' }
+  dbImportOpen.value = true
+}
+
+const closeDbImport = () => {
+  if (dbImportBusy.value) return
+  dbImportOpen.value = false
+}
+
+const onDbImportFileChange = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  dbImportFile.value = input.files?.[0] || null
+}
+
+const runDbImport = async () => {
+  const f = dbImportForm.value
+  if (!dbImportFile.value) {
+    await alert({ message: '请选择要导入的备份文件', type: 'warning' })
+    return
+  }
+  if (!f.account.trim() || !f.password) {
+    await alert({ message: '请输入房主账号和密码', type: 'warning' })
+    return
+  }
+  const ok = await confirm({
+    message: '导入将清空并覆盖备份文件中包含的所有数据表，且不可恢复。请确认已做好当前数据的备份。确认继续？',
+    type: 'warning',
+    confirmText: '确认导入',
+  })
+  if (!ok) return
+  dbImportBusy.value = true
+  try {
+    const res = await adminApi.importDatabase(dbImportFile.value, f.account.trim(), f.password)
+    dbImportResult.value = res
+    dbImportForm.value.password = ''
+    await Promise.all([loadDbTables(), dbActiveTable.value ? loadDbRows() : Promise.resolve()])
+  } catch (err) {
+    await alert({ message: (err as Error).message, type: 'error' })
+  } finally {
+    dbImportBusy.value = false
+  }
+}
+
 // ---- Auth settings ----
 const applyAuthSettings = (res: adminApi.AuthSettings) => {
   authForm.value = {
@@ -1038,6 +1107,13 @@ const repoForm = ref<{ auto_enabled: boolean; interval_minutes: number }>({ auto
 const repoCommitDetail = ref<RepoCommitInfo | null>(null)
 let repoPollTimer: number | null = null
 
+// 弹窗自动置顶：每个全屏 overlay 各领一个自增 z-index，后开者居上
+const mainZIndex = usePopupZIndex(() => props.show)
+const repoCommitZIndex = usePopupZIndex(() => !!repoCommitDetail.value)
+const dbEditorZIndex = usePopupZIndex(() => !!dbEditor.value)
+const dbCleanupZIndex = usePopupZIndex(dbCleanupOpen)
+const dbImportZIndex = usePopupZIndex(dbImportOpen)
+
 const REPO_PHASE_META = ADMIN_REPO_PHASE_META
 const REPO_STEP_ICON = ADMIN_REPO_STEP_ICON
 
@@ -1187,7 +1263,8 @@ const avatarFor = (u: AdminUser) =>
     <Transition name="fade">
       <div
         v-if="show"
-        class="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        :style="{ zIndex: mainZIndex }"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
         @click="emit('close')"
       >
         <div
@@ -1761,8 +1838,21 @@ const avatarFor = (u: AdminUser) =>
                 </button>
                 <div v-if="!dbTables.length && !dbTablesLoading" class="text-center text-zinc-400 py-6 text-xs">暂无数据表</div>
               </div>
-              <!-- Destructive cleanup entry — owner only -->
-              <div v-if="isOwner" class="shrink-0 p-2 border-t border-zinc-200 dark:border-zinc-800">
+              <!-- Backup / restore + destructive cleanup — owner only -->
+              <div v-if="isOwner" class="shrink-0 p-2 border-t border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                <button
+                  class="w-full text-xs px-2 py-2 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 dark:border-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-900/20 flex items-center justify-center gap-1 disabled:opacity-50"
+                  :disabled="dbExportBusy"
+                  @click="runDbExport"
+                >{{ dbExportBusy ? '导出中…' : '⬇ 导出备份' }}</button>
+                <label class="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 cursor-pointer select-none">
+                  <input v-model="dbExportIncludeMedia" type="checkbox" class="accent-indigo-600" />
+                  含媒体文件
+                </label>
+                <button
+                  class="w-full text-xs px-2 py-2 rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 hover:border-amber-300 dark:border-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/20 flex items-center justify-center gap-1"
+                  @click="openDbImport"
+                >⬆ 导入备份</button>
                 <button
                   class="w-full text-xs px-2 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20 flex items-center justify-center gap-1"
                   @click="openDbCleanup"
@@ -2187,7 +2277,8 @@ const avatarFor = (u: AdminUser) =>
     <Transition name="fade">
       <div
         v-if="repoCommitDetail"
-        class="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        :style="{ zIndex: repoCommitZIndex }"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
         @click="repoCommitDetail = null"
       >
         <div
@@ -2229,7 +2320,8 @@ const avatarFor = (u: AdminUser) =>
     <Transition name="fade">
       <div
         v-if="dbEditor"
-        class="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        :style="{ zIndex: dbEditorZIndex }"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
         @click="closeDbEditor"
       >
         <div
@@ -2296,7 +2388,8 @@ const avatarFor = (u: AdminUser) =>
     <Transition name="fade">
       <div
         v-if="dbCleanupOpen"
-        class="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        :style="{ zIndex: dbCleanupZIndex }"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
         @click="closeDbCleanup"
       >
         <div
@@ -2376,6 +2469,84 @@ const avatarFor = (u: AdminUser) =>
               :disabled="dbCleanupBusy || !dbCleanupHasSelection"
               @click="runDbCleanup"
             >{{ dbCleanupBusy ? '清理中…' : '确认清理' }}</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ============ Database import confirmation (owner only) ============ -->
+  <Teleport to="body">
+    <Transition name="fade">
+      <div
+        v-if="dbImportOpen"
+        :style="{ zIndex: dbImportZIndex }"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        @click="closeDbImport"
+      >
+        <div
+          class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden dark:bg-zinc-900 dark:border dark:border-zinc-800"
+          @click.stop
+        >
+          <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
+            <h3 class="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">⬆ 导入数据库备份</h3>
+            <button class="w-7 h-7 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center" @click="closeDbImport">✕</button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-5 space-y-4">
+            <div class="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700 leading-relaxed dark:bg-amber-900/15 dark:border-amber-900/40 dark:text-amber-300">
+              ⚠️ 高风险操作：导入会<b>清空并覆盖</b>备份中包含的所有数据表（账号、对话、AI 配置、任务、知识等），<b>不可恢复</b>。请先用「导出备份」保存当前数据。
+            </div>
+
+            <!-- Backup file -->
+            <div class="space-y-2">
+              <span class="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">备份文件（.json）</span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                class="w-full text-xs text-zinc-600 file:mr-2 file:text-xs file:px-2.5 file:py-1.5 file:rounded-lg file:border-0 file:bg-amber-100 file:text-amber-700 hover:file:bg-amber-200 dark:text-zinc-300 dark:file:bg-amber-900/30 dark:file:text-amber-300"
+                @change="onDbImportFileChange"
+              />
+              <div v-if="dbImportFile" class="text-[11px] text-zinc-400 font-mono truncate">已选择：{{ dbImportFile.name }}</div>
+            </div>
+
+            <!-- Owner re-auth -->
+            <div class="space-y-2 pt-1">
+              <span class="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">房主身份确认</span>
+              <input
+                v-model="dbImportForm.account"
+                type="text"
+                autocomplete="off"
+                placeholder="房主账号"
+                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-2 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+              />
+              <input
+                v-model="dbImportForm.password"
+                type="password"
+                autocomplete="new-password"
+                placeholder="房主密码"
+                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-2 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                @keyup.enter="runDbImport"
+              />
+            </div>
+
+            <!-- Result -->
+            <div
+              v-if="dbImportResult"
+              class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-xs text-emerald-700 leading-relaxed dark:bg-emerald-900/15 dark:border-emerald-900/40 dark:text-emerald-300"
+            >
+              ✅ 导入完成：共写入 {{ dbImportResult.total }} 行，覆盖 {{ Object.keys(dbImportResult.imported).length }} 张表。
+              <div v-if="dbImportResult.skipped_tables.length" class="mt-1 text-amber-600">
+                跳过未知表：<span class="font-mono">{{ dbImportResult.skipped_tables.join('、') }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 px-5 py-3 border-t border-zinc-200 dark:border-zinc-800">
+            <button class="text-xs px-3 py-1.5 rounded-lg text-zinc-500 hover:text-zinc-700 dark:text-zinc-400" :disabled="dbImportBusy" @click="closeDbImport">关闭</button>
+            <button
+              class="text-xs px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+              :disabled="dbImportBusy || !dbImportFile"
+              @click="runDbImport"
+            >{{ dbImportBusy ? '导入中…' : '确认导入' }}</button>
           </div>
         </div>
       </div>

@@ -280,6 +280,73 @@ export const cleanupDatabase = (payload: DbCleanupPayload) =>
     fallbackError: '清理数据库失败',
   })
 
+// ---- Database export / import (full backup & restore) ----
+
+export interface DbImportResult {
+  ok: boolean
+  /** table name → number of rows inserted */
+  imported: Record<string, number>
+  total: number
+  /** tables present in the backup but no longer in the live schema */
+  skipped_tables: string[]
+}
+
+/** Download a full database backup as a JSON file (owner only).
+ *
+ *  Uses an authenticated fetch + Blob (rather than the shared http client) so
+ *  the Bearer token is attached and the browser saves the streamed file —
+ *  mirrors {@link fetchFileBlob}. Set `includeMedia=false` for a lighter dump
+ *  that omits chat media blobs. */
+export const exportDatabase = async (includeMedia = true): Promise<void> => {
+  const url = `/api/admin/db/export?include_media=${includeMedia ? 'true' : 'false'}`
+  const token = getAuthToken()
+  const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+  if (!res.ok) {
+    let msg = '导出数据库失败'
+    try { msg = (await res.json())?.detail || msg } catch { /* keep default */ }
+    throw new Error(msg)
+  }
+  // Prefer the server-suggested filename; fall back to a timestamped name.
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const filename = /filename="?([^"]+)"?/.exec(disposition)?.[1]
+    || `heysure-backup-${Date.now()}.json`
+  const blob = await res.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objectUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(objectUrl)
+}
+
+/** Restore a backup file (owner only). Wipes and repopulates every table the
+ *  document carries; requires an owner's account + password as a second
+ *  factor. Multipart upload, so it bypasses the JSON http client. */
+export const importDatabase = async (
+  file: File,
+  account: string,
+  password: string,
+): Promise<DbImportResult> => {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('account', account)
+  form.append('password', password)
+  const token = getAuthToken()
+  const res = await fetch('/api/admin/db/import', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  })
+  if (!res.ok) {
+    let msg = '导入数据库失败'
+    try { msg = (await res.json())?.detail || msg } catch { /* keep default */ }
+    throw new Error(msg)
+  }
+  return res.json() as Promise<DbImportResult>
+}
+
 // ---- Auth settings (registration mode + SMTP mailer) ----
 
 export type RegistrationMode = 'open' | 'email' | 'closed'

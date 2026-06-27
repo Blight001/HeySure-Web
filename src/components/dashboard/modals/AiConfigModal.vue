@@ -5,6 +5,7 @@ import { fetchWorkshopBindings, setWorkshopBinding, type WorkshopAgentItem } fro
 import type { ModelPreset } from '@/types'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import DeviceMcpScopeEditor from './DeviceMcpScopeEditor.vue'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 type SettingsSection = 'mcp' | 'bot'
 
@@ -29,6 +30,10 @@ interface Props {
 
 const props = defineProps<Props>()
 const promptDetailOpen = ref(false)
+
+const mainZIndex = usePopupZIndex(() => props.show && !!props.form)
+const settingsZIndex = usePopupZIndex(() => !!props.settingsSection)
+const promptDetailZIndex = usePopupZIndex(promptDetailOpen)
 
 const settingsSectionTitle: Record<SettingsSection, string> = {
   mcp: 'MCP 工具权限',
@@ -145,8 +150,9 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
 </script>
 
 <template>
-  <Transition name="fade">
-    <div v-if="show && form" class="fixed inset-0 z-[95] bg-black/45 flex items-center justify-center p-4" @click="onClose">
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="show && form" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-4" @click="onClose">
       <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5" @click.stop>
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
@@ -303,7 +309,8 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
       <Transition name="fade">
         <div
           v-if="settingsSection"
-          class="fixed inset-0 z-[105] bg-black/35 flex items-center justify-center p-4"
+          :style="{ zIndex: settingsZIndex }"
+          class="fixed inset-0 bg-black/35 flex items-center justify-center p-4"
           @click.stop="closeSettingsSection"
         >
           <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-2xl max-h-[82vh] flex flex-col" @click.stop>
@@ -484,7 +491,8 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
       <Transition name="fade">
         <div
           v-if="promptDetailOpen"
-          class="fixed inset-0 z-[110] bg-black/40 flex items-center justify-center p-4"
+          :style="{ zIndex: promptDetailZIndex }"
+          class="fixed inset-0 bg-black/40 flex items-center justify-center p-4"
           @click.stop="closePromptDetail"
         >
           <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-5xl h-[82vh] flex flex-col" @click.stop>
@@ -504,6 +512,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
           </div>
         </div>
       </Transition>
-    </div>
-  </Transition>
+      </div>
+    </Transition>
+  </Teleport>
 </template>

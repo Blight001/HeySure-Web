@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import { useMessage } from '@/composables/useMessage'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 const { state } = useMessage()
+const zIndex = usePopupZIndex(() => state.show)
 const promptValue = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 
@@ -70,7 +72,7 @@ const getIcon = () => {
     leave-from-class="opacity-100 scale-100"
     leave-to-class="opacity-0 scale-95"
   >
-    <div v-if="state.show" class="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6">
+    <div v-if="state.show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center p-4 sm:p-6">
       <!-- Backdrop -->
       <div class="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm transition-opacity" @click="handleCancel"></div>
 

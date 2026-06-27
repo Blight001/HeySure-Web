@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 export interface CatalogMcpTool {
   name: string
@@ -27,6 +28,7 @@ const saving = ref(false)
 const notice = ref('')
 const error = ref('')
 const detailOpen = ref(false)
+const detailZIndex = usePopupZIndex(detailOpen)
 
 const capabilities = computed(() =>
   props.tools
@@ -130,7 +132,8 @@ const closeDetail = () => { detailOpen.value = false }
       <Transition name="fade">
         <div
           v-if="detailOpen"
-          class="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4"
+          :style="{ zIndex: detailZIndex }"
+          class="fixed inset-0 bg-black/40 flex items-center justify-center p-4"
           @click="closeDetail"
         >
           <div

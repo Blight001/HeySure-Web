@@ -8,6 +8,7 @@ import { useDashboardData } from '@/composables/dashboard/useDashboardData'
 import { useDashboardUi } from '@/composables/dashboard/useDashboardUi'
 import { useDashboardSystemSettings } from '@/composables/dashboard/useDashboardSystemSettings'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import {
   DASHBOARD_REFRESH_FAST_MS,
   DASHBOARD_REFRESH_HIDDEN_MS,
@@ -60,6 +61,7 @@ const activateArenaTab = () => {
 const selectedFiles = ref<string[]>([])
 const chatModalOpen = ref(false)
 const chatTarget = ref<Agent | null>(null)
+const agentChatZIndex = usePopupZIndex(() => chatModalOpen.value && !!chatTarget.value)
 const chatInitialSessionId = ref('')
 const adminModalOpen = ref(false)
 const isAdminUser = computed(() => ['owner', 'admin'].includes(props.currentUser?.role || ''))
@@ -583,7 +585,7 @@ onUnmounted(() => {
     />
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="chatTarget && chatModalOpen" class="fixed inset-0 z-[300] bg-black/45 flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
+        <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
           <div class="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl border-0 sm:border border-zinc-200 dark:border-zinc-700 shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
             <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
               <div>

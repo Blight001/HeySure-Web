@@ -23,6 +23,7 @@ import { updateAiConfigFields } from '@/api/ai'
 import { me } from '@/api/auth'
 import { runInheritanceMcpTest, type InheritanceMcpTestResult } from '@/api/mcp'
 import { useMessage } from '@/composables/useMessage'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
 import MarkdownText from '@/components/chat/MarkdownText.vue'
 import type { McpToolDefinition } from '@/types'
@@ -331,6 +332,13 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
 
 const mcpTestModalOpen = ref(false)
 const mcpTestTarget = ref<McpTestTarget | null>(null)
+
+// 弹窗自动置顶：每个 overlay 各领一个自增 z-index，后开者居上
+const detailZIndex = usePopupZIndex(detailOpen)
+const clawhubZIndex = usePopupZIndex(clawhubModalOpen)
+const installedClawhubZIndex = usePopupZIndex(installedClawhubModalOpen)
+const mcpTestZIndex = usePopupZIndex(() => mcpTestModalOpen.value && !!mcpTestTarget.value)
+const inheritanceHoverZIndex = usePopupZIndex(() => !!inheritanceHoverPopover.value)
 const mcpTestPresetLoading = ref(false)
 const mcpTestSubmitting = ref(false)
 const mcpTestError = ref('')
@@ -929,7 +937,8 @@ const closeDetail = () => {
     <Teleport to="body">
     <div
       v-if="detailOpen"
-      class="fixed inset-0 z-[520] bg-black/50 flex items-center justify-center p-4"
+      :style="{ zIndex: detailZIndex }"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
       @click.self="closeDetail"
     >
       <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[88vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
@@ -1511,7 +1520,8 @@ const closeDetail = () => {
     </div>
     <div
       v-if="clawhubModalOpen"
-      class="fixed inset-0 z-[560] bg-black/55 flex items-center justify-center p-4"
+      :style="{ zIndex: clawhubZIndex }"
+      class="fixed inset-0 bg-black/55 flex items-center justify-center p-4"
       @click.self="closeClawHubModal"
     >
       <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
@@ -1629,7 +1639,8 @@ const closeDetail = () => {
     </div>
     <div
       v-if="installedClawhubModalOpen"
-      class="fixed inset-0 z-[570] bg-black/55 flex items-center justify-center p-4"
+      :style="{ zIndex: installedClawhubZIndex }"
+      class="fixed inset-0 bg-black/55 flex items-center justify-center p-4"
       @click.self="closeInstalledClawHubModal"
     >
       <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-5xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
@@ -1726,7 +1737,8 @@ const closeDetail = () => {
     </div>
     <div
       v-if="mcpTestModalOpen && mcpTestTarget"
-      class="fixed inset-0 z-[570] flex items-center justify-center bg-black/50 p-4"
+      :style="{ zIndex: mcpTestZIndex }"
+      class="fixed inset-0 flex items-center justify-center bg-black/50 p-4"
       @click.self="closeMcpTestModal"
     >
       <div class="flex max-h-[88vh] w-full max-w-xl flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
@@ -1821,11 +1833,11 @@ const closeDetail = () => {
     </div>
     <div
       v-if="inheritanceHoverPopover && hoveredInheritanceTool"
-      class="fixed z-[560] overflow-y-auto rounded-lg border bg-white p-3 text-left shadow-xl dark:bg-zinc-900"
+      class="fixed overflow-y-auto rounded-lg border bg-white p-3 text-left shadow-xl dark:bg-zinc-900"
       :class="inheritanceHoverPopover.kind === 'impl'
         ? 'border-indigo-100 dark:border-indigo-900/60'
         : 'border-zinc-200 dark:border-zinc-700'"
-      :style="inheritanceHoverPopoverStyle"
+      :style="[inheritanceHoverPopoverStyle, { zIndex: inheritanceHoverZIndex }]"
       @mouseenter="cancelCloseInheritanceHoverPopover"
       @mouseleave="scheduleCloseInheritanceHoverPopover"
     >

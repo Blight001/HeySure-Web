@@ -17,6 +17,7 @@ import type {
   TaskCreateForm,
 } from '@/utils/taskSystem'
 import { getMcpToolZhLabel, groupMcpToolGroupsByParent, groupMcpToolsByZhTag } from '@/utils/mcpTools'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { Agent } from '@/types'
 
 interface Props {
@@ -48,6 +49,11 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+// 弹窗自动置顶：后开者居上
+const mainZIndex = usePopupZIndex(() => props.show && !!props.target)
+const taskCreateZIndex = usePopupZIndex(() => props.show && props.taskCreatePanelOpen && !!props.target)
+
 type JobStateFilter = 'running' | 'next' | 'scheduled' | 'completed'
 const selectedJobStateFilter = ref<JobStateFilter | null>(null)
 const taskMcpToolGroups = computed(() => groupMcpToolsByZhTag(props.availableMcpTools.length ? props.availableMcpTools : props.defaultMcpTools))
@@ -183,7 +189,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
 
 <template>
   <Transition name="fade">
-    <div v-if="show && target" class="fixed inset-0 z-[88] bg-black/45 flex items-center justify-center p-4" @click="onClose">
+    <div v-if="show && target" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-4" @click="onClose">
       <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-2xl min-h-[72vh] max-h-[90vh] overflow-y-auto p-5" @click.stop>
         <div class="flex items-start justify-between gap-3 mb-4">
           <div>
@@ -376,7 +382,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
   </Transition>
 
   <Transition name="fade">
-    <div v-if="show && taskCreatePanelOpen && target" class="fixed inset-0 z-[89] bg-black/45 flex items-center justify-center p-4" @click="onCloseTaskCreatePanel">
+    <div v-if="show && taskCreatePanelOpen && target" :style="{ zIndex: taskCreateZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-4" @click="onCloseTaskCreatePanel">
       <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-3xl max-h-[86vh] overflow-y-auto p-5" @click.stop>
         <div class="flex items-start justify-between gap-3 mb-4">
           <div>

@@ -5,6 +5,7 @@ import type { InlineContent as InlineContentType } from '@/utils/chatParser'
 import { computed, ref } from 'vue'
 import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
 import { parseMcpToolBubbleDetails } from '@/utils/mcpFormat'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 const emit = defineEmits<{
   (e: 'delete', idx: number): void
@@ -93,6 +94,7 @@ const mcpToolSections = computed(() => {
 
 const copiedTarget = ref('')
 const frontPromptDetailsOpen = ref(false)
+const frontPromptDetailsZIndex = usePopupZIndex(frontPromptDetailsOpen)
 
 const userMessageCopyText = computed(() => {
   return String(props.message.display_text || props.message.content || '')
@@ -331,7 +333,8 @@ const segmentTimeLabel = computed(() => String(props.timeLabel || '').trim())
 
     <div
       v-if="isFrontPromptMessage && frontPromptDetailsOpen"
-      class="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4 backdrop-blur-sm"
+      :style="{ zIndex: frontPromptDetailsZIndex }"
+      class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 backdrop-blur-sm"
       @click.self="frontPromptDetailsOpen = false"
     >
       <div class="front-prompt-detail-modal">

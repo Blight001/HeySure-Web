@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { getDeviceMcpScope, setDeviceMcpScope, type DeviceMcpScope } from '@/api/devices'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 const props = defineProps<{
   deviceId: string
@@ -16,6 +17,7 @@ const saving = ref(false)
 const error = ref('')
 const notice = ref('')
 const detailOpen = ref(false)
+const detailZIndex = usePopupZIndex(detailOpen)
 
 const load = async () => {
   if (!props.deviceId) return
@@ -189,7 +191,8 @@ const closeDetail = () => {
       <Transition name="fade">
         <div
           v-if="detailOpen"
-          class="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4"
+          :style="{ zIndex: detailZIndex }"
+          class="fixed inset-0 bg-black/40 flex items-center justify-center p-4"
           @click="closeDetail"
         >
           <div

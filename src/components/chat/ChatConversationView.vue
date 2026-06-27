@@ -475,10 +475,46 @@ const frontPromptMessage = computed<ConversationMessage | null>(() => {
   }
 })
 
+const normalizeReasoningText = (raw?: string) => {
+  return String(raw || '').replace(/\r\n?/g, '\n').trim()
+}
+
+const trimKnownLiveReasoningPrefix = (live: string, known: string) => {
+  const normalizedLive = normalizeReasoningText(live)
+  const normalizedKnown = normalizeReasoningText(known)
+  if (!normalizedLive || !normalizedKnown) return normalizedLive
+  if (normalizedLive === normalizedKnown) return ''
+  if (!normalizedLive.startsWith(normalizedKnown)) return normalizedLive
+  return normalizedLive.slice(normalizedKnown.length).replace(/^\s+/, '')
+}
+
+const displayedLiveThinking = computed(() => {
+  const live = stripMcpCallFormatText(props.liveThinking)
+  if (!normalizeReasoningText(live)) return ''
+
+  let latestUserIndex = -1
+  for (let i = normalizedMessages.value.length - 1; i >= 0; i -= 1) {
+    if (normalizedMessages.value[i].role === 'user') {
+      latestUserIndex = i
+      break
+    }
+  }
+
+  const knownThinking = normalizedMessages.value
+    .slice(latestUserIndex + 1)
+    .filter((msg) => msg.role === 'assistant')
+    .map((msg) => stripMcpCallFormatText(msg.think || ''))
+    .map(normalizeReasoningText)
+    .filter(Boolean)
+    .join('\n\n')
+
+  return trimKnownLiveReasoningPrefix(live, knownThinking)
+})
+
 const liveAssistantMessage = computed<ConversationMessage | null>(() => {
   const text = stripMcpCallFormatText(props.liveText)
   if (!text.trim()) return null
-  const think = stripMcpCallFormatText(props.liveThinking)
+  const think = displayedLiveThinking.value
   return {
     id: -1,
     role: 'assistant',
@@ -491,7 +527,7 @@ const liveAssistantMessage = computed<ConversationMessage | null>(() => {
 
 const typingThinkingText = computed(() => {
   if (props.livePhase !== 'generating') return ''
-  return String(props.liveText || '').trim() ? '' : props.liveThinking
+  return String(props.liveText || '').trim() ? '' : displayedLiveThinking.value
 })
 
 const renderMessages = computed<ConversationMessage[]>(() => {

@@ -4,10 +4,13 @@ import * as authApi from '@/api/auth'
 import type { AuthConfig } from '@/api/auth'
 import type { User } from '@/types'
 import { PRESET_AVATARS } from '@/utils/avatar'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 const props = defineProps<{
   show: boolean
 }>()
+
+const zIndex = usePopupZIndex(() => props.show)
 
 const emit = defineEmits<{
   (e: 'close'): void
@@ -132,7 +135,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+  <div v-if="show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
     <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-md border border-zinc-200 dark:border-zinc-800 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-xl font-bold text-zinc-800 dark:text-zinc-100">{{ title }}</h2>

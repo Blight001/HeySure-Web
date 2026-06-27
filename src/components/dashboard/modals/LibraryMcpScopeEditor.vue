@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { LibraryMcpFullView } from '@/api/librarian'
 import { updateAiConfigFields } from '@/api/ai'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
+import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { CatalogMcpTool } from '@/components/dashboard/modals/CatalogMcpScopeEditor.vue'
 
 const props = withDefaults(defineProps<{
@@ -51,6 +52,7 @@ const saving = ref(false)
 const error = ref('')
 const notice = ref('')
 const detailOpen = ref(false)
+const detailZIndex = usePopupZIndex(detailOpen)
 
 const governanceSelected = computed(() =>
   (props.governanceMcpTools || []).filter(name => governanceNames.value.has(name)),
@@ -219,7 +221,8 @@ const canEditGovernance = computed(() => !!props.boundAiConfigId)
       <Transition name="fade">
         <div
           v-if="detailOpen"
-          class="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4"
+          :style="{ zIndex: detailZIndex }"
+          class="fixed inset-0 bg-black/40 flex items-center justify-center p-4"
           @click="detailOpen = false"
         >
           <div
