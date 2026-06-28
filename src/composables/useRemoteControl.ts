@@ -17,7 +17,7 @@ import { getAuthToken } from '@/api/http'
 
 export type RcStatus = 'idle' | 'connecting' | 'streaming' | 'error' | 'ended'
 
-export type RcMode = 'android' | 'desktop'
+export type RcMode = 'android' | 'desktop' | 'browser'
 export type RcMouseButton = 'left' | 'right' | 'middle'
 
 /**
@@ -49,6 +49,22 @@ export interface RcInput {
   meta?: boolean
 }
 
+export interface RcBrowserTab {
+  id: number
+  title: string
+  url: string
+  favIconUrl: string
+  active: boolean
+}
+export interface RcBrowserState {
+  activeTabId: number
+  tabs: RcBrowserTab[]
+}
+export type RcBrowserCommand =
+  | { action: 'back' | 'forward' | 'reload' }
+  | { action: 'navigate' | 'new-tab'; url?: string }
+  | { action: 'switch-tab' | 'close-tab'; tabId: number }
+
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
 
 export const useRemoteControl = () => {
@@ -57,6 +73,11 @@ export const useRemoteControl = () => {
   const deviceWidth = ref(0)
   const deviceHeight = ref(0)
   const remoteStream = shallowRef<MediaStream | null>(null)
+  // True once the P2P control DataChannel is open; until then input is dropped.
+  const controlReady = ref(false)
+  const connectionState = ref<RTCPeerConnectionState>('new')
+  // Edge-style chrome state for browser-extension control (tab strip + address bar).
+  const browserState = ref<RcBrowserState | null>(null)
 
   let socket: Socket | null = null
   let pc: RTCPeerConnection | null = null
@@ -74,8 +95,9 @@ export const useRemoteControl = () => {
     if (pc) return pc
     const connection = new RTCPeerConnection({ iceServers: ICE_SERVERS })
     connection.ontrack = (event) => {
+      // Fires during negotiation, before ICE connects — only stash the stream;
+      // we flip to "streaming" on the real 'connected' state below.
       remoteStream.value = event.streams[0] || null
-      status.value = 'streaming'
     }
     connection.onicecandidate = (event) => {
       if (event.candidate && sessionId) {
@@ -83,14 +105,28 @@ export const useRemoteControl = () => {
       }
     }
     connection.ondatachannel = (event) => {
-      if (event.channel.label === 'control') controlChannel = event.channel
+      if (event.channel.label !== 'control') return
+      controlChannel = event.channel
+      controlReady.value = controlChannel.readyState === 'open'
+      controlChannel.onopen = () => { controlReady.value = true }
+      controlChannel.onclose = () => { controlReady.value = false }
+      // Device → controller messages (browser-extension tab/address state).
+      controlChannel.onmessage = (msg) => {
+        try {
+          const parsed = JSON.parse(String(msg.data))
+          if (parsed?.kind === 'browser-state') browserState.value = parsed.state
+        } catch { /* ignore malformed */ }
+      }
     }
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState
-      if (state === 'failed' || state === 'disconnected' || state === 'closed') {
-        if (status.value === 'streaming' || status.value === 'connecting') {
-          status.value = 'ended'
-        }
+      connectionState.value = state
+      if (state === 'connected') {
+        status.value = 'streaming'
+      } else if (state === 'failed') {
+        fail('点对点连接失败（可能需要 TURN 服务器或双方网络受限）')
+      } else if (state === 'disconnected' || state === 'closed') {
+        if (status.value === 'streaming' || status.value === 'connecting') status.value = 'ended'
       }
     }
     pc = connection
@@ -158,11 +194,21 @@ export const useRemoteControl = () => {
     }
   }
 
+  /** Send an Edge-style browser command (navigate / tabs) over the same channel. */
+  const sendBrowserCommand = (cmd: RcBrowserCommand) => {
+    if (controlChannel?.readyState === 'open') {
+      controlChannel.send(JSON.stringify({ kind: 'browser', ...cmd }))
+    }
+  }
+
   const teardown = (notifyServer: boolean) => {
     if (notifyServer && socket && sessionId) {
       socket.emit('rc:stop', { sessionId })
     }
     controlChannel = null
+    controlReady.value = false
+    connectionState.value = 'closed'
+    browserState.value = null
     pendingIce.length = 0
     remoteStream.value = null
     if (pc) {
@@ -193,8 +239,12 @@ export const useRemoteControl = () => {
     deviceWidth,
     deviceHeight,
     remoteStream,
+    controlReady,
+    connectionState,
+    browserState,
     start,
     stop,
     sendInput,
+    sendBrowserCommand,
   }
 }

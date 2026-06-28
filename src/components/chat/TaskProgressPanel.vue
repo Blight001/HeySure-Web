@@ -130,6 +130,8 @@ const endTitleClass = computed(() => {
   return 'text-zinc-400 dark:text-zinc-500'
 })
 
+const flowRunning = computed(() => ['planning', 'executing', 'finishing'].includes(stage.value))
+
 // Hover details state (for header mode tooltips)
 const hovered = ref<null | { kind: 'arrange' | 'phase' | 'finish'; phase?: TaskPlanPhase }>(null)
 const showHover = (kind: 'arrange' | 'phase' | 'finish', phase?: TaskPlanPhase) => {
@@ -238,10 +240,14 @@ onBeforeUnmount(() => {
   <!-- Header mode: minimal horizontal flow placed next to title at top of dialog.
        Status is shown purely via title color (no badges or "完成" labels).
        Hover any item (安排 / 阶段 / 结束) to see details. -->
-  <div v-if="visible && props.header" class="relative">
+  <div
+    v-if="visible && props.header"
+    class="relative flex w-full justify-center"
+    :class="{ 'task-flow-running': flowRunning }"
+  >
     <div
       ref="flowScrollRef"
-      class="flex items-center gap-1 text-[10px] text-zinc-500 dark:text-zinc-400 whitespace-nowrap overflow-x-auto max-w-[320px] sm:max-w-[680px] pb-1"
+      class="task-flow-strip flex w-fit max-w-[320px] items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 sm:max-w-[680px] sm:text-xs"
       @wheel.passive="markUserInteraction"
       @mousedown="markUserInteraction"
     >
@@ -253,7 +259,7 @@ onBeforeUnmount(() => {
         @pointerdown.stop
         @click.stop="toggleHover('arrange')"
       >安排</span>
-      <span class="text-zinc-400">→</span>
+      <span class="task-flow-arrow text-zinc-400">→</span>
 
       <!-- 各阶段（颜色即状态） -->
       <template v-for="phase in phases" :key="phase.seq">
@@ -266,7 +272,7 @@ onBeforeUnmount(() => {
           @pointerdown.stop
           @click.stop="toggleHover('phase', phase)"
         >{{ phase.title }}</span>
-        <span class="text-zinc-400">→</span>
+        <span class="task-flow-arrow text-zinc-400">→</span>
       </template>
 
       <!-- 结束（成功绿 / 失败红） -->
@@ -447,3 +453,59 @@ onBeforeUnmount(() => {
     </ol>
   </div>
 </template>
+
+<style scoped>
+.task-flow-strip {
+  scrollbar-width: none;
+}
+
+.task-flow-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.task-flow-running .task-flow-strip {
+  position: relative;
+}
+
+.task-flow-running .task-flow-strip::after {
+  animation: taskFlowSweep 1.8s linear infinite;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.55), transparent);
+  border-radius: 999px;
+  bottom: 0;
+  content: '';
+  height: 1px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 42%;
+}
+
+.task-flow-running .task-flow-arrow {
+  animation: taskFlowArrow 1.15s ease-in-out infinite;
+}
+
+.task-flow-arrow {
+  display: inline-block;
+}
+
+@keyframes taskFlowSweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes taskFlowArrow {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translateX(2px);
+  }
+}
+</style>

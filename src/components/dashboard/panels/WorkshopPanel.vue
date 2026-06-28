@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
+import type { McpRoleMeta } from '@/types'
 import { assignDeviceAi } from '@/api/devices'
 import { setWorkshopBinding } from '@/api/workshop'
 import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
+import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
 import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
+import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
 
 interface Agent {
   id: string
   name: string
   role: 'admin' | 'worker'
+  aiRole?: 'assistant_admin' | 'digital_member' | 'admin' | 'worker'
+  digitalMemberRole?: 'manager' | 'member'
   aiConfigId?: number
   mcpTools?: string
   status: 'learning' | 'working' | 'reproducing' | 'dead'
@@ -25,9 +30,43 @@ interface Agent {
 interface Props {
   devices: ConnectedDevice[]
   agents: Agent[]
+  mcpRoleMeta: McpRoleMeta
+  roleMcpPermissions: Record<string, string[]>
 }
 
 const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
+  (e: 'save-role-mcp-permissions'): void
+}>()
+
+// The toolbox tool set (12 tools): used to scope the role-permission editor so
+// it only shows tools that actually belong to the toolbox.
+const toolboxToolNames = computed<string[]>(() => {
+  const tb = (props.devices || []).find(device => isToolboxDevice(device))
+  return Array.isArray(tb?.capabilities) ? tb!.capabilities : []
+})
+
+// Map a bound AI member to its role tier (mirrors backend config_role_tier).
+const ROLE_MEMBER = 'digital_member_member'
+const ROLE_MANAGER = 'digital_member_manager'
+const ROLE_ASSISTANT_ADMIN = 'assistant_admin'
+const tierForAgent = (agent?: Agent): string => {
+  if (!agent) return ROLE_MEMBER
+  if (agent.aiRole === 'assistant_admin') return ROLE_ASSISTANT_ADMIN
+  return agent.digitalMemberRole === 'manager' ? ROLE_MANAGER : ROLE_MEMBER
+}
+
+// Per-AI role permission editor: opened from the bound-AI list in the toolbox card.
+const roleEditor = ref<{ role: string; aiName: string } | null>(null)
+const openRoleEditor = (aiConfigId: number) => {
+  const agent = memberByConfigId.value.get(aiConfigId)
+  roleEditor.value = {
+    role: tierForAgent(agent),
+    aiName: agent?.name || `AI-${aiConfigId}`,
+  }
+}
 
 const memberByConfigId = computed(() => {
   const map = new Map<number, Agent>()
@@ -201,6 +240,28 @@ const isAndroidDevice = (device: ConnectedDevice) => {
   return !!device.isAndroid || platform.includes('android')
 }
 
+// Live remote control is available for desktop + android endpoints. The device
+// advertises the ``remote_control`` capability once its client supports it; we
+// still show the button for those device types and let the session surface a
+// clear error if an older client hasn't been updated yet.
+const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' | 'browser' } | null>(null)
+
+const isBrowserDevice = (device: ConnectedDevice) => {
+  const platform = String(device.platform || '').toLowerCase()
+  return !!device.isBrowserExtension || platform.includes('browser')
+}
+
+const canRemoteControl = (device: ConnectedDevice) =>
+  isSoftwareDevice(device) || isAndroidDevice(device) || isBrowserDevice(device)
+
+const openRemoteControl = (device: ConnectedDevice) => {
+  rcTarget.value = {
+    deviceId: device.id,
+    name: deviceDisplayName(device),
+    mode: isAndroidDevice(device) ? 'android' : isBrowserDevice(device) ? 'browser' : 'desktop',
+  }
+}
+
 const isEndpointDevice = (device: ConnectedDevice) => {
   const platform = String(device.platform || '').toLowerCase()
   return isSoftwareDevice(device) || isAndroidDevice(device) || !!device.isBrowserExtension || platform.includes('browser') || isWorkshopDevice(device)
@@ -301,6 +362,16 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
         </span>
       </div>
 
+      <!-- 实时远程控制：查看并操作该端的画面（桌面/安卓）。 -->
+      <button
+        v-if="canRemoteControl(device)"
+        type="button"
+        class="mt-2 w-full rounded-lg border border-sky-200 bg-sky-50 px-2 py-1.5 text-[11px] font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
+        @click="openRemoteControl(device)"
+      >
+        🖥️ {{ isAndroidDevice(device) ? '远程控制 · 查看并操作手机画面' : isBrowserDevice(device) ? '浏览器控制 · 查看并操作浏览器画面' : '桌面控制 · 查看并操作桌面画面' }}
+      </button>
+
       <div class="mt-2 rounded-lg border p-2" :class="memberPanelClass(device)">
         <div v-if="isToolboxDevice(device)" class="mb-1 text-[10px] text-indigo-600 dark:text-indigo-300">
           工具箱支持多绑：分配操作会为选中的 AI 增加绑定。可多次分配不同成员。绑定后该 AI 的 prompt 动态 MCP 会包含工具箱工具，MCP 权限范围生效。
@@ -315,13 +386,19 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
         <!-- Multi-bind display for toolbox: list all bound AIs with individual unbind -->
         <div v-if="isToolboxDevice(device) && linkedConfigIds(device).length > 0" class="mb-2">
           <div class="text-[9px] mb-0.5 text-zinc-500">已绑定 AI（这些 AI 的对话 prompt 中会出现 工具箱 MCP）：</div>
-          <div v-for="mid in linkedConfigIds(device)" :key="mid" class="flex justify-between items-center text-[10px] bg-zinc-50 dark:bg-zinc-800 px-1 py-0.5 rounded mb-0.5">
-            <span>{{ assignableMembers.find((m: any) => Number(m.aiConfigId) === mid)?.name || 'AI-' + mid }} (ID: {{ mid }})</span>
-            <button
-              :disabled="busy[device.id]"
-              class="text-[9px] px-1 py-0 rounded border hover:bg-rose-50"
-              @click="unbindSpecific(device, mid)"
-            >解除</button>
+          <div v-for="mid in linkedConfigIds(device)" :key="mid" class="flex justify-between items-center gap-1 text-[10px] bg-zinc-50 dark:bg-zinc-800 px-1 py-0.5 rounded mb-0.5">
+            <span class="min-w-0 truncate">{{ assignableMembers.find((m: any) => Number(m.aiConfigId) === mid)?.name || 'AI-' + mid }} (ID: {{ mid }})</span>
+            <span class="shrink-0 flex items-center gap-1">
+              <button
+                class="text-[9px] px-1 py-0 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50 dark:border-indigo-500/30 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+                @click="openRoleEditor(mid)"
+              >权限</button>
+              <button
+                :disabled="busy[device.id]"
+                class="text-[9px] px-1 py-0 rounded border hover:bg-rose-50"
+                @click="unbindSpecific(device, mid)"
+              >解除</button>
+            </span>
           </div>
         </div>
         <div v-else-if="isToolboxDevice(device)" class="text-[10px] text-amber-600 mb-1">暂无 AI 绑定工具箱。</div>
@@ -418,6 +495,26 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
         错误: {{ device.lastError }}
       </div>
     </div>
+
+    <RemoteControlModal
+      v-if="rcTarget"
+      :device-id="rcTarget.deviceId"
+      :device-name="rcTarget.name"
+      :mode="rcTarget.mode"
+      @close="rcTarget = null"
+    />
+
+    <ToolboxRoleMcpModal
+      :show="!!roleEditor"
+      :role="roleEditor?.role || ''"
+      :ai-name="roleEditor?.aiName || ''"
+      :mcp-role-meta="mcpRoleMeta"
+      :role-mcp-permissions="roleMcpPermissions"
+      :toolbox-tools="toolboxToolNames"
+      @toggle-role-tool="emit('toggle-role-tool', $event)"
+      @save="emit('save-role-mcp-permissions')"
+      @close="roleEditor = null"
+    />
   </div>
 </template>
 

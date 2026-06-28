@@ -103,8 +103,7 @@ const {
   saveBrainViewMode,
   roleMcpPermissions,
   toggleRoleTool,
-  setRoleAllTools,
-  resetRoleMcpPermissions,
+  saveRoleMcpPermissions,
 } = useDashboardSystemSettings({
   getCurrentUser: () => props.currentUser,
   alert,
@@ -507,7 +506,11 @@ onUnmounted(() => {
             :knowledge-filter-open="knowledgeFilterOpen"
             :knowledge-filter="knowledgeFilter"
             :brain-view-mode="brainViewMode"
+            :mcp-role-meta="mcpRoleMeta"
+            :role-mcp-permissions="roleMcpPermissions"
             @update:brain-view-mode="saveBrainViewMode"
+            @toggle-role-tool="payload => toggleRoleTool(payload.role, payload.tool, payload.checked)"
+            @save-role-mcp-permissions="saveRoleMcpPermissions"
             @show-tasks="openAgentTaskList"
             @show-task-detail="openAgentTaskDetailFromCard"
             @chat="openAgentChat"
@@ -596,22 +599,22 @@ onUnmounted(() => {
       <Transition name="fade">
         <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
           <div class="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl border-0 sm:border border-zinc-200 dark:border-zinc-700 shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
-            <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
-              <div class="min-w-0 flex-1">
-                <div class="flex min-w-0 items-center gap-2">
-                  <div class="shrink-0 text-sm font-semibold text-zinc-800 dark:text-zinc-100">与 {{ chatTarget.name }} 对话</div>
-                  <div class="min-w-0 flex-1">
-                    <TaskProgressPanel
-                      :configId="chatTarget.aiConfigId"
-                      :sessionId="chatCurrentSessionId"
-                      :refreshSignal="chatTaskPlanRefreshSignal"
-                      header
-                    />
-                  </div>
-                </div>
+            <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
+              <div class="min-w-0">
+                <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">与 {{ chatTarget.name }} 对话</div>
                 <div class="text-xs text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
               </div>
-              <button class="shrink-0 text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300" @click="closeAgentChat">关闭</button>
+              <div class="min-w-0">
+                <TaskProgressPanel
+                  :configId="chatTarget.aiConfigId"
+                  :sessionId="chatCurrentSessionId"
+                  :refreshSignal="chatTaskPlanRefreshSignal"
+                  header
+                />
+              </div>
+              <div class="flex justify-end">
+                <button class="shrink-0 text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300" @click="closeAgentChat">关闭</button>
+              </div>
             </div>
             <div class="flex-1 min-h-0 p-2">
               <ChatInterface
@@ -678,11 +681,6 @@ onUnmounted(() => {
       v-model:tavilyApiKey="tavilyApiKey"
       v-model:modelPresets="modelPresets"
       v-model:mcpMaxSteps="mcpMaxSteps"
-      :mcp-role-meta="mcpRoleMeta"
-      :role-mcp-permissions="roleMcpPermissions"
-      @toggle-role-tool="payload => toggleRoleTool(payload.role, payload.tool, payload.checked)"
-      @set-role-all-tools="payload => setRoleAllTools(payload.role, payload.checked)"
-      @reset-role-mcp-permissions="resetRoleMcpPermissions"
       @save="saveSystemSettings"
     />
 

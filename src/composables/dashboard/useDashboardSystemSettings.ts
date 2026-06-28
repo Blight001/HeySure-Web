@@ -193,6 +193,26 @@ Rules:
     initRoleMcpPermissions(true)
   }
 
+  // Persist only the per-role MCP allow-list. Used by the toolbox panel's
+  // per-AI role-permission editor so it does not have to push the whole system
+  // settings payload (which lives elsewhere in this composable).
+  const saveRoleMcpPermissions = async () => {
+    const currentUser = options.getCurrentUser()
+    if (!currentUser) return
+    try {
+      const updatedUser = await updateProfile({
+        role_mcp_permissions: roleMcpPermissionsInitialized
+          ? JSON.stringify(roleMcpPermissions.value)
+          : (options.getCurrentUser()?.role_mcp_permissions ?? ''),
+      })
+      void options.alert({ message: 'MCP 角色权限已保存', type: 'success' })
+      options.onRefreshUser(updatedUser)
+    } catch (err: any) {
+      console.error('Failed to save role MCP permissions:', err)
+      void options.alert({ message: `保存失败: ${err?.message || '未知错误'}`, type: 'error' })
+    }
+  }
+
   const defaultStartTaskPrompt = ref('你将收到一个任务，请先理解目标、约束与优先级，然后开始执行。')
   const defaultResumeTaskPrompt = ref('请继续执行刚才被暂停的任务，先简要回顾当前进度，再继续推进直到可交付。')
   const defaultSupervisionPrompt = ref('系统监督提醒：请确认当前任务是否已完成。若已完成可自然结束；若未完成请给出剩余步骤并继续执行。复杂任务请使用 plan.create 拆分阶段。')
@@ -467,5 +487,6 @@ Rules:
     toggleRoleTool,
     setRoleAllTools,
     resetRoleMcpPermissions,
+    saveRoleMcpPermissions,
   }
 }

@@ -9,7 +9,17 @@ const props = withDefaults(defineProps<{
 }>(), { mode: 'android' })
 const emit = defineEmits<{ (e: 'close'): void }>()
 
-const isDesktop = computed(() => props.mode === 'desktop')
+// Desktop and browser share the same mouse+keyboard control surface and render
+// a landscape <video>; only the device-side injection differs (robotjs vs CDP).
+const isDesktopLike = computed(() => props.mode === 'desktop' || props.mode === 'browser')
+const modeLabel = computed(() =>
+  props.mode === 'browser' ? '（浏览器）' : props.mode === 'desktop' ? '（桌面）' : '')
+
+// Desktop/browser get a big, freely resizable panel (drag the bottom-right
+// corner); phone keeps a compact portrait window.
+const panelStyle = computed(() => isDesktopLike.value
+  ? { width: '80vw', height: '85vh', minWidth: '480px', minHeight: '360px', maxWidth: '98vw', maxHeight: '95vh' }
+  : {})
 
 const {
   status,
@@ -17,13 +27,45 @@ const {
   deviceWidth,
   deviceHeight,
   remoteStream,
+  controlReady,
+  connectionState,
+  browserState,
   start,
   stop,
   sendInput,
+  sendBrowserCommand,
 } = useRemoteControl()
+
+// ── Edge-style browser chrome (browser-extension mode only) ──────────────────
+const isBrowser = computed(() => props.mode === 'browser')
+const addressInput = ref('')
+const addressFocused = ref(false)
+const activeTab = computed(() => browserState.value?.tabs.find(t => t.active) || null)
+
+// Keep the address bar mirroring the live URL, but never clobber what the
+// operator is mid-typing.
+watch(activeTab, (tab) => {
+  if (!addressFocused.value) addressInput.value = tab?.url || ''
+})
+
+const submitAddress = (event: Event) => {
+  ;(event.target as HTMLInputElement)?.blur()
+  sendBrowserCommand({ action: 'navigate', url: addressInput.value })
+}
+const navBack = () => sendBrowserCommand({ action: 'back' })
+const navForward = () => sendBrowserCommand({ action: 'forward' })
+const navReload = () => sendBrowserCommand({ action: 'reload' })
+const switchTab = (tabId: number) => sendBrowserCommand({ action: 'switch-tab', tabId })
+const closeTab = (tabId: number) => sendBrowserCommand({ action: 'close-tab', tabId })
+const newTab = () => sendBrowserCommand({ action: 'new-tab' })
+const onFaviconError = (event: Event) => { (event.target as HTMLElement).style.visibility = 'hidden' }
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const surfaceRef = ref<HTMLElement | null>(null)
+// Hidden field that owns keyboard focus on desktop: raw keys are forwarded
+// natively (down/up), while IME composition is captured invisibly so 中文 still
+// types through without a visible input box.
+const imeRef = ref<HTMLTextAreaElement | null>(null)
 const typing = ref('')
 
 // --- Android gesture classification (resolution-independent thresholds) ---
@@ -39,7 +81,7 @@ const aspectStyle = computed(() => {
   if (deviceWidth.value > 0 && deviceHeight.value > 0) {
     return { aspectRatio: `${deviceWidth.value} / ${deviceHeight.value}` }
   }
-  return { aspectRatio: isDesktop.value ? '16 / 9' : '9 / 19.5' }
+  return { aspectRatio: isDesktopLike.value ? '16 / 9' : '9 / 19.5' }
 })
 
 const statusText = computed(() => {
@@ -71,8 +113,9 @@ const onPointerDown = (event: PointerEvent) => {
   const pos = normalized(event)
   if (!pos) return
   ;(event.target as HTMLElement).setPointerCapture?.(event.pointerId)
-  surfaceRef.value?.focus()
-  if (isDesktop.value) {
+  if (isDesktopLike.value) {
+    // Grab keyboard focus into the hidden IME field so typing reaches the remote.
+    imeRef.value?.focus()
     sendInput({ type: 'down', x: pos.x, y: pos.y, button: mouseButton(event.button) })
   } else {
     down = { ...pos, t: Date.now() }
@@ -80,7 +123,7 @@ const onPointerDown = (event: PointerEvent) => {
 }
 
 const onPointerMove = (event: PointerEvent) => {
-  if (status.value !== 'streaming' || !isDesktop.value) return
+  if (status.value !== 'streaming' || !isDesktopLike.value) return
   const now = Date.now()
   if (now - lastMoveAt < MOVE_INTERVAL_MS) return
   lastMoveAt = now
@@ -91,7 +134,7 @@ const onPointerMove = (event: PointerEvent) => {
 const onPointerUp = (event: PointerEvent) => {
   if (status.value !== 'streaming') return
   const pos = normalized(event) || null
-  if (isDesktop.value) {
+  if (isDesktopLike.value) {
     sendInput({ type: 'up', x: pos?.x, y: pos?.y, button: mouseButton(event.button) })
     return
   }
@@ -112,25 +155,49 @@ const onPointerUp = (event: PointerEvent) => {
 }
 
 const onWheel = (event: WheelEvent) => {
-  if (status.value !== 'streaming' || !isDesktop.value) return
+  if (status.value !== 'streaming' || !isDesktopLike.value) return
   event.preventDefault()
   sendInput({ type: 'scroll', dx: event.deltaX, dy: event.deltaY })
 }
 
+// Native key forwarding: each physical key (modifiers included) is sent as
+// down/up, so the remote reproduces holds and combos (Ctrl+C, Shift+arrows…)
+// exactly. While an IME is composing we stay out of the way and let
+// onCompositionEnd ship the finished text instead.
+// Desktop (robotjs) replays modifiers as their own key holds; browser (CDP) wants
+// a modifier bitmask per key event and ignores standalone modifier presses. So
+// browser mode carries the modifier booleans, desktop mode does not.
 const MODIFIER_ONLY = new Set(['Control', 'Alt', 'Shift', 'Meta'])
+const keyPayload = (event: KeyboardEvent, action: 'down' | 'up'): RcInput | null => {
+  if (props.mode === 'browser') {
+    if (MODIFIER_ONLY.has(event.key)) return null
+    return { type: 'key', action, key: event.key, ctrl: event.ctrlKey, alt: event.altKey, shift: event.shiftKey, meta: event.metaKey }
+  }
+  return { type: 'key', action, key: event.key }
+}
+
 const onKeyDown = (event: KeyboardEvent) => {
-  if (status.value !== 'streaming' || !isDesktop.value) return
-  if (MODIFIER_ONLY.has(event.key)) return
+  if (status.value !== 'streaming' || !isDesktopLike.value) return
+  if (event.isComposing || event.keyCode === 229) return
   event.preventDefault()
-  sendInput({
-    type: 'key',
-    action: 'tap',
-    key: event.key,
-    ctrl: event.ctrlKey,
-    alt: event.altKey,
-    shift: event.shiftKey,
-    meta: event.metaKey,
-  })
+  if (event.repeat) return // the remote OS auto-repeats a held key
+  const payload = keyPayload(event, 'down')
+  if (payload) sendInput(payload)
+}
+
+const onKeyUp = (event: KeyboardEvent) => {
+  if (status.value !== 'streaming' || !isDesktopLike.value) return
+  if (event.isComposing) return
+  event.preventDefault()
+  const payload = keyPayload(event, 'up')
+  if (payload) sendInput(payload)
+}
+
+const onCompositionEnd = (event: CompositionEvent) => {
+  if (status.value !== 'streaming' || !isDesktopLike.value) return
+  const text = event.data
+  if (text) sendInput({ type: 'text', text })
+  if (imeRef.value) imeRef.value.value = '' // don't let the hidden field accumulate
 }
 
 // ---------------- Android nav + text ----------------
@@ -166,14 +233,16 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div class="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" @click.self="close">
       <div
-        class="flex flex-col w-full max-h-[92vh] rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden"
-        :class="isDesktop ? 'max-w-5xl' : 'max-w-sm'"
+        class="flex flex-col rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden"
+        :class="isDesktopLike ? 'resize' : 'w-full max-w-sm max-h-[92vh]'"
+        :style="panelStyle"
+        @click.stop
       >
         <!-- 头部 -->
         <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-100 truncate">
-              远程控制{{ isDesktop ? '（桌面）' : '' }} · {{ deviceName || deviceId }}
+              远程控制{{ modeLabel }} · {{ deviceName || deviceId }}
             </div>
             <div class="text-xs mt-0.5 flex items-center gap-1.5"
               :class="status === 'streaming' ? 'text-emerald-400' : status === 'error' ? 'text-rose-400' : 'text-amber-400'">
@@ -187,22 +256,70 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
+        <!-- Edge 风格浏览器外壳（仅浏览器控制） -->
+        <div v-if="isBrowser" class="border-b border-zinc-800 bg-zinc-950/60">
+          <!-- 标签栏 -->
+          <div class="flex items-end gap-1 px-2 pt-2 overflow-x-auto rc-tabstrip">
+            <button
+              v-for="tab in browserState?.tabs || []"
+              :key="tab.id"
+              class="group flex items-center gap-1.5 min-w-[120px] max-w-[200px] px-2 py-1.5 rounded-t-lg border border-b-0 text-xs transition-colors"
+              :class="tab.active ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-zinc-900/60 border-transparent text-zinc-400 hover:bg-zinc-800/60'"
+              :title="tab.title"
+              @click="switchTab(tab.id)"
+            >
+              <img v-if="tab.favIconUrl" :src="tab.favIconUrl" class="w-3.5 h-3.5 shrink-0 rounded-sm" alt="" @error="onFaviconError" />
+              <span class="flex-1 truncate text-left">{{ tab.title || '新标签页' }}</span>
+              <span class="grid h-4 w-4 shrink-0 place-items-center rounded text-zinc-400 hover:bg-zinc-600 hover:text-white" title="关闭标签页" @click.stop="closeTab(tab.id)">✕</span>
+            </button>
+            <button class="mb-0.5 h-7 w-7 shrink-0 rounded text-base leading-none text-zinc-400 hover:bg-zinc-800 hover:text-white" title="新建标签页" @click="newTab">＋</button>
+          </div>
+          <!-- 工具栏 + 地址栏 -->
+          <div class="flex items-center gap-1.5 px-2 py-1.5">
+            <button class="rc-toolbtn" title="后退" :disabled="status !== 'streaming'" @click="navBack">‹</button>
+            <button class="rc-toolbtn" title="前进" :disabled="status !== 'streaming'" @click="navForward">›</button>
+            <button class="rc-toolbtn" title="刷新" :disabled="status !== 'streaming'" @click="navReload">⟳</button>
+            <input
+              v-model="addressInput"
+              type="text"
+              placeholder="搜索或输入网址"
+              class="min-w-0 flex-1 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+              :disabled="status !== 'streaming'"
+              @focus="addressFocused = true"
+              @blur="addressFocused = false"
+              @keyup.enter="submitAddress"
+              @keydown.stop
+            />
+          </div>
+        </div>
+
         <!-- 画面 -->
         <div class="relative flex-1 min-h-0 overflow-auto bg-black flex items-center justify-center p-3">
           <div
             ref="surfaceRef"
-            tabindex="0"
             class="relative w-full max-h-full outline-none"
             :style="aspectStyle"
-            @keydown="onKeyDown"
           >
+            <!-- Invisible keyboard/IME sink (desktop). pointer-events:none so it
+                 never blocks the mouse; focused programmatically on click. -->
+            <textarea
+              v-if="isDesktopLike"
+              ref="imeRef"
+              class="absolute inset-0 z-10 opacity-0 resize-none pointer-events-none"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              @keydown="onKeyDown"
+              @keyup="onKeyUp"
+              @compositionend="onCompositionEnd"
+            ></textarea>
             <video
               ref="videoRef"
               autoplay
               playsinline
               muted
               class="w-full h-full object-contain rounded-lg bg-zinc-950 touch-none select-none"
-              :class="isDesktop ? 'cursor-crosshair' : ''"
+              :class="isDesktopLike ? 'cursor-crosshair' : ''"
               @pointerdown="onPointerDown"
               @pointermove="onPointerMove"
               @pointerup="onPointerUp"
@@ -212,20 +329,27 @@ onBeforeUnmount(() => {
             <div v-if="status !== 'streaming'" class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">
               <span v-if="status === 'error'" class="px-3 text-center text-rose-300">{{ errorMessage }}</span>
               <span v-else-if="status === 'ended'">会话已结束</span>
-              <span v-else class="flex items-center gap-2">
+              <span v-else class="flex flex-col items-center gap-2 text-center px-3">
                 <span class="w-3 h-3 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin"></span>
-                正在连接设备…
+                正在连接设备…<span class="text-zinc-500">P2P：{{ connectionState }}</span>
               </span>
+            </div>
+            <!-- 画面已出但控制通道未就绪：明确告诉用户鼠标/键盘暂不可用 -->
+            <div
+              v-if="status === 'streaming' && !controlReady"
+              class="absolute left-2 top-2 rounded bg-amber-500/90 px-2 py-1 text-[11px] text-white shadow"
+            >
+              控制通道未就绪，鼠标/键盘暂不可用…
             </div>
           </div>
         </div>
 
-        <!-- 文本输入 -->
-        <div class="flex items-center gap-2 px-3 py-2 border-t border-zinc-800">
+        <!-- 文本输入（仅安卓：手机无逐键注入，靠整段文本写入聚焦框） -->
+        <div v-if="!isDesktopLike" class="flex items-center gap-2 px-3 py-2 border-t border-zinc-800">
           <input
             v-model="typing"
             type="text"
-            :placeholder="isDesktop ? '向桌面发送一段文本…' : '向聚焦输入框发送文本…'"
+            placeholder="向聚焦输入框发送文本…"
             class="flex-1 min-w-0 rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
             :disabled="status !== 'streaming'"
             @keyup.enter="sendText"
@@ -240,14 +364,14 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <!-- 导航键（安卓）/ 操作提示（桌面） -->
-        <div v-if="!isDesktop" class="grid grid-cols-3 gap-2 px-3 py-3 border-t border-zinc-800">
+        <!-- 导航键（安卓）/ 操作提示（桌面、浏览器） -->
+        <div v-if="!isDesktopLike" class="grid grid-cols-3 gap-2 px-3 py-3 border-t border-zinc-800">
           <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="sendKey('back')">返回</button>
           <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="sendKey('home')">主页</button>
           <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="sendKey('recents')">最近</button>
         </div>
         <div v-else class="px-3 py-2 border-t border-zinc-800 text-[11px] text-zinc-500 leading-relaxed">
-          左键点击/拖拽 · 右键、中键支持 · 滚轮滚动 · 点击画面后可用键盘输入（含 Ctrl/Alt 组合键）
+          左键点击/拖拽 · 右键、中键 · 滚轮滚动 · 点击画面后直接用键盘输入（支持 Ctrl/Alt 组合键与中文输入法）
         </div>
       </div>
     </div>
@@ -270,5 +394,33 @@ onBeforeUnmount(() => {
 }
 .rc-navbtn:disabled {
   opacity: 0.4;
+}
+
+.rc-toolbtn {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: rgb(212 212 216);
+  font-size: 1rem;
+  line-height: 1;
+  transition: background-color 0.15s, color 0.15s;
+}
+.rc-toolbtn:hover:not(:disabled) {
+  background: rgb(39 39 42);
+  color: #fff;
+}
+.rc-toolbtn:disabled {
+  opacity: 0.4;
+}
+
+.rc-tabstrip::-webkit-scrollbar {
+  height: 4px;
+}
+.rc-tabstrip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
 }
 </style>

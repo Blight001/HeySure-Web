@@ -5,7 +5,7 @@ import BrainCorePanel from './BrainCorePanel.vue'
 import KnowledgeBasePanel from './KnowledgeBasePanel.vue'
 import WorkshopPanel from './WorkshopPanel.vue'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
-import type { KnowledgeItem, User } from '@/types'
+import type { KnowledgeItem, McpRoleMeta, User } from '@/types'
 
 interface Agent {
   id: string
@@ -45,6 +45,8 @@ interface Props {
   knowledgeFilterOpen: boolean
   knowledgeFilter: 'all' | 'personas' | 'skills' | 'tools' | 'inheritance' | 'system' | 'business'
   brainViewMode: 'sections' | 'all'
+  mcpRoleMeta: McpRoleMeta
+  roleMcpPermissions: Record<string, string[]>
 }
 
 defineProps<Props>()
@@ -60,6 +62,8 @@ const emit = defineEmits<{
   (e: 'refresh-user', user: User): void
   (e: 'view-all-mcp'): void
   (e: 'manage-device-tools'): void
+  (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
+  (e: 'save-role-mcp-permissions'): void
 }>()
 
 const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
@@ -135,6 +139,10 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           class="flex-1"
           :devices="connectedDevices"
           :agents="activeAgents"
+          :mcp-role-meta="mcpRoleMeta"
+          :role-mcp-permissions="roleMcpPermissions"
+          @toggle-role-tool="emit('toggle-role-tool', $event)"
+          @save-role-mcp-permissions="emit('save-role-mcp-permissions')"
         />
       </Transition>
     </div>
