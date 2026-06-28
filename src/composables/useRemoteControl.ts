@@ -59,6 +59,10 @@ export interface RcBrowserTab {
 export interface RcBrowserState {
   activeTabId: number
   tabs: RcBrowserTab[]
+  // false when the active tab is a restricted page (chrome://, web store, …):
+  // the live screen is frozen and mouse/keyboard do nothing, but the address bar
+  // still works to navigate away. Older extensions omit this (treated as true).
+  controllable?: boolean
 }
 export type RcBrowserCommand =
   | { action: 'back' | 'forward' | 'reload' }

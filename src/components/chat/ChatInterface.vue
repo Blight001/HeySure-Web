@@ -10,6 +10,7 @@ import * as chatApi from '@/api/chat'
 import { listAiConfigs } from '@/api/ai'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
 import { getAuthToken } from '@/api/http'
+import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
 import { renderGroupedMcpToolCatalog, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { formatDurationMs } from '@/utils/datetime'
 
@@ -56,6 +57,8 @@ interface Props {
   adminModel?: string
   aiConfigId?: number
   aiKind?: 'assistant' | 'core'
+  /** Logged-in user id, used to join the `user_{id}` Socket.IO room for live runs. */
+  currentUserId?: number
   initialSessionId?: string
   mcpAutoApprove?: boolean
   mcpIcon?: string
@@ -113,10 +116,15 @@ let sessionSyncPollEpoch = 0
 let lastRealtimeTokenSyncAt = 0
 let lastExternalRunCheckAt = 0
 const chatScrollRef = ref<HTMLElement | null>(null)
+// Re-pins the view to the bottom whenever async content (markdown / images / code
+// blocks) grows the scroll height after the initial scrollToBottom. Without this,
+// the one-shot scroll lands above the latest message and the user can't catch the
+// receding bottom while content keeps expanding.
+let chatResizeObserver: ResizeObserver | null = null
 const stickToBottom = ref(true)
 // History is paged: load the latest page on open, then prepend older pages as the
 // user scrolls up. Avoids materializing an entire long conversation at once.
-const HISTORY_PAGE_SIZE = 30
+const HISTORY_PAGE_SIZE = 15
 const hasMoreHistory = ref(false)
 const loadingOlder = ref(false)
 let lastProgrammaticScrollTs = 0
@@ -533,6 +541,59 @@ const scrollToBottom = async (smooth = false) => {
   }
 }
 
+// On dialog open the messages keep laying out for a while: the record list paints
+// first, then the task plan, then the chat blocks (markdown / collapsibles / MCP
+// results) suddenly expand — often well after a single scrollToBottom has run, so
+// the view ends up stranded mid-list. Keep re-pinning to the bottom until the
+// scroll height has stopped changing (or a hard cap), which makes the first open
+// settle on the latest message the same way a session switch already does. The
+// loop bails the moment the user scrolls up so it never fights manual reading.
+let pinSettleTimer: number | null = null
+const PIN_SETTLE_INTERVAL_MS = 90
+const PIN_SETTLE_MAX_MS = 4000
+const pinToBottomSettled = () => {
+  if (pinSettleTimer !== null) {
+    window.clearTimeout(pinSettleTimer)
+    pinSettleTimer = null
+  }
+  const start = Date.now()
+  let prevHeight = -1
+  let stableTicks = 0
+  const step = () => {
+    pinSettleTimer = null
+    const el = chatScrollRef.value
+    if (!el || !stickToBottom.value) return
+    const height = el.scrollHeight
+    const atBottom = height - el.scrollTop - el.clientHeight <= 4
+    // Height unchanged but we drifted off the bottom => the user scrolled up.
+    // Respect it: release stick-to-bottom and stop the loop.
+    if (height === prevHeight && !atBottom) {
+      stickToBottom.value = false
+      return
+    }
+    lastProgrammaticScrollTs = Date.now()
+    el.scrollTop = el.scrollHeight
+    if (height === prevHeight) {
+      stableTicks += 1
+    } else {
+      stableTicks = 0
+      prevHeight = height
+    }
+    if (stableTicks >= 4 || Date.now() - start > PIN_SETTLE_MAX_MS) return
+    pinSettleTimer = window.setTimeout(step, PIN_SETTLE_INTERVAL_MS)
+  }
+  pinSettleTimer = window.setTimeout(step, 0)
+}
+
+// When the scroll content resizes (late markdown/image layout, streaming growth),
+// keep the viewport glued to the bottom as long as we're in stick-to-bottom mode.
+const handleScrollContentResize = () => {
+  const el = chatScrollRef.value
+  if (!el || !stickToBottom.value) return
+  lastProgrammaticScrollTs = Date.now()
+  el.scrollTop = el.scrollHeight
+}
+
 const getDistanceFromBottom = (el: HTMLElement) =>
   el.scrollHeight - el.scrollTop - el.clientHeight
 
@@ -675,7 +736,15 @@ const LOAD_OLDER_THRESHOLD_PX = 120
 const handleScroll = () => {
   updateStickFromScroll()
   const el = chatScrollRef.value
-  if (el && el.scrollTop <= LOAD_OLDER_THRESHOLD_PX) {
+  if (!el) return
+  // Only auto-load older pages when the user has genuinely scrolled up to browse
+  // history. While we're pinned to the bottom (initial open, settle loop, fresh
+  // reply) the top sentinel is near scrollTop 0 simply because the list is short or
+  // still settling — firing loadOlderHistory there cascades the whole conversation
+  // in and yanks the view off the latest message.
+  if (stickToBottom.value) return
+  if (Date.now() - lastProgrammaticScrollTs < PROGRAMMATIC_SCROLL_GRACE_MS) return
+  if (el.scrollTop <= LOAD_OLDER_THRESHOLD_PX) {
     void loadOlderHistory()
   }
 }
@@ -688,6 +757,86 @@ const handleWheel = () => {
   if (getDistanceFromBottom(el) > 20) {
     stickToBottom.value = false
   }
+}
+
+// --- Socket-primary live streaming ------------------------------------------
+// Subscribe to the backend's chat:run_live / chat:run_done push events. The HTTP
+// polling below stays only as a fallback for when this socket is disconnected.
+let lastFinishedRunId = ''
+const STREAM_PLAN_TOOLS = ['plan.create', 'plan.phase_complete', 'plan.finish']
+
+const handleStreamLive = (payload: RunLivePayload) => {
+  const runId = String(payload?.run_id || '')
+  if (!runId || runId !== currentRunId.value) return
+  // Ignore any trailing live frame for a run we already finished/stopped, so it
+  // can't flip the UI back into "typing".
+  if (lastFinishedRunId === runId) return
+  isTyping.value = true
+  if (!isRunActive.value) currentRunStatus.value = 'running'
+  if (runStartTs.value == null) {
+    runStartTs.value = Date.now()
+    phaseEnterTs.value = Date.now()
+    startTimeTicker()
+  }
+  const incomingPhase = (payload.phase || 'generating') as 'idle' | 'generating' | 'waiting_mcp'
+  if (incomingPhase !== currentRunPhase.value) {
+    applyPhaseDelta()
+    currentRunPhase.value = incomingPhase
+    if (incomingPhase !== 'idle') phaseEnterTs.value = Date.now()
+  }
+  const incomingTool = String(payload.current_tool || '')
+  const toolChanged = incomingTool !== currentMcpTool.value
+  if (toolChanged && STREAM_PLAN_TOOLS.includes(incomingTool)) bumpTaskPlan()
+  currentMcpTool.value = incomingTool
+  liveThinkingText.value = String(payload.reasoning || '')
+  updateLiveAssistantView(String(payload.text || ''))
+  liveCursor.value = String(payload.text || '').length
+  // A tool boundary means new tool-call/result bubbles were just persisted.
+  if (toolChanged) void fetchRunHistoryIncrementalOnce()
+  void refreshTokensDuringRunIfNeeded()
+}
+
+const handleStreamDone = (payload: RunDonePayload) => {
+  const runId = String(payload?.run_id || '')
+  if (!runId) return
+  if (runId === currentRunId.value) {
+    void finishRun(runId, String(payload.status || 'completed'), String(payload.error_message || ''))
+  } else if (payload.session_id && payload.session_id === currentSessionId.value) {
+    // An external run (other device / bot) finished in this session — pull its
+    // freshly-persisted messages without waiting for the slow safety-net poll.
+    void fetchRunHistoryIncrementalOnce()
+  }
+}
+
+const runStream = useChatRunStream({
+  onLive: handleStreamLive,
+  onDone: handleStreamDone,
+})
+
+// Shared run-completion sequence for both the socket (chat:run_done) and the
+// fallback poll terminal branch, so the finish logic lives in exactly one place.
+const finishRun = async (runId: string, status: string, errorMessage: string) => {
+  if (!runId || runId !== currentRunId.value) return
+  if (lastFinishedRunId === runId) return
+  lastFinishedRunId = runId
+  stopRunPolling()
+  const epoch = runPollEpoch
+  isTyping.value = false
+  currentRunStatus.value = (['completed', 'error', 'stopped'].includes(status)
+    ? status
+    : 'completed') as typeof currentRunStatus.value
+  finalizeRunTimers()
+  currentRunPhase.value = 'idle'
+  currentMcpTool.value = ''
+  await fetchRunHistoryIncrementalOnce()
+  await ensureFinalAssistantMessage(epoch)
+  clearLiveAssistantView()
+  if (currentRunStatus.value === 'error') {
+    await appendRunErrorNotice(runId, errorMessage || '后端运行失败，但没有返回具体错误信息。')
+  }
+  await loadTotalTokens()
+  stopTimeTicker()
+  bumpTaskPlan()
 }
 
 const stopRunPolling = () => {
@@ -1142,6 +1291,9 @@ const loadChatHistory = async (sid: string) => {
   restoreActionStatesFromHistory(chatMessages.value)
   stickToBottom.value = true
   await scrollToBottom()
+  // Keep pinning to the bottom for a few frames so the first dialog open (transition
+  // + async message layout still settling) ends at the latest message, not mid-list.
+  pinToBottomSettled()
   // Setting currentSessionId triggers the session-change watcher, which owns the
   // streaming-resume + polling + prompt-preview side effects — no need to repeat
   // them here. Keeping them out lets the message list paint without blocking on
@@ -1154,11 +1306,18 @@ const loadChatHistory = async (sid: string) => {
 const fetchRunHistoryIncrementalOnce = async () => {
   if (!currentSessionId.value) return
   if (!getAuthToken()) return
+  // `after_id` is inclusive-exclusive on the backend: passing 0 (no baseline
+  // loaded yet) means `id > 0` → the ENTIRE history. That would briefly dump the
+  // whole conversation before the paged initial load replaces it. When we have
+  // no baseline, ask for the latest page instead so the result stays bounded.
+  const lastId = getLastMessageId()
   let incremental
   try {
-    incremental = await chatApi.getChatHistory(chatCtx.value, currentSessionId.value, {
-      afterId: getLastMessageId(),
-    })
+    incremental = await chatApi.getChatHistory(
+      chatCtx.value,
+      currentSessionId.value,
+      lastId > 0 ? { afterId: lastId } : { limit: HISTORY_PAGE_SIZE },
+    )
   } catch {
     return
   }
@@ -1211,7 +1370,10 @@ const pollSessionSync = async (epoch: number) => {
     }
   } finally {
     if (epoch === sessionSyncPollEpoch) {
-      sessionSyncPollTimer = window.setTimeout(() => { void pollSessionSync(epoch) }, 1200)
+      // Safety net only: external-run discovery + catch messages other sources
+      // persist. Socket push covers the common path, so back off when connected.
+      const interval = runStream.connected.value ? 3000 : 1200
+      sessionSyncPollTimer = window.setTimeout(() => { void pollSessionSync(epoch) }, interval)
     }
   }
 }
@@ -1221,7 +1383,9 @@ const startSessionSyncPolling = () => {
   if (!currentSessionId.value || !getAuthToken()) return
   lastExternalRunCheckAt = 0
   const epoch = sessionSyncPollEpoch
-  void pollSessionSync(epoch)
+  // Defer the first tick: the paged initial load (loadChatHistory) owns the first
+  // paint. Running pollSessionSync immediately would race it and double-fetch.
+  sessionSyncPollTimer = window.setTimeout(() => { void pollSessionSync(epoch) }, 1200)
 }
 
 const ensureFinalAssistantMessage = async (epoch: number) => {
@@ -1303,19 +1467,7 @@ const pollRunLive = async (epoch: number) => {
       liveCursor.value = liveTargetText.value.length
     }
     if (['completed', 'error', 'stopped'].includes(currentRunStatus.value)) {
-      isTyping.value = false
-      finalizeRunTimers()
-      currentRunPhase.value = 'idle'
-      currentMcpTool.value = ''
-      await pollRunHistory(epoch)
-      await ensureFinalAssistantMessage(epoch)
-      clearLiveAssistantView()
-      if (currentRunStatus.value === 'error') {
-        await appendRunErrorNotice(currentRunId.value, String(run.error_message || '后端运行失败，但没有返回具体错误信息。'))
-      }
-      await loadTotalTokens()
-      stopTimeTicker()
-      bumpTaskPlan()
+      await finishRun(currentRunId.value, currentRunStatus.value, String(run.error_message || ''))
       return
     }
     await refreshTokensDuringRunIfNeeded()
@@ -1330,9 +1482,14 @@ const pollRunLive = async (epoch: number) => {
 
 const startRunPolling = () => {
   stopRunPolling()
+  lastFinishedRunId = ''
   lastRealtimeTokenSyncAt = 0
   const epoch = runPollEpoch
   liveCursor.value = liveTargetText.value.length
+  // Socket primary: when connected, chat:run_live / chat:run_done drive the UI
+  // and we skip the 90 ms HTTP poll entirely. Fall back to polling only while
+  // the socket is down (the connection watcher re-runs this on disconnect).
+  if (runStream.connected.value) return
   void pollRunLive(epoch)
   void pollRunHistory(epoch)
 }
@@ -1381,6 +1538,9 @@ const stopCurrentRun = async () => {
   if (!getAuthToken()) return
   try {
     await chatApi.stopRun(currentRunId.value)
+    // Mark finished so the inbound chat:run_done / trailing chat:run_live for
+    // this run are ignored (we've already done the teardown here).
+    lastFinishedRunId = currentRunId.value
     stopRunPolling()
     isTyping.value = false
     currentRunStatus.value = 'stopped'
@@ -1615,7 +1775,9 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       ai_kind: aiKindValue.value,
     })
     currentRunId.value = started.run_id
-    await loadChatHistory(currentSessionId.value)
+    // Pull just the freshly-persisted user message instead of reloading and
+    // re-parsing the whole page right as the run begins.
+    await fetchRunHistoryIncrementalOnce()
     startRunPolling()
   } catch (err: any) {
     isTyping.value = false
@@ -1692,9 +1854,24 @@ watch(currentSessionId, async (sid, oldSid) => {
   currentMcpTool.value = ''
   clearLiveAssistantView()
   isTyping.value = false
-  await checkActiveRun()
+  // Don't block the freshly-rendered conversation on these: checkActiveRun
+  // resumes any in-progress run, and the prompt preview only feeds the hover
+  // panel. Run them in the background so the message list paints immediately.
   startSessionSyncPolling()
-  await loadEffectiveSystemPromptPreview()
+  void checkActiveRun()
+  void loadEffectiveSystemPromptPreview()
+})
+
+watch(() => props.currentUserId, (uid) => {
+  if (uid) runStream.connect(uid)
+})
+
+// Socket dropped mid-run → resume fallback polling; recovered → hand back to the
+// socket (startRunPolling / stopRunPolling both honor runStream.connected).
+watch(() => runStream.connected.value, (isConnected) => {
+  if (!isRunActive.value) return
+  if (isConnected) stopRunPolling()
+  else startRunPolling()
 })
 
 
@@ -1704,13 +1881,25 @@ watch(chatScrollRef, (newEl, oldEl) => {
     oldEl.removeEventListener('scroll', handleScroll)
     oldEl.removeEventListener('wheel', handleWheel)
   }
+  if (chatResizeObserver) {
+    chatResizeObserver.disconnect()
+    chatResizeObserver = null
+  }
   if (newEl) {
     newEl.addEventListener('scroll', handleScroll, { passive: true })
     newEl.addEventListener('wheel', handleWheel, { passive: true })
+    if (typeof ResizeObserver !== 'undefined') {
+      chatResizeObserver = new ResizeObserver(handleScrollContentResize)
+      // Observe the inner content wrapper so growth in rendered messages is caught,
+      // not just resizes of the scroll viewport itself.
+      const content = newEl.firstElementChild
+      chatResizeObserver.observe(content ?? newEl)
+    }
   }
 })
 
 onMounted(async () => {
+  if (props.currentUserId) runStream.connect(props.currentUserId)
   await initializeSessions()
   emit('update:currentSessionId', currentSessionId.value || '')
   emit('taskPlanRefresh', taskPlanRefreshSignal.value)
@@ -1720,6 +1909,9 @@ onMounted(async () => {
     el.addEventListener('scroll', handleScroll, { passive: true })
     el.addEventListener('wheel', handleWheel, { passive: true })
   }
+  // NOTE: the bottom-pin ResizeObserver is owned solely by the chatScrollRef watch.
+  // Creating a second one here raced with the watch (observe target swapped mid-mount)
+  // and left the view stuck on middle content, so it stays out of onMounted.
 })
 
 onBeforeUnmount(() => {
@@ -1727,6 +1919,14 @@ onBeforeUnmount(() => {
   stopSessionSyncPolling()
   stopTimeTicker()
   clearLiveAssistantView()
+  if (pinSettleTimer !== null) {
+    window.clearTimeout(pinSettleTimer)
+    pinSettleTimer = null
+  }
+  if (chatResizeObserver) {
+    chatResizeObserver.disconnect()
+    chatResizeObserver = null
+  }
   const el = chatScrollRef.value
   if (el) {
     el.removeEventListener('scroll', handleScroll)

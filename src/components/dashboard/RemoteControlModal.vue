@@ -15,11 +15,15 @@ const isDesktopLike = computed(() => props.mode === 'desktop' || props.mode === 
 const modeLabel = computed(() =>
   props.mode === 'browser' ? '（浏览器）' : props.mode === 'desktop' ? '（桌面）' : '')
 
-// Desktop/browser get a big, freely resizable panel (drag the bottom-right
-// corner); phone keeps a compact portrait window.
-const panelStyle = computed(() => isDesktopLike.value
-  ? { width: '80vw', height: '85vh', minWidth: '480px', minHeight: '360px', maxWidth: '98vw', maxHeight: '95vh' }
-  : {})
+// Every mode now gets a freely resizable panel (drag the bottom-right corner).
+const panelRef = ref<HTMLElement | null>(null)
+
+// Min/max constraints only — the live width/height are owned by the operator's
+// drag-resize and by fitPanelToOrientation(), both set imperatively so they are
+// never clobbered by re-renders (e.g. typing in the Android text box).
+const panelConstraints = computed(() => isDesktopLike.value
+  ? { minWidth: '480px', minHeight: '360px', maxWidth: '98vw', maxHeight: '95vh' }
+  : { minWidth: '260px', minHeight: '320px', maxWidth: '96vw', maxHeight: '95vh' })
 
 const {
   status,
@@ -41,6 +45,10 @@ const isBrowser = computed(() => props.mode === 'browser')
 const addressInput = ref('')
 const addressFocused = ref(false)
 const activeTab = computed(() => browserState.value?.tabs.find(t => t.active) || null)
+// Restricted page (chrome:// etc.): screen frozen + input dead, but the address
+// bar still navigates. Only meaningful once we're actually streaming.
+const pageUncontrollable = computed(() =>
+  isBrowser.value && status.value === 'streaming' && browserState.value?.controllable === false)
 
 // Keep the address bar mirroring the live URL, but never clobber what the
 // operator is mid-typing.
@@ -68,18 +76,60 @@ const surfaceRef = ref<HTMLElement | null>(null)
 const imeRef = ref<HTMLTextAreaElement | null>(null)
 const typing = ref('')
 
+// Live intrinsic resolution of the stream — this is what drives the auto aspect
+// ratio and the window re-fit on rotation. The <video> `resize`/`loadedmetadata`
+// events are an instant signal, but on a rotating WebRTC stream they don't
+// always fire, so we also poll videoWidth/Height (see dimensionPoll). The refs
+// only change when the numbers truly change, so downstream watchers stay quiet
+// until a real rotation happens.
+const videoNaturalWidth = ref(0)
+const videoNaturalHeight = ref(0)
+let dimensionPoll = 0
+const onVideoResize = () => {
+  const el = videoRef.value
+  if (el && el.videoWidth > 0 && el.videoHeight > 0
+    && (el.videoWidth !== videoNaturalWidth.value || el.videoHeight !== videoNaturalHeight.value)) {
+    videoNaturalWidth.value = el.videoWidth
+    videoNaturalHeight.value = el.videoHeight
+  }
+}
+
 // --- Android gesture classification (resolution-independent thresholds) ---
 const SWIPE_THRESHOLD = 0.025
+const ANDROID_DRAG_STEP_THRESHOLD = 0.004
+const ANDROID_DRAG_INTERVAL_MS = 45
 const LONG_PRESS_MS = 500
-let down: { x: number; y: number; t: number } | null = null
+let down: {
+  x: number
+  y: number
+  t: number
+  lastX: number
+  lastY: number
+  lastMoveAt: number
+  dragging: boolean
+  longPressSent: boolean
+  longPressTimer: number | null
+  holdInterval: number | null
+} | null = null
 
 // --- Desktop pointer throttle (move events fire continuously for hover+drag) ---
 let lastMoveAt = 0
 const MOVE_INTERVAL_MS = 33
 
+// Prefer the live stream resolution (updates on rotation) over the one-shot
+// rc:ready size.
+const effectiveWidth = computed(() => videoNaturalWidth.value || deviceWidth.value)
+const effectiveHeight = computed(() => videoNaturalHeight.value || deviceHeight.value)
+
+// Phone is assumed portrait until the stream proves otherwise; desktop/browser
+// are landscape.
+const isPortrait = computed(() => (effectiveWidth.value > 0 && effectiveHeight.value > 0)
+  ? effectiveHeight.value >= effectiveWidth.value
+  : !isDesktopLike.value)
+
 const aspectStyle = computed(() => {
-  if (deviceWidth.value > 0 && deviceHeight.value > 0) {
-    return { aspectRatio: `${deviceWidth.value} / ${deviceHeight.value}` }
+  if (effectiveWidth.value > 0 && effectiveHeight.value > 0) {
+    return { aspectRatio: `${effectiveWidth.value} / ${effectiveHeight.value}` }
   }
   return { aspectRatio: isDesktopLike.value ? '16 / 9' : '9 / 19.5' }
 })
@@ -94,18 +144,95 @@ const statusText = computed(() => {
   }
 })
 
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
+
 const normalized = (event: PointerEvent | WheelEvent) => {
   const el = videoRef.value
   if (!el) return null
   const rect = el.getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return null
-  const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-  const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height))
+
+  const sourceWidth = el.videoWidth || deviceWidth.value
+  const sourceHeight = el.videoHeight || deviceHeight.value
+  let contentLeft = rect.left
+  let contentTop = rect.top
+  let contentWidth = rect.width
+  let contentHeight = rect.height
+
+  if (sourceWidth > 0 && sourceHeight > 0) {
+    const sourceRatio = sourceWidth / sourceHeight
+    const rectRatio = rect.width / rect.height
+    if (rectRatio > sourceRatio) {
+      contentWidth = rect.height * sourceRatio
+      contentLeft += (rect.width - contentWidth) / 2
+    } else if (rectRatio < sourceRatio) {
+      contentHeight = rect.width / sourceRatio
+      contentTop += (rect.height - contentHeight) / 2
+    }
+  }
+
+  const x = clamp01((event.clientX - contentLeft) / contentWidth)
+  const y = clamp01((event.clientY - contentTop) / contentHeight)
   return { x, y }
 }
 
 const mouseButton = (button: number): RcMouseButton =>
   button === 2 ? 'right' : button === 1 ? 'middle' : 'left'
+
+const clearAndroidLongPressTimer = () => {
+  if (down?.longPressTimer != null) {
+    window.clearTimeout(down.longPressTimer)
+    down.longPressTimer = null
+  }
+}
+
+const clearAndroidHoldInterval = () => {
+  if (down?.holdInterval != null) {
+    window.clearInterval(down.holdInterval)
+    down.holdInterval = null
+  }
+}
+
+const startAndroidLongPressTimer = () => {
+  clearAndroidLongPressTimer()
+  if (!down) return
+  down.longPressTimer = window.setTimeout(() => {
+    if (!down || down.dragging) return
+    down.longPressSent = true
+    down.dragging = true
+    down.longPressTimer = null
+    down.lastMoveAt = Date.now()
+    sendInput({ type: 'down', x: down.x, y: down.y })
+    down.holdInterval = window.setInterval(() => {
+      if (!down?.dragging) return
+      sendInput({ type: 'move', x: down.lastX, y: down.lastY, durationMs: ANDROID_DRAG_INTERVAL_MS + 25 })
+    }, ANDROID_DRAG_INTERVAL_MS + 10)
+  }, LONG_PRESS_MS)
+}
+
+const sendAndroidDragMove = (pos: { x: number; y: number }, force = false) => {
+  if (!down?.dragging) return
+  const now = Date.now()
+  const elapsed = now - down.lastMoveAt
+  const step = Math.hypot(pos.x - down.lastX, pos.y - down.lastY)
+  if (!force && (elapsed < ANDROID_DRAG_INTERVAL_MS || step < ANDROID_DRAG_STEP_THRESHOLD)) return
+  sendInput({
+    type: 'move',
+    x: pos.x,
+    y: pos.y,
+    durationMs: Math.min(120, Math.max(24, elapsed || ANDROID_DRAG_INTERVAL_MS)),
+  })
+  down.lastX = pos.x
+  down.lastY = pos.y
+  down.lastMoveAt = now
+}
+
+const cancelAndroidPointer = () => {
+  clearAndroidLongPressTimer()
+  clearAndroidHoldInterval()
+  if (down?.dragging) sendInput({ type: 'up', x: down.lastX, y: down.lastY })
+  down = null
+}
 
 // ---------------- Pointer ----------------
 const onPointerDown = (event: PointerEvent) => {
@@ -118,17 +245,45 @@ const onPointerDown = (event: PointerEvent) => {
     imeRef.value?.focus()
     sendInput({ type: 'down', x: pos.x, y: pos.y, button: mouseButton(event.button) })
   } else {
-    down = { ...pos, t: Date.now() }
+    event.preventDefault()
+    const now = Date.now()
+    down = {
+      ...pos,
+      t: now,
+      lastX: pos.x,
+      lastY: pos.y,
+      lastMoveAt: now,
+      dragging: false,
+      longPressSent: false,
+      longPressTimer: null,
+      holdInterval: null,
+    }
+    startAndroidLongPressTimer()
   }
 }
 
 const onPointerMove = (event: PointerEvent) => {
-  if (status.value !== 'streaming' || !isDesktopLike.value) return
-  const now = Date.now()
-  if (now - lastMoveAt < MOVE_INTERVAL_MS) return
-  lastMoveAt = now
+  if (status.value !== 'streaming') return
   const pos = normalized(event)
-  if (pos) sendInput({ type: 'move', x: pos.x, y: pos.y })
+  if (!pos) return
+  if (isDesktopLike.value) {
+    const now = Date.now()
+    if (now - lastMoveAt < MOVE_INTERVAL_MS) return
+    lastMoveAt = now
+    sendInput({ type: 'move', x: pos.x, y: pos.y })
+    return
+  }
+
+  if (!down) return
+  event.preventDefault()
+  const dist = Math.hypot(pos.x - down.x, pos.y - down.y)
+  if (!down.dragging && dist >= SWIPE_THRESHOLD) {
+    clearAndroidLongPressTimer()
+    down.dragging = true
+    down.lastMoveAt = Date.now()
+    sendInput({ type: 'down', x: down.x, y: down.y })
+  }
+  sendAndroidDragMove(pos)
 }
 
 const onPointerUp = (event: PointerEvent) => {
@@ -139,25 +294,41 @@ const onPointerUp = (event: PointerEvent) => {
     return
   }
   if (!down) return
+  event.preventDefault()
+  clearAndroidLongPressTimer()
   const end = pos || { x: down.x, y: down.y }
   const dt = Date.now() - down.t
   const dist = Math.hypot(end.x - down.x, end.y - down.y)
-  let input: RcInput
-  if (dist >= SWIPE_THRESHOLD) {
-    input = { type: 'swipe', x: down.x, y: down.y, x2: end.x, y2: end.y, durationMs: Math.min(800, Math.max(120, dt)) }
-  } else if (dt >= LONG_PRESS_MS) {
-    input = { type: 'long_press', x: down.x, y: down.y, durationMs: dt }
-  } else {
-    input = { type: 'tap', x: down.x, y: down.y }
+  if (down.dragging) {
+    clearAndroidHoldInterval()
+    sendAndroidDragMove(end, true)
+    sendInput({ type: 'up', x: end.x, y: end.y })
+    down = null
+    return
   }
-  sendInput(input)
+  if (!down.longPressSent) {
+    let input: RcInput
+    if (dist >= SWIPE_THRESHOLD) {
+      input = { type: 'swipe', x: down.x, y: down.y, x2: end.x, y2: end.y, durationMs: Math.min(800, Math.max(120, dt)) }
+    } else if (dt >= LONG_PRESS_MS) {
+      input = { type: 'long_press', x: down.x, y: down.y, durationMs: Math.max(LONG_PRESS_MS + 180, dt) }
+    } else {
+      input = { type: 'tap', x: down.x, y: down.y }
+    }
+    sendInput(input)
+  }
   down = null
 }
 
 const onWheel = (event: WheelEvent) => {
-  if (status.value !== 'streaming' || !isDesktopLike.value) return
+  if (status.value !== 'streaming') return
   event.preventDefault()
-  sendInput({ type: 'scroll', dx: event.deltaX, dy: event.deltaY })
+  if (isDesktopLike.value) {
+    sendInput({ type: 'scroll', dx: event.deltaX, dy: event.deltaY })
+    return
+  }
+  const pos = normalized(event) || { x: 0.5, y: 0.5 }
+  sendInput({ type: 'scroll', x: pos.x, y: pos.y, dx: event.deltaX, dy: event.deltaY })
 }
 
 // Native key forwarding: each physical key (modifiers included) is sent as
@@ -219,12 +390,102 @@ const close = () => {
   emit('close')
 }
 
+// Re-fit the floating window to the device's actual aspect ratio. A portrait
+// phone gets a tall, narrow window; once it rotates to landscape the window
+// itself turns wide (instead of leaving a tiny landscape frame letterboxed
+// inside a portrait shell). Set imperatively so it seeds the initial size and
+// follows rotation without fighting the operator's manual drag-resize.
+const PANEL_CHROME_PX = 160 // header + Android text/nav rows below the video
+const PANEL_SIDE_PAD_PX = 24 // p-3 around the video surface
+const fitPanelToOrientation = () => {
+  const el = panelRef.value
+  if (!el || isMaximized.value) return
+  if (isDesktopLike.value) {
+    el.style.width = '80vw'
+    el.style.height = '85vh'
+    return
+  }
+  const w = effectiveWidth.value
+  const h = effectiveHeight.value
+  const maxW = window.innerWidth * 0.96
+  const maxH = window.innerHeight * 0.95
+  if (w > 0 && h > 0) {
+    // Shape the window after the device aspect, then clamp to the viewport.
+    const ratio = w / h
+    let height = isPortrait.value ? maxH : Math.min(maxH, window.innerHeight * 0.82)
+    let width = (height - PANEL_CHROME_PX) * ratio + PANEL_SIDE_PAD_PX
+    if (width > maxW) {
+      width = maxW
+      height = (width - PANEL_SIDE_PAD_PX) / ratio + PANEL_CHROME_PX
+    }
+    el.style.width = `${Math.round(Math.min(width, maxW))}px`
+    el.style.height = `${Math.round(Math.min(height, maxH))}px`
+  } else {
+    // Size unknown yet: fall back to plain orientation defaults.
+    el.style.width = isPortrait.value ? '380px' : '82vw'
+    el.style.height = isPortrait.value ? '85vh' : '64vh'
+  }
+}
+
+// Refit whenever the device's reported dimensions actually change — that covers
+// the first time the size is known and every portrait↔landscape rotation. Manual
+// drag-resizes don't change device dimensions, so they're never clobbered.
+watch([effectiveWidth, effectiveHeight], () => {
+  if (!isDesktopLike.value && !isMaximized.value) fitPanelToOrientation()
+})
+
+// ── Fullscreen / maximize ────────────────────────────────────────────────────
+// Maximizing expands the panel to fill the viewport (CSS, .rc-panel-maximized)
+// AND requests native fullscreen when the browser supports it. The CSS path is
+// what keeps mobile browsers (iOS Safari can't fullscreen a <div>) usable. The
+// video still letterboxes via object-contain, and clicks stay accurate because
+// normalized() maps against the video's live bounding rect.
+const isMaximized = ref(false)
+
+const enterNativeFullscreen = () => {
+  const el = panelRef.value as (HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }) | null
+  const req = el?.requestFullscreen || el?.webkitRequestFullscreen
+  if (el && req) Promise.resolve(req.call(el)).catch(() => { /* fall back to CSS maximize */ })
+}
+const exitNativeFullscreen = () => {
+  const doc = document as Document & {
+    webkitFullscreenElement?: Element
+    webkitExitFullscreen?: () => Promise<void>
+  }
+  if (!doc.fullscreenElement && !doc.webkitFullscreenElement) return
+  const exit = doc.exitFullscreen || doc.webkitExitFullscreen
+  if (exit) Promise.resolve(exit.call(doc)).catch(() => { /* already exiting */ })
+}
+const toggleMaximize = () => {
+  isMaximized.value = !isMaximized.value
+  if (isMaximized.value) enterNativeFullscreen()
+  else exitNativeFullscreen()
+}
+// Keep state in sync when the user leaves native fullscreen via ESC / system gesture.
+const onFullscreenChange = () => {
+  const doc = document as Document & { webkitFullscreenElement?: Element }
+  const active = !!(doc.fullscreenElement || doc.webkitFullscreenElement)
+  if (!active && isMaximized.value) isMaximized.value = false
+}
+
 onMounted(() => {
+  fitPanelToOrientation()
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+  // Safety net for rotation: the <video> resize event isn't reliable on a
+  // rotating WebRTC stream, so poll the intrinsic size too. Cheap — the refs
+  // (and thus the re-fit watcher) only react when the dimensions truly change.
+  dimensionPoll = window.setInterval(onVideoResize, 500)
   if (videoRef.value && remoteStream.value) videoRef.value.srcObject = remoteStream.value
   if (props.deviceId) start(props.deviceId)
 })
 
 onBeforeUnmount(() => {
+  if (dimensionPoll) window.clearInterval(dimensionPoll)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  exitNativeFullscreen()
+  cancelAndroidPointer()
   stop()
 })
 </script>
@@ -233,9 +494,10 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div class="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" @click.self="close">
       <div
-        class="flex flex-col rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden"
-        :class="isDesktopLike ? 'resize' : 'w-full max-w-sm max-h-[92vh]'"
-        :style="panelStyle"
+        ref="panelRef"
+        class="flex flex-col rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden resize"
+        :class="{ 'rc-panel-maximized': isMaximized }"
+        :style="panelConstraints"
         @click.stop
       >
         <!-- 头部 -->
@@ -251,9 +513,29 @@ onBeforeUnmount(() => {
               {{ statusText }}
             </div>
           </div>
-          <button class="w-8 h-8 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-lg leading-none" title="关闭" @click="close">
-            ✕
-          </button>
+          <div class="flex items-center gap-1 shrink-0">
+            <button
+              class="grid h-8 w-8 place-items-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              :title="isMaximized ? '退出全屏' : '全屏控制'"
+              @click="toggleMaximize"
+            >
+              <svg v-if="!isMaximized" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+                <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+                <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3" />
+                <path d="M16 3v3a2 2 0 0 0 2 2h3" />
+                <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+                <path d="M3 16h3a2 2 0 0 1 2 2v3" />
+              </svg>
+            </button>
+            <button class="grid h-8 w-8 place-items-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors text-lg leading-none" title="关闭" @click="close">
+              ✕
+            </button>
+          </div>
         </div>
 
         <!-- Edge 风格浏览器外壳（仅浏览器控制） -->
@@ -320,9 +602,12 @@ onBeforeUnmount(() => {
               muted
               class="w-full h-full object-contain rounded-lg bg-zinc-950 touch-none select-none"
               :class="isDesktopLike ? 'cursor-crosshair' : ''"
+              @loadedmetadata="onVideoResize"
+              @resize="onVideoResize"
               @pointerdown="onPointerDown"
               @pointermove="onPointerMove"
               @pointerup="onPointerUp"
+              @pointercancel="cancelAndroidPointer"
               @wheel="onWheel"
               @contextmenu.prevent
             ></video>
@@ -340,6 +625,13 @@ onBeforeUnmount(() => {
               class="absolute left-2 top-2 rounded bg-amber-500/90 px-2 py-1 text-[11px] text-white shadow"
             >
               控制通道未就绪，鼠标/键盘暂不可用…
+            </div>
+            <!-- 受限页面（chrome:// 等）：画面冻结、鼠标/键盘无效，但仍可用地址栏跳转离开 -->
+            <div
+              v-if="pageUncontrollable"
+              class="absolute inset-x-2 top-2 rounded bg-zinc-800/90 px-3 py-1.5 text-center text-[11px] text-amber-200 shadow"
+            >
+              当前页面无法控制（chrome:// 等浏览器内部页）。可在上方地址栏输入网址跳转离开。
             </div>
           </div>
         </div>
@@ -379,6 +671,19 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* Maximize: fill the viewport, overriding the inline drag-resize width/height
+   (hence !important) and dropping the rounded corners + resize handle. */
+.rc-panel-maximized {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  resize: none !important;
+}
+
 .rc-navbtn {
   border-radius: 0.5rem;
   border: 1px solid rgb(63 63 70);

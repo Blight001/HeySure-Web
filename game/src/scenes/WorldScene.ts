@@ -112,9 +112,15 @@ export class WorldScene extends Phaser.Scene {
   private camVx = 0
   private camVy = 0
   private camDragging = false
-  /** 成员长按计时（长按 500ms 打开聊天） */
-  private memberLongPressTimer: Phaser.Time.TimerEvent | null = null
-  private memberLongPressId: number | null = null
+  /** 成员双击计时（双击打开聊天） */
+  private lastMemberTapId: number | null = null
+  private lastMemberTapAt = 0
+  private readonly MEMBER_DOUBLE_TAP_MS = 300
+  /**
+   * 本次按下命中的可交互对象。只有 down 与 up 命中同一对象才算一次有效点击，
+   * 防止 iframe 在焦点/可见性变化时补发的“孤立 pointerup”落在悬停对象上误开抽屉。
+   */
+  private pressedObj: Phaser.GameObjects.GameObject | null = null
   /** 拖拽落点高亮 */
   private dragHoveredDeviceId: string | null = null
   private dragHoveredSpawn = false
@@ -164,7 +170,7 @@ export class WorldScene extends Phaser.Scene {
     this.store.onEvent(ev => this.handleWorldEvent(ev))
     this.store.start()
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.cancelMemberLongPress()
+      this.resetMemberTap()
       window.removeEventListener('message', this.onParentMessage)
       this.store.stop()
     })
@@ -861,7 +867,9 @@ export class WorldScene extends Phaser.Scene {
       sprite.setOrigin(0.5, 0.55)
       sprite.setScale(def.scale)
       sprite.setDepth(def.pos.y + sprite.displayHeight * 0.4)
-      sprite.setInteractive()
+      // 像素级命中：建筑贴图含大片透明边距，默认整帧矩形可点会让点空地也误开抽屉。
+      // pixelPerfect 只把非透明像素算作命中（alphaTolerance 默认 1）。
+      sprite.setInteractive({ pixelPerfect: true })
       sprite.setData('tooltip', () => this.buildingTooltip(def.key, def.label))
       sprite.setData('buildingKey', def.key)
       this.buildings.set(def.key, sprite)
@@ -888,6 +896,8 @@ export class WorldScene extends Phaser.Scene {
     })
     this.input.on('pointerup', () => {
       this.camDragging = false
+      // 释放点不在任何对象上 → 清除按下记录，避免残留命中影响下一次判定
+      this.pressedObj = null
     })
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       // 辅助管理员操控模式下相机跟随该角色，拖拽平移让位
@@ -997,7 +1007,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.nearestInteractId === null || !this.snap) return
     const m = this.snap.members.find(x => x.id === this.nearestInteractId)
     if (!m) return
-    this.cancelMemberLongPress()
+    this.resetMemberTap()
     this.drawer.openMember(m, this.snap, this.portraitForMember(m))
     this.playSfx('ui_click', 0.4)
   }
@@ -1093,44 +1103,49 @@ export class WorldScene extends Phaser.Scene {
     })
   }
 
-  private cancelMemberLongPress() {
-    this.memberLongPressTimer?.remove(false)
-    this.memberLongPressTimer = null
-    this.memberLongPressId = null
+  private resetMemberTap() {
+    this.lastMemberTapId = null
+    this.lastMemberTapAt = 0
   }
 
   private wireClickAndDrag() {
     this.input.dragDistanceThreshold = 8
 
-    // 成员按下：启动 500ms 长按计时，时间到前松手则正常开抽屉，持续按住则打开聊天
+    // 对象按下：记录命中对象（用于 up 时校验同一对象），成员附带点击反馈高亮
     this.input.on(
       'gameobjectdown',
       (_ptr: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-        if (!(obj instanceof MemberActor) || obj.isDying) return
-        obj.flashClick()
-        this.cancelMemberLongPress()
-        this.memberLongPressId = obj.memberId
-        this.memberLongPressTimer = this.time.delayedCall(500, () => {
-          if (this.memberLongPressId !== obj.memberId) return
-          this.cancelMemberLongPress()
-          this.drawer.close()
-          this.openMemberChat(obj.memberId)
-          this.playSfx('ui_click', 0.5)
-        })
+        this.pressedObj = obj
+        if (obj instanceof MemberActor && !obj.isDying) obj.flashClick()
       },
     )
 
-    // 成员/建筑/作坊抬起：单击开抽屉
+    // 成员/建筑/作坊抬起：单击开抽屉；成员双击打开聊天
     this.input.on(
       'gameobjectup',
       (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
         // 抽屉已打开时仍允许点击其它成员/建筑切换面板（抽屉只占右侧，不挡左侧地图）
         if (this.draggingActor) return
+        // 必须 down/up 命中同一对象才算点击；否则可能是 iframe 补发的孤立 up，忽略
+        const pressed = this.pressedObj
+        this.pressedObj = null
+        if (pressed !== obj) return
         const dist = Phaser.Math.Distance.Between(pointer.downX, pointer.downY, pointer.upX, pointer.upY)
         if (dist >= 8 || !this.snap) return
         this.playSfx('ui_click', 0.4)
         if (obj instanceof MemberActor) {
-          this.cancelMemberLongPress()
+          const now = Date.now()
+          // 双击同一成员：打开聊天
+          if (this.lastMemberTapId === obj.memberId && now - this.lastMemberTapAt <= this.MEMBER_DOUBLE_TAP_MS) {
+            this.resetMemberTap()
+            this.drawer.close()
+            this.openMemberChat(obj.memberId)
+            this.playSfx('ui_click', 0.5)
+            return
+          }
+          // 单击：记录本次点击并打开抽屉
+          this.lastMemberTapId = obj.memberId
+          this.lastMemberTapAt = now
           const m = this.snap.members.find(x => x.id === obj.memberId)
           if (m) this.drawer.openMember(m, this.snap, this.portraitForMember(m))
           return
@@ -1168,7 +1183,8 @@ export class WorldScene extends Phaser.Scene {
     this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
       if (this.drawer?.isOpen) return
       if (obj instanceof MemberActor && !obj.isDying) {
-        this.cancelMemberLongPress()
+        this.resetMemberTap()
+        this.pressedObj = null
         this.draggingActor = obj
         obj.beginDrag()
         this.overlay.hideTooltip()
@@ -1360,7 +1376,8 @@ export class WorldScene extends Phaser.Scene {
         sprite.setOrigin(0.5, 0.6)
         sprite.setScale(w.type === 'workshop' ? LIBRARY_DEVICE_SCALE : WORKSHOP_SCALE)
         sprite.setDepth(pos.y)
-        sprite.setInteractive()
+        // 同建筑：像素级命中，避免点到作坊贴图透明边距而误开抽屉。
+        sprite.setInteractive({ pixelPerfect: true })
         view = {
           sprite,
           taskGlow,

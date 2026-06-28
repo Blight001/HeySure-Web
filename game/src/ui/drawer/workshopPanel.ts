@@ -1,7 +1,13 @@
-import type { WorldSnapshot } from '../../world/store'
+import type { WorldSnapshot, WorldWorkshop } from '../../world/store'
 import type { PortraitSpec } from '../portrait'
+import { RemoteScreenViewer, type ScreenStatus } from '../../world/remoteScreen'
 import { esc } from './dom'
 import type { PanelController } from './types'
+
+/** 实时画面可用的端侧类型（图书馆 workshop 不是真实设备，无画面）。 */
+const SCREEN_TYPES: ReadonlyArray<WorldWorkshop['type']> = ['desktop', 'browser', 'android']
+const canViewScreen = (w: WorldWorkshop) =>
+  w.online && w.lifecycle !== 'waiting' && SCREEN_TYPES.includes(w.type)
 
 export const openWorkshopPanel = (
   panel: PanelController,
@@ -40,6 +46,8 @@ export const openWorkshopPanel = (
             hint.textContent = '这是通用设备插槽：桌面端或浏览器端 Agent 连接后，会自动替换为真实设备。'
             info.appendChild(hint)
           }
+          // 详情下方：在线设备（桌面 / 浏览器 / 安卓）的实时画面。
+          if (canViewScreen(w)) buildLiveScreen(panel, w)
         },
       },
       ...(w.lifecycle === 'waiting' ? [] : [{
@@ -76,6 +84,60 @@ export const openWorkshopPanel = (
       }]),
       ...(w.lifecycle === 'waiting' ? [] : [{ name: 'MCP 权限', build: () => mcpScopeSection(panel, w.deviceId) }]),
     ],
+  })
+}
+
+/**
+ * 在设备详情下方嵌入只读实时画面：点开在线设备即自动拉流（WebRTC），
+ * 仅展示不操作。会话随标签页切换 / 面板关闭通过 panel.onCleanup 释放。
+ */
+const buildLiveScreen = (panel: PanelController, w: WorldWorkshop) => {
+  const sec = panel.section('实时画面')
+
+  const stage = document.createElement('div')
+  stage.className = w.type === 'android' ? 'd-screen portrait' : 'd-screen'
+
+  const video = document.createElement('video')
+  video.className = 'd-screen-video'
+  video.autoplay = true
+  video.muted = true
+  video.setAttribute('playsinline', '') // iOS：内联播放，不强制全屏
+
+  const overlay = document.createElement('div')
+  overlay.className = 'd-screen-overlay'
+  overlay.textContent = '正在连接设备…'
+
+  stage.appendChild(video)
+  stage.appendChild(overlay)
+  sec.appendChild(stage)
+
+  const hint = document.createElement('div')
+  hint.className = 'd-dim'
+  hint.textContent = '仅查看画面；如需操作设备请在主控制台使用「远程控制」。'
+  sec.appendChild(hint)
+
+  const setOverlay = (status: ScreenStatus, message?: string) => {
+    if (status === 'streaming') {
+      overlay.style.display = 'none'
+      return
+    }
+    overlay.style.display = ''
+    overlay.classList.toggle('err', status === 'error')
+    overlay.textContent =
+      status === 'error' ? (message || '画面获取失败')
+        : status === 'ended' ? '画面已结束'
+          : '正在连接设备…'
+  }
+
+  const viewer = new RemoteScreenViewer({
+    onStatus: setOverlay,
+    onStream: (stream) => { video.srcObject = stream },
+  })
+  viewer.start(w.deviceId)
+
+  panel.onCleanup(() => {
+    video.srcObject = null
+    viewer.stop()
   })
 }
 

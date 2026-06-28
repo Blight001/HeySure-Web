@@ -114,6 +114,21 @@ const DRAWER_CSS = `
   .gw-panel input.d-range { width: 100%; accent-color: #f0c060; }
   .gw-panel .gp-cols { column-width: 260px; column-gap: 14px; }
   .gw-panel .gp-cols > .d-item { break-inside: avoid; }
+  .gw-panel .d-screen {
+    position: relative; width: 100%; aspect-ratio: 16 / 9;
+    background: #000; border: 1px solid #343949; border-radius: 4px; overflow: hidden;
+  }
+  .gw-panel .d-screen.portrait { aspect-ratio: 9 / 19.5; max-height: 60vh; margin: 0 auto; }
+  .gw-panel .d-screen-video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; background: #000;
+  }
+  .gw-panel .d-screen-overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 0 12px; color: #9aa0b0; font-size: 12px;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .gw-panel .d-screen-overlay.err { color: #e08484; }
 `
 
 export const installDrawerStyles = () => {

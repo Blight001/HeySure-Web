@@ -472,7 +472,7 @@ const taskStatusClass = (raw?: string) => {
   return 'border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
 }
 
-const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' } | null>(null)
+const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' | 'browser' } | null>(null)
 
 const DOUBLE_TAP_DELAY = 320
 let lastTouchTapAt = 0
@@ -721,6 +721,9 @@ const onCardPointerUp = (event: PointerEvent) => {
       </button>
       <button v-if="agent.desktopAgentConnected" class="text-xs text-sky-600 hover:text-sky-700 px-2 py-1 hover:bg-sky-50 rounded transition-colors dark:text-sky-300 dark:hover:text-sky-200 dark:hover:bg-sky-500/10" title="实时查看并控制该桌面设备" @click.stop="rcTarget = { deviceId: agent.desktopAgentId || '', name: agent.desktopAgentName || agent.name, mode: 'desktop' }">
         桌面控制
+      </button>
+      <button v-if="agent.browserAgentConnected" class="text-xs text-violet-600 hover:text-violet-700 px-2 py-1 hover:bg-violet-50 rounded transition-colors dark:text-violet-300 dark:hover:text-violet-200 dark:hover:bg-violet-500/10" title="实时查看并控制该浏览器" @click.stop="rcTarget = { deviceId: agent.browserAgentId || '', name: agent.browserAgentName || agent.name, mode: 'browser' }">
+        浏览器控制
       </button>
       <button class="text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors dark:text-red-300 dark:hover:text-red-200 dark:hover:bg-red-500/10" @click.stop="emit('chat', agent)">
         与此 AI 对话

@@ -31,6 +31,8 @@ export class Drawer implements PanelController {
   private tabsEl: HTMLDivElement
   private bodyEl: HTMLDivElement
   private sideEl: HTMLDivElement
+  /** 当前正文挂起的资源清理回调；切标签 / 关面板时统一执行并清空 */
+  private cleanups: Array<() => void> = []
   readonly actions: DrawerActions
 
   constructor(parent: HTMLElement, actions: DrawerActions) {
@@ -71,7 +73,18 @@ export class Drawer implements PanelController {
     ;(this.el.querySelector('.gp-close') as HTMLButtonElement).onclick = () => this.close()
   }
 
+  onCleanup(fn: () => void) {
+    this.cleanups.push(fn)
+  }
+
+  private runCleanups() {
+    for (const fn of this.cleanups.splice(0)) {
+      try { fn() } catch { /* 清理失败不应阻塞面板切换 */ }
+    }
+  }
+
   close() {
+    this.runCleanups()
     this.activeMemberId = null
     this.el.classList.remove('open')
     this.bodyEl.innerHTML = ''
@@ -99,6 +112,7 @@ export class Drawer implements PanelController {
 
   /** 打开面板：设置头像 + 标题 + 标签页，默认展示第一栏。 */
   openPanel(opts: { title: string; subtitle?: string; portrait?: PortraitSpec | null; tabs: PanelTab[] }) {
+    this.runCleanups()
     this.activeMemberId = null
     this.portraitName.textContent = opts.title
     this.portraitSub.textContent = opts.subtitle || ''
@@ -112,6 +126,7 @@ export class Drawer implements PanelController {
     this.bodyEl.innerHTML = ''
     const tabButtons: HTMLButtonElement[] = []
     const show = (i: number) => {
+      this.runCleanups()
       tabButtons.forEach((b, j) => b.classList.toggle('active', i === j))
       this.bodyEl.innerHTML = ''
       this.host = this.bodyEl

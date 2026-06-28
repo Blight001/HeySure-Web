@@ -26,9 +26,30 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // Scope dependency scanning to the console entry. Without this Vite also
+    // crawls game/index.html and prebundles `phaser` (a ~1MB game engine) on
+    // every console startup — pure cost when you're only opening the chat UI.
+    // Phaser is still optimized on-demand the first time /game/ is opened.
+    entries: ['index.html'],
+    // Pin the always-needed deps so the prebundle is deterministic and a stray
+    // late-discovered import doesn't trigger a full re-optimize + page reload.
+    include: ['vue', 'socket.io-client'],
+  },
   server: {
     host: '0.0.0.0',
     port: 58150,
+    // Pre-transform the console entry + chat view on boot so the first time a
+    // conversation record is opened it isn't paying Vite's on-demand compile
+    // cost for the whole chat module graph (the main cause of the ~5s first load).
+    warmup: {
+      clientFiles: [
+        './src/main.ts',
+        './src/App.vue',
+        './src/components/chat/*.vue',
+        './src/composables/useMessage.ts',
+      ],
+    },
     proxy: {
       '/api': {
         target: process.env.SERVER_URL || 'http://localhost:3000',

@@ -622,6 +622,7 @@ onUnmounted(() => {
                 :adminModel="chatTarget.model || ''"
                 :aiConfigId="chatTarget.aiConfigId"
                 :aiKind="chatTargetAiKind"
+                :currentUserId="Number(currentUser?.id) || undefined"
                 :initialSessionId="chatInitialSessionId || undefined"
                 :mcpAutoApprove="!!chatTarget.mcpAutoApprove"
                 :mcpDynamicRule="mcpDynamicRule"

@@ -42,6 +42,11 @@ export interface PanelController {
   section(titleText: string): HTMLDivElement
   rows(sec: HTMLElement, rows: Array<[string, string]>): void
   feedback(sec: HTMLElement): HTMLDivElement
+  /**
+   * 注册一个清理回调：切换标签页或关闭面板（即正文被重建/清空）时触发。
+   * 用于释放标签页里挂起的资源（如实时画面的 WebRTC 会话）。
+   */
+  onCleanup(fn: () => void): void
   runAction(
     btn: HTMLButtonElement | null,
     fb: HTMLElement,
