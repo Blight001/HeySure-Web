@@ -116,10 +116,12 @@ let down: {
 let lastMoveAt = 0
 const MOVE_INTERVAL_MS = 33
 
-// Prefer the live stream resolution (updates on rotation) over the one-shot
-// rc:ready size.
-const effectiveWidth = computed(() => videoNaturalWidth.value || deviceWidth.value)
-const effectiveHeight = computed(() => videoNaturalHeight.value || deviceHeight.value)
+// Prefer the device-reported geometry: the device re-emits rc:ready on rotation
+// (instant), so deviceWidth/Height flip orientation immediately. The live stream
+// resolution is the fallback — it also follows rotation but only after the poll
+// notices the new frame size.
+const effectiveWidth = computed(() => deviceWidth.value || videoNaturalWidth.value)
+const effectiveHeight = computed(() => deviceHeight.value || videoNaturalHeight.value)
 
 // Phone is assumed portrait until the stream proves otherwise; desktop/browser
 // are landscape.
