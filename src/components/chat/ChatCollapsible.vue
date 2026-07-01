@@ -11,6 +11,10 @@ const props = defineProps<{
 const open = ref(!!props.defaultOpen)
 const innerRef = ref<HTMLElement | null>(null)
 const contentHeight = ref(0)
+// While true, height/opacity transitions are disabled. We use it so a
+// default-open block paints at its final height on first mount instead of
+// animating 0 → full, which on history load shifted the scroll position.
+const suppressTransition = ref(false)
 
 let resizeObserver: ResizeObserver | null = null
 
@@ -52,16 +56,23 @@ const onSummaryKeydown = (event: KeyboardEvent) => {
 }
 
 onMounted(() => {
+  // Default-open content must paint at its final height right away (no grow
+  // animation), or loading a history full of open activity groups makes the
+  // scroll position jump as each one animates open. Set the height
+  // synchronously with transitions suppressed, then re-enable them next frame
+  // so later user toggles still animate.
+  if (open.value && innerRef.value) {
+    suppressTransition.value = true
+    contentHeight.value = measureContentHeight()
+    requestAnimationFrame(() => {
+      contentHeight.value = measureContentHeight()
+      suppressTransition.value = false
+    })
+  }
+
   if (typeof ResizeObserver === 'undefined' || !innerRef.value) return
   resizeObserver = new ResizeObserver(() => syncOpenHeight())
   resizeObserver.observe(innerRef.value)
-
-  // Initial height for default-open case (otherwise height stays 0 and content is clipped)
-  if (open.value) {
-    requestAnimationFrame(() => {
-      contentHeight.value = measureContentHeight()
-    })
-  }
 })
 
 onUnmounted(() => {
@@ -71,7 +82,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="['chat-collapsible', props.detailsClass, { 'is-open': open }]">
+  <div :class="['chat-collapsible', props.detailsClass, { 'is-open': open, 'no-anim': suppressTransition }]">
     <div
       :class="['chat-collapsible-summary', props.summaryClass]"
       role="button"
@@ -107,6 +118,18 @@ onUnmounted(() => {
   overflow: hidden;
   transition: height 0.34s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: height;
+}
+
+/* First paint of a default-open block: show it fully expanded with no
+   animation so history loads don't shift the scroll position. */
+.chat-collapsible.no-anim .chat-collapsible-content,
+.chat-collapsible.no-anim .chat-collapsible-body {
+  transition: none !important;
+}
+
+.chat-collapsible.no-anim .chat-collapsible-body {
+  opacity: 1;
+  transform: none;
 }
 
 .chat-collapsible-body {

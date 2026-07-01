@@ -127,6 +127,9 @@ const stickToBottom = ref(true)
 const HISTORY_PAGE_SIZE = 15
 const hasMoreHistory = ref(false)
 const loadingOlder = ref(false)
+// Bumped on every history (re)load so a slow in-flight request for a session
+// the user already navigated away from can't clobber the current view.
+let historyLoadEpoch = 0
 let lastProgrammaticScrollTs = 0
 const PROGRAMMATIC_SCROLL_GRACE_MS = 260
 const currentSessionId = ref<string>('')
@@ -958,6 +961,29 @@ const loadOlderHistory = async () => {
   loadingOlder.value = false
 }
 
+// When the latest page doesn't fill the viewport there's no scroll room, so the
+// user can never scroll up to trigger loadOlderHistory — the conversation looks
+// "stuck" with no way to reach older messages. Proactively pull older pages
+// until the list overflows (or there's nothing older), keeping the view pinned
+// to the latest message while backfilling. `epoch` cancels the loop if the user
+// switches session/AI mid-fill.
+const autoFillHistoryUntilScrollable = async (epoch: number) => {
+  for (let guard = 0; guard < 20; guard += 1) {
+    if (epoch !== historyLoadEpoch) return
+    if (!hasMoreHistory.value || loadingOlder.value) return
+    await nextTick()
+    const el = chatScrollRef.value
+    if (!el) return
+    // Already scrollable → normal scroll-up loading takes over from here.
+    if (el.scrollHeight > el.clientHeight + 8) return
+    const before = chatMessages.value.length
+    await loadOlderHistory()
+    if (epoch !== historyLoadEpoch) return
+    if (chatMessages.value.length === before) return
+    if (stickToBottom.value) await scrollToBottom()
+  }
+}
+
 const hasAssistantMessageWithContent = (content: string) => {
   const normalized = normalizeAssistantReplyText(content)
   if (!normalized) return false
@@ -1279,10 +1305,24 @@ const refreshTokensDuringRunIfNeeded = async (force = false) => {
 const loadChatHistory = async (sid: string) => {
   if (!getAuthToken() || !sid) return
   loadingOlder.value = false
-  let history
-  try {
-    history = await chatApi.getChatHistory(chatCtx.value, sid, { limit: HISTORY_PAGE_SIZE })
-  } catch {
+  const epoch = ++historyLoadEpoch
+  // One transient failure (token refresh race, flaky network, brief 5xx) used to
+  // leave the conversation silently blank. Retry once, then surface the error.
+  let history: ChatMessage[] | undefined
+  let lastErr: any = null
+  for (let attempt = 0; attempt < 2 && history === undefined; attempt += 1) {
+    try {
+      history = await chatApi.getChatHistory(chatCtx.value, sid, { limit: HISTORY_PAGE_SIZE })
+    } catch (err) {
+      lastErr = err
+      if (attempt === 0) await waitMs(300)
+    }
+  }
+  // The user switched session (or AI) while this request was in flight — drop the
+  // stale result so it can't overwrite the conversation now on screen.
+  if (epoch !== historyLoadEpoch) return
+  if (history === undefined) {
+    alert({ message: lastErr?.message || '会话历史加载失败，请重试', type: 'error' })
     return
   }
   const mapped = mapHistoryMessages(history)
@@ -1301,6 +1341,9 @@ const loadChatHistory = async (sid: string) => {
   currentSessionId.value = sid
   // Token total is a header stat, not part of the conversation render — defer it.
   void loadTotalTokens()
+  // Backfill older pages in the background if this page is too short to scroll,
+  // so history stays reachable. Non-blocking so the conversation paints first.
+  void autoFillHistoryUntilScrollable(epoch)
 }
 
 const fetchRunHistoryIncrementalOnce = async () => {
