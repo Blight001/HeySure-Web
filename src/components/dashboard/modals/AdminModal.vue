@@ -2148,7 +2148,7 @@ const avatarFor = (u: AdminUser) =>
               v-if="repoStatus && repoStatus.update_mode === 'unavailable'"
               class="rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-700/40 dark:bg-amber-900/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300"
             >
-              未连接宿主版本更新服务，暂时无法自动更新。请通过 <code>docker-run.sh</code> 启动服务，或配置 <code>HEYSURE_REPO_UPDATER_URL</code> 指向可用的更新服务。
+              未连接宿主版本更新服务，暂时无法自动更新。请通过 <code>docker-run.sh</code> 或 <code>docker-run.bat</code> 启动服务，或配置 <code>HEYSURE_REPO_UPDATER_URL</code> 指向可用的更新服务。
             </div>
 
             <template v-if="repoStatus">
