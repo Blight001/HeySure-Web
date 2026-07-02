@@ -334,6 +334,15 @@ function updatePhase(newPhase: 'idle' | 'generating' | 'waiting_mcp') {
   }
 }
 
+// Restart the live segment counter without losing the accumulated per-phase
+// totals — used when the MCP tool switches while the phase stays waiting_mcp,
+// so each tool call is timed on its own instead of continuing the previous one.
+function resetSegmentTimer() {
+  if (phaseEnterTs.value == null) return
+  applyPhaseDelta()
+  phaseEnterTs.value = Date.now()
+}
+
 const STATE_PREFIX = '__HS_MCP_STATE__='
 
 const normalizedAllFiles = computed(() => props.allFiles.map(file => file.replace(/\\/g, '/')))
@@ -783,6 +792,9 @@ const handleStreamLive = (payload: RunLivePayload) => {
   const incomingTool = String(payload.current_tool || '')
   const toolChanged = incomingTool !== currentMcpTool.value
   if (toolChanged && STREAM_PLAN_TOOLS.includes(incomingTool)) bumpTaskPlan()
+  // Back-to-back tool calls keep the phase at waiting_mcp; restart the segment
+  // timer so the header shows this call's own elapsed, not a running total.
+  if (toolChanged && incomingTool && currentRunPhase.value === 'waiting_mcp') resetSegmentTimer()
   currentMcpTool.value = incomingTool
   liveThinkingText.value = String(payload.reasoning || '')
   updateLiveAssistantView(String(payload.text || ''))
@@ -1488,6 +1500,10 @@ const pollRunLive = async (epoch: number) => {
     if (incomingTool !== currentMcpTool.value
       && ['plan.create', 'plan.phase_complete', 'plan.finish'].includes(incomingTool)) {
       bumpTaskPlan()
+    }
+    if (incomingTool && incomingTool !== currentMcpTool.value
+      && currentRunPhase.value === 'waiting_mcp') {
+      resetSegmentTimer()
     }
     currentMcpTool.value = incomingTool
     const delta = String(run.live_delta || '')
