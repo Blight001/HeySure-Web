@@ -1136,6 +1136,61 @@ const repoStepLabel = (step: { key: string; label: string }) => {
   return REPO_RESTART_STEP_LABELS[phase] || step.label
 }
 
+const repoProgressLines = computed(() => {
+  const status = repoStatus.value
+  if (!status) return []
+  const state = status.state
+  const lines: Array<{ key: string; text: string; tone?: 'muted' | 'info' | 'warn' | 'error' | 'ok' }> = []
+  if (repoUnreachable.value) {
+    lines.push({ key: 'unreachable', text: '服务正在重建或重启，控制台暂时不可用，请稍候…恢复后将显示最新版本。', tone: 'info' })
+  } else if (state.message) {
+    lines.push({ key: 'message', text: state.message, tone: state.phase === 'error' ? 'error' : 'info' })
+  }
+  if (state.last_check_at) {
+    lines.push({ key: 'last-check', text: `上次检测：${fmtCommitTime(state.last_check_at)}`, tone: 'muted' })
+  }
+  if (state.branch) {
+    lines.push({ key: 'branch', text: `当前分支：${state.branch}`, tone: 'muted' })
+  }
+  if (state.current?.short) {
+    lines.push({ key: 'current', text: `当前版本：${state.current.short} ${state.current.subject || ''}`.trim(), tone: 'muted' })
+  }
+  if (state.remote?.short && state.behind > 0) {
+    lines.push({ key: 'remote', text: `远端版本：${state.remote.short} ${state.remote.subject || ''}`.trim(), tone: 'warn' })
+  }
+  if (state.phase === 'update_available' && state.behind > 0) {
+    lines.push({ key: 'behind', text: `发现 ${state.behind} 个新提交待应用。`, tone: 'warn' })
+  } else if (state.ahead > 0 || state.behind > 0) {
+    lines.push({ key: 'ahead-behind', text: `本地领先 ${state.ahead} 个提交，落后 ${state.behind} 个提交。`, tone: state.behind > 0 ? 'warn' : 'muted' })
+  }
+  if (state.phase === 'done') {
+    lines.push({ key: 'done', text: '更新流程已完成，服务已启动。', tone: 'ok' })
+  }
+  if (state.phase === 'error' && state.last_error) {
+    lines.push({ key: 'error', text: state.last_error, tone: 'error' })
+  }
+  const recentLogs = (state.logs || []).filter(Boolean).slice(-10)
+  for (const [idx, log] of recentLogs.entries()) {
+    lines.push({ key: `log-${idx}`, text: log, tone: state.phase === 'error' && idx === recentLogs.length - 1 ? 'error' : 'muted' })
+  }
+  return lines
+})
+
+const repoProgressLineClass = (tone?: string) => {
+  switch (tone) {
+    case 'info':
+      return 'text-purple-600 dark:text-purple-300'
+    case 'warn':
+      return 'text-amber-600 dark:text-amber-400'
+    case 'error':
+      return 'text-red-600 dark:text-red-400 break-all'
+    case 'ok':
+      return 'text-emerald-600 dark:text-emerald-400'
+    default:
+      return 'text-zinc-500 dark:text-zinc-400'
+  }
+}
+
 const fmtCommitTime = formatCommitDateTime
 
 const loadRepoStatus = async (silent = false) => {
@@ -2266,19 +2321,20 @@ const avatarFor = (u: AdminUser) =>
                 </div>
 
                 <!-- 信息提示 -->
-                <p v-if="repoUnreachable" class="text-xs text-purple-600 dark:text-purple-400">
-                  服务正在重建或重启，控制台暂时不可用，请稍候…恢复后将显示最新版本。
-                </p>
-                <p v-else-if="repoStatus.state.behind > 0 && repoStatus.state.phase === 'update_available'" class="text-xs text-amber-600 dark:text-amber-400">
-                  发现 {{ repoStatus.state.behind }} 个新提交待应用。
-                </p>
-                <p v-else-if="repoStatus.state.message" class="text-xs text-zinc-500 dark:text-zinc-400">
-                  {{ repoStatus.state.message }}
-                  <span v-if="repoStatus.state.last_check_at"> · 上次检测 {{ fmtCommitTime(repoStatus.state.last_check_at) }}</span>
-                </p>
-                <p v-if="repoStatus.state.phase === 'error' && repoStatus.state.last_error" class="text-xs text-red-600 dark:text-red-400 break-all">
-                  ✕ {{ repoStatus.state.last_error }}
-                </p>
+                <div
+                  v-if="repoProgressLines.length"
+                  class="rounded-lg border border-zinc-200/70 bg-zinc-50/70 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900/40"
+                >
+                  <div
+                    v-for="line in repoProgressLines"
+                    :key="line.key"
+                    class="flex gap-2 leading-5"
+                    :class="repoProgressLineClass(line.tone)"
+                  >
+                    <span class="mt-[0.45rem] h-1 w-1 shrink-0 rounded-full bg-current opacity-60"></span>
+                    <span>{{ line.text }}</span>
+                  </div>
+                </div>
               </section>
             </template>
           </div>
