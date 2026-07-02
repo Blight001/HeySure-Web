@@ -594,23 +594,31 @@ onUnmounted(() => {
     />
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
-          <div class="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl border-0 sm:border border-zinc-200 dark:border-zinc-700 shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
-            <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
-              <div class="min-w-0">
-                <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">与 {{ chatTarget.name }} 对话</div>
-                <div class="text-xs text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
+        <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
+          <!-- 手机比例：对话界面覆盖整个页面（无圆角/无边框/无外边距）；≥sm 恢复居中弹窗 -->
+          <div class="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl border-0 sm:border border-zinc-200 dark:border-zinc-700 shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
+            <div class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200 bg-white/80 px-2 py-2 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 sm:px-3 sm:py-2.5">
+              <!-- 脱出按钮：左上角，返回上一页面 -->
+              <button
+                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                title="退出对话"
+                @click="closeAgentChat"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                </svg>
+              </button>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</div>
+                <div class="truncate text-[11px] text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
               </div>
-              <div class="min-w-0">
+              <div class="min-w-0 max-w-[55%] shrink-0">
                 <TaskProgressPanel
                   :configId="chatTarget.aiConfigId"
                   :sessionId="chatCurrentSessionId"
                   :refreshSignal="chatTaskPlanRefreshSignal"
                   header
                 />
-              </div>
-              <div class="flex justify-end">
-                <button class="shrink-0 text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300" @click="closeAgentChat">关闭</button>
               </div>
             </div>
             <div class="flex-1 min-h-0 p-2">

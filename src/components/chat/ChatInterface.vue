@@ -11,7 +11,7 @@ import { listAiConfigs } from '@/api/ai'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
 import { getAuthToken } from '@/api/http'
 import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
-import { renderGroupedMcpToolCatalog, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
+import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { formatDurationMs } from '@/utils/datetime'
 
 const { alert, confirm, prompt } = useMessage()
@@ -171,28 +171,13 @@ const frontPromptBaseText = computed(() => {
     || '运行时 Prompt 预览加载中或暂不可用'
 })
 const frontPromptBodyText = computed(() => stripPromptSection(stripPromptSection(frontPromptBaseText.value, '动态 MCP 说明'), '可用MCP工具'))
-const frontPromptMcpCatalogText = computed(() => {
-  if (frontPromptToolMcpEnabled.value === false) {
-    return '- （MCP 未启用）'
-  }
+// MCP 工具目录已从系统 Prompt 卸载（改为勾选工坊后随消息动态附带），预览直接
+// 展示服务端真实 Prompt；工具目录加载失败只影响加号面板的工具组列表。
+const frontPromptPreviewText = computed(() => {
   const error = frontPromptToolSchemaError.value || frontPromptPreviewError.value
-  if (error) return `- （工具目录加载失败：${error}）`
-  if (frontPromptToolGroups.value.length > 0) {
-    return renderGroupedMcpToolCatalog(frontPromptToolGroups.value)
-  }
-  const serverTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') === 'server')
-  const deviceTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') !== 'server')
-  return renderGroupedMcpToolCatalog([
-    { groupKey: 'workspace', groupLabel: '工作区 MCP', groupKind: 'workspace', tools: serverTools },
-    { groupKey: 'device:fallback', groupLabel: '端侧设备 MCP', groupKind: 'device', tools: deviceTools },
-  ])
+  if (error) return `${frontPromptBodyText.value}\n\n（工具目录加载失败：${error}）`
+  return frontPromptBodyText.value
 })
-const frontPromptPreviewText = computed(() => [
-  frontPromptBodyText.value,
-  '',
-  '[动态 MCP 说明]',
-  frontPromptMcpCatalogText.value,
-].join('\n'))
 const copyFrontPrompt = async () => {
   const text = frontPromptPreviewText.value
   if (!text) return
@@ -345,6 +330,80 @@ function resetSegmentTimer() {
 
 const STATE_PREFIX = '__HS_MCP_STATE__='
 const ATTACHMENTS_PREFIX = '__HS_ATTACHMENTS__='
+const MCP_TOOLS_PREFIX = '__HS_MCP_TOOLS__='
+// 客户端注入用户消息的 MCP 目录段标题。系统 prompt 已不再内置工具目录
+// （见 chat_runtime_helpers.CLIENT_MCP_CATALOG_MARKER），目录只随勾选的
+// 工具组按轮携带。
+const CLIENT_MCP_CATALOG_TITLE = '本轮可用 MCP 工具'
+
+// 加号面板里的工具组（工坊/工具箱/端侧设备）默认全部勾选，每次发送时按当前
+// 勾选动态附带该组 MCP 工具目录。这里只记录用户手动取消的组：新绑定的工坊、
+// 新上线的设备会自动进入默认勾选，而用户取消过的组跨消息保持取消状态。
+const uncheckedToolGroupKeys = ref<string[]>([])
+
+const attachableToolGroups = computed<McpCatalogToolGroup[]>(() => {
+  if (frontPromptToolMcpEnabled.value === false) return []
+  if (frontPromptToolGroups.value.length > 0) {
+    return frontPromptToolGroups.value.filter(group => group.tools.length > 0)
+  }
+  // 旧版后端没有分组数据时，退化为「工作区 / 端侧」两个组
+  const serverTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') === 'server')
+  const deviceTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') !== 'server')
+  const fallback: McpCatalogToolGroup[] = []
+  if (serverTools.length > 0) fallback.push({ groupKey: 'workspace', groupLabel: '工作区 MCP', groupKind: 'workspace', tools: serverTools })
+  if (deviceTools.length > 0) fallback.push({ groupKey: 'device:fallback', groupLabel: '端侧设备 MCP', groupKind: 'device', tools: deviceTools })
+  return fallback
+})
+
+const selectedToolGroupKeys = computed(() =>
+  attachableToolGroups.value
+    .map(group => group.groupKey)
+    .filter(key => !uncheckedToolGroupKeys.value.includes(key)))
+
+const checkedToolGroups = computed(() =>
+  attachableToolGroups.value.filter(group => selectedToolGroupKeys.value.includes(group.groupKey)))
+
+const toggleToolGroup = (groupKey: string) => {
+  const next = [...uncheckedToolGroupKeys.value]
+  const idx = next.indexOf(groupKey)
+  if (idx >= 0) next.splice(idx, 1)
+  else next.push(groupKey)
+  uncheckedToolGroupKeys.value = next
+}
+
+const clearAttachments = () => {
+  emit('update:selectedFiles', [])
+  uncheckedToolGroupKeys.value = attachableToolGroups.value.map(group => group.groupKey)
+}
+
+const buildMcpCatalogSection = (groups: McpCatalogToolGroup[]) => {
+  if (groups.length === 0) return ''
+  return [
+    `[${CLIENT_MCP_CATALOG_TITLE}]`,
+    '以下是本轮对话勾选携带的 MCP 工具目录（名称 + 简介，`!` 表示有副作用）。',
+    '需要调用时，先用一次 mcp.describe_tool（tool / tools / query）获取参数 schema，再发起调用。',
+    '',
+    renderGroupedMcpToolCatalog(groups),
+  ].join('\n')
+}
+
+const encodeUserMcpGroupsTags = (groups: McpCatalogToolGroup[]) => {
+  const payload = groups
+    .map(group => ({
+      label: group.groupLabel,
+      kind: group.groupKind === 'device' ? 'device' : 'workspace',
+      tools: group.tools
+        .slice(0, 60)
+        .map(tool => ({
+          name: String(tool.name || '').trim(),
+          desc: shortToolDesc(String(tool.description || ''), 80),
+        }))
+        .filter(tool => tool.name),
+    }))
+    .filter(group => group.tools.length > 0)
+  if (payload.length === 0) return ''
+  return `${MCP_TOOLS_PREFIX}${encodeURIComponent(JSON.stringify(payload))}`
+}
 
 const normalizedAllFiles = computed(() => props.allFiles.map(file => file.replace(/\\/g, '/')))
 const normalizedSelectedFiles = computed(() => props.selectedFiles.map(file => file.replace(/\\/g, '/')))
@@ -1812,9 +1871,18 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
     }
   }
 
+  // 勾选的工具组：目录进 model_content（每轮动态携带），概要进 tags（气泡下方展示）
+  const mcpGroups = checkedToolGroups.value
+  const mcpCatalogStr = buildMcpCatalogSection(mcpGroups)
+
   const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话'
   const visibleUserContent = content
-  const fullContentWithContext = contextStr ? `${visibleUserContent}\n\n${contextStr}` : visibleUserContent
+  const fullContentWithContext = [visibleUserContent, contextStr.trim(), mcpCatalogStr]
+    .filter(Boolean)
+    .join('\n\n')
+  const visibleTags = [encodeUserAttachmentTags(props.selectedFiles), encodeUserMcpGroupsTags(mcpGroups)]
+    .filter(Boolean)
+    .join(' | ')
   chatInput.value = ''
   isTyping.value = true
   currentRunStatus.value = 'queued'
@@ -1827,7 +1895,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
     const started = await chatApi.startRun({
       visible_content: visibleUserContent,
       model_content: fullContentWithContext,
-      visible_tags: encodeUserAttachmentTags(props.selectedFiles),
+      visible_tags: visibleTags,
       session_id: currentSessionId.value,
       session_name: currentSessionName,
       ai_config_id: props.aiConfigId,
@@ -2095,14 +2163,17 @@ onBeforeUnmount(() => {
         :allFiles="allFiles"
         :selectedFiles="selectedFiles"
         :currentPath="currentPath"
+        :toolGroups="attachableToolGroups"
+        :selectedToolGroups="selectedToolGroupKeys"
         @send="sendChat"
         @toggleFileSelector="handleToggleFileSelector"
         @closeFileSelector="isFileSelectorOpen = false"
         @navigateTo="navigateTo"
         @navigateBack="navigateBack"
         @toggleFile="toggleFileSelection"
-        @clearFiles="emit('update:selectedFiles', [])"
+        @clearFiles="clearAttachments"
         @refreshFiles="handleRefreshFiles"
+        @toggleToolGroup="toggleToolGroup"
       />
     </div>
   </div>

@@ -149,22 +149,54 @@ const renderedThinkText = computed(() => {
 const segmentTimeLabel = computed(() => String(props.timeLabel || '').trim())
 
 const ATTACHMENTS_PREFIX = '__HS_ATTACHMENTS__='
+const MCP_TOOLS_PREFIX = '__HS_MCP_TOOLS__='
+
+const decodeTagSegment = (prefix: string): unknown => {
+  const tags = String(props.message.tags || '')
+  const idx = tags.indexOf(prefix)
+  if (idx < 0) return null
+  const raw = tags.slice(idx + prefix.length).split(/\s*\|\s*/)[0]?.trim()
+  if (!raw) return null
+  try {
+    return JSON.parse(decodeURIComponent(raw))
+  } catch {
+    return null
+  }
+}
 
 const attachedFiles = computed(() => {
-  const tags = String(props.message.tags || '')
-  const idx = tags.indexOf(ATTACHMENTS_PREFIX)
-  if (idx < 0) return []
-  const raw = tags.slice(idx + ATTACHMENTS_PREFIX.length).split(/\s*\|\s*/)[0]?.trim()
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw))
-    return Array.isArray(parsed)
-      ? parsed.map(item => String(item || '').trim()).filter(Boolean)
-      : []
-  } catch {
-    return []
-  }
+  const parsed = decodeTagSegment(ATTACHMENTS_PREFIX)
+  return Array.isArray(parsed)
+    ? parsed.map(item => String(item || '').trim()).filter(Boolean)
+    : []
 })
+
+interface AttachedMcpGroup {
+  label: string
+  kind: 'workspace' | 'device'
+  tools: { name: string; desc: string }[]
+}
+
+// 发送时勾选的工坊/工具组：本轮附带给模型的 MCP 目录概要，展示在用户气泡下方。
+const attachedMcpGroups = computed<AttachedMcpGroup[]>(() => {
+  const parsed = decodeTagSegment(MCP_TOOLS_PREFIX)
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map((group: any) => ({
+      label: String(group?.label || '').trim() || '未命名工具组',
+      kind: (group?.kind === 'device' ? 'device' : 'workspace') as 'workspace' | 'device',
+      tools: (Array.isArray(group?.tools) ? group.tools : [])
+        .map((tool: any) => ({
+          name: String(tool?.name || '').trim(),
+          desc: String(tool?.desc || '').trim(),
+        }))
+        .filter((tool: { name: string }) => tool.name),
+    }))
+    .filter(group => group.tools.length > 0)
+})
+
+const attachedMcpToolCount = computed(() =>
+  attachedMcpGroups.value.reduce((sum, group) => sum + group.tools.length, 0))
 </script>
 
 <template>
@@ -362,6 +394,50 @@ const attachedFiles = computed(() => {
           {{ file }}
         </span>
       </div>
+
+      <!-- 本轮附带的 MCP 工具目录概要（勾选工坊/工具组后动态注入，不进系统 prompt） -->
+      <div
+        v-if="props.message.role === 'user' && !isSystemNoticeMessage && attachedMcpGroups.length > 0"
+        class="mt-1.5 flex w-full justify-end"
+      >
+        <div class="user-mcp-panel">
+          <ChatCollapsible
+            details-class="group/user-mcp"
+            summary-class="flex items-center gap-1.5 cursor-pointer select-none py-0.5 text-[11px] leading-4 text-indigo-500 hover:text-indigo-600 dark:text-indigo-300 dark:hover:text-indigo-200 transition-colors"
+            body-class="mt-1 ml-0.5 pl-2.5 border-l border-indigo-100 dark:border-indigo-500/30"
+          >
+            <template #summary>
+              <span class="chat-collapsible-arrow text-[10px] leading-none">➣</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085" />
+              </svg>
+              <span class="font-medium">本轮附带 MCP 工具</span>
+              <span class="tabular-nums text-indigo-400 dark:text-indigo-300/70">{{ attachedMcpGroups.length }} 组 · {{ attachedMcpToolCount }} 个</span>
+            </template>
+            <div class="max-h-56 overflow-y-auto pr-1">
+              <div v-for="group in attachedMcpGroups" :key="group.label" class="mb-1.5 last:mb-0">
+                <div class="flex items-center gap-1.5 py-0.5">
+                  <span class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">{{ group.label }}</span>
+                  <span
+                    class="rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none"
+                    :class="group.kind === 'device'
+                      ? 'bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300'
+                      : 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300'"
+                  >{{ group.kind === 'device' ? '端侧' : '工作区' }}</span>
+                </div>
+                <div
+                  v-for="tool in group.tools"
+                  :key="tool.name"
+                  class="flex items-baseline gap-1.5 py-px text-[11px] leading-4"
+                >
+                  <span class="shrink-0 font-mono text-zinc-500 dark:text-zinc-400">{{ tool.name }}</span>
+                  <span v-if="tool.desc" class="min-w-0 truncate text-zinc-400 dark:text-zinc-500" :title="tool.desc">{{ tool.desc }}</span>
+                </div>
+              </div>
+            </div>
+          </ChatCollapsible>
+        </div>
+      </div>
     </div>
 
     <div
@@ -510,6 +586,19 @@ const attachedFiles = computed(() => {
   border-color: rgba(129, 140, 248, 0.35);
   background: rgba(79, 70, 229, 0.16);
   color: rgb(199 210 254);
+}
+
+.user-mcp-panel {
+  max-width: min(24rem, 100%);
+  border: 1px solid rgb(224 231 255);
+  border-radius: 12px;
+  background: rgb(238 242 255 / 0.6);
+  padding: 4px 10px;
+}
+
+.dark .user-mcp-panel {
+  border-color: rgba(129, 140, 248, 0.25);
+  background: rgba(79, 70, 229, 0.1);
 }
 
 .dark .segment-time-badge {
