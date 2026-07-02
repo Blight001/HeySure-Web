@@ -81,10 +81,19 @@ export const SHEETS: SheetDef[] = [
     frameWidth: 32,
     frameHeight: 32,
     columns: 8,
-    rows: 2,
+    rows: 3,
     anims: { water: { frames: [9, 10], fps: 2, repeat: true } },
   },
-  strip('tree.png', '树', 'tileset', 32, 48, 1),
+  {
+    file: 'tree.png',
+    label: '树 x4 变体（橡树/松树/白桦/樱花，帧=变体非动画）',
+    kind: 'tileset',
+    frameWidth: 48,
+    frameHeight: 72,
+    columns: 4,
+    rows: 1,
+    anims: {},
+  },
 
   // ---- 固定建筑 ----
   strip('building_spawn.png', '出生地（泉水）', 'building', 64, 64, 4),
@@ -114,6 +123,16 @@ export const SHEETS: SheetDef[] = [
   strip('decor_library_obelisk.png', '图书馆装饰·知识方尖碑', 'tileset', 36, 64, 1),
   strip('decor_library_banner.png', '图书馆装饰·学院旗帜', 'tileset', 28, 56, 1),
   strip('decor_book_stand.png', '图书馆装饰·展开书台', 'tileset', 36, 36, 1),
+  {
+    file: 'bush.png',
+    label: '灌木丛 x3 变体（圆灌木/浆果/花灌木，帧=变体非动画）',
+    kind: 'tileset',
+    frameWidth: 32,
+    frameHeight: 24,
+    columns: 3,
+    rows: 1,
+    anims: {},
+  },
   strip('bench.png', '长椅', 'tileset', 40, 24, 1),
   strip('signpost.png', '路牌', 'tileset', 32, 40, 1),
   strip('butterfly.png', '蝴蝶（扇翅，运行时 tint 变色）', 'effect', 16, 16, 2, 8),
@@ -128,6 +147,7 @@ export const SHEETS: SheetDef[] = [
     rows: 1,
     anims: {},
   },
+  strip('effect_petal.png', '樱花花瓣（飘落翻转）', 'effect', 16, 16, 2, 3),
   strip('effect_smoke.png', '烟雾', 'effect', 16, 16, 4, 5),
   strip('effect_sparkle.png', '火花', 'effect', 16, 16, 4, 8),
   strip('effect_toolbox_bag.png', '工具箱挎包（绑定工具箱的 AI 成员侧挂饰）', 'effect', 12, 16, 1),
@@ -165,6 +185,19 @@ export const TILES = {
   bush: 12,
   plazaA: 13,
   plazaB: 14,
+  flowerBlue: 15,
+  mushroom: 16,
+  dirt: 17,
+  sprout: 18,
+  leafLitter: 19,
+} as const
+
+/** tree.png 帧索引（变体） */
+export const TREE_VARIANTS = {
+  oak: 0,
+  pine: 1,
+  birch: 2,
+  sakura: 3,
 } as const
 
 /** emotes.png 图标索引 */

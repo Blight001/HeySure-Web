@@ -77,6 +77,13 @@ export const workshopZone = (i: number): Rect => {
   return { x: p.x - 48, y: p.y + 70, w: 96, h: 82 }
 }
 
+/** 作坊前方椅子的就坐位置（离线设备时，对应 AI 成员锁死坐在长椅上） */
+export const workshopBenchSeat = (i: number): Point => {
+  const p = workshopSlotPos(i)
+  // 角色容器 y ≈ 椅面位置，让坐姿贴合长椅（bench 放置在 +74）
+  return { x: p.x, y: p.y + 72 }
+}
+
 export const randomPointIn = (zone: Rect, rnd: () => number = Math.random): Point => ({
   x: zone.x + rnd() * zone.w,
   y: zone.y + rnd() * zone.h,

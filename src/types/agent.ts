@@ -38,6 +38,7 @@ export interface Agent {
   projectName?: string
   parentAiConfigId?: number | null
   managementScope?: string
+  workspaceRoot?: string
   aiConfigId?: number
   enabled?: boolean
   mcpEnabled?: boolean

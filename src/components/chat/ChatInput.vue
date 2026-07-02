@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import FileSelector from './FileSelector.vue'
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 
 const props = defineProps<{
@@ -10,6 +10,7 @@ const props = defineProps<{
   allFiles: string[]
   selectedFiles: string[]
   currentPath: string
+  selectableFileRoot?: string
   toolGroups?: McpCatalogToolGroup[]
   selectedToolGroups?: string[]
 }>()
@@ -36,10 +37,27 @@ const attachCount = computed(() =>
   props.selectedFiles.length + (props.selectedToolGroups?.length || 0))
 
 const canSend = computed(() => !!inputValue.value.trim() && !props.isTyping)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const TEXTAREA_MIN_HEIGHT = 36
+const TEXTAREA_MAX_HEIGHT = 146
 
 // 触屏设备（手机/平板）上回车应换行，由发送按钮触发发送，避免软键盘回车误发
 const isCoarsePointer = typeof window !== 'undefined' && !!window.matchMedia
   && window.matchMedia('(pointer: coarse)').matches
+
+const resizeTextarea = (target = textareaRef.value) => {
+  if (!target) return
+  const currentHeight = target.offsetHeight || TEXTAREA_MIN_HEIGHT
+  target.style.height = `${currentHeight}px`
+  target.style.height = 'auto'
+  const nextHeight = Math.max(TEXTAREA_MIN_HEIGHT, Math.min(target.scrollHeight, TEXTAREA_MAX_HEIGHT))
+  target.style.height = `${currentHeight}px`
+  void target.offsetHeight
+  window.requestAnimationFrame(() => {
+    target.style.height = `${nextHeight}px`
+  })
+  target.style.overflowY = target.scrollHeight > TEXTAREA_MAX_HEIGHT ? 'auto' : 'hidden'
+}
 
 const handleKeydown = (e: KeyboardEvent) => {
   if (isCoarsePointer) return
@@ -51,10 +69,16 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 const handleInput = (e: Event) => {
   const target = e.target as HTMLTextAreaElement
-  target.style.height = 'auto'
-  target.style.height = Math.max(36, Math.min(target.scrollHeight, 120)) + 'px'
   emit('update:modelValue', target.value)
+  resizeTextarea(target)
 }
+
+onMounted(() => resizeTextarea())
+
+watch(() => props.modelValue, async () => {
+  await nextTick()
+  resizeTextarea()
+})
 </script>
 
 <template>
@@ -85,6 +109,7 @@ const handleInput = (e: Event) => {
         :allFiles="allFiles"
         :selectedFiles="selectedFiles"
         :currentPath="currentPath"
+        :selectable-file-root="selectableFileRoot"
         :toolGroups="toolGroups"
         :selectedToolGroups="selectedToolGroups"
         @close="emit('closeFileSelector')"
@@ -97,9 +122,10 @@ const handleInput = (e: Event) => {
       />
 
       <textarea
+        ref="textareaRef"
         v-model="inputValue"
         rows="1"
-        class="chat-input-textarea box-border h-9 max-h-[120px] min-h-[36px] flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-[7px] text-sm leading-[22px] text-zinc-800 placeholder:text-zinc-400 focus:outline-none focus:ring-0 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+        class="chat-input-textarea box-border h-9 max-h-[146px] min-h-[36px] flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-[7px] text-sm leading-[22px] text-zinc-800 placeholder:text-zinc-400 transition-[height] duration-300 ease-linear focus:outline-none focus:ring-0 dark:text-zinc-100 dark:placeholder:text-zinc-500"
         placeholder="给主脑发送指令..."
         @keydown="handleKeydown"
         @input="handleInput"

@@ -66,6 +66,7 @@ interface Props {
   stripMarkdownSymbols?: boolean
   selectedFiles: string[]
   allFiles: string[]
+  selectableFileRoot?: string
 }
 
 const props = defineProps<Props>()
@@ -407,6 +408,33 @@ const encodeUserMcpGroupsTags = (groups: McpCatalogToolGroup[]) => {
 
 const normalizedAllFiles = computed(() => props.allFiles.map(file => file.replace(/\\/g, '/')))
 const normalizedSelectedFiles = computed(() => props.selectedFiles.map(file => file.replace(/\\/g, '/')))
+const normalizedSelectableFileRoot = computed(() =>
+  String(props.selectableFileRoot || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''))
+
+const normalizeSelectionPath = (path: string) => {
+  const raw = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/{2,}/g, '/')
+  return raw.endsWith('/') ? raw.replace(/\/+$/g, '') + '/' : raw
+}
+
+const isSelectableFilePath = (path: string) => {
+  const root = normalizedSelectableFileRoot.value
+  if (!root) return true
+  const normalized = normalizeSelectionPath(path).replace(/\/+$/g, '')
+  return normalized === root || normalized.startsWith(`${root}/`)
+}
+
+const toAiWorkspacePath = (path: string) => {
+  const normalized = normalizeSelectionPath(path)
+  const root = normalizedSelectableFileRoot.value
+  if (!root) return normalized
+  const withoutTrailing = normalized.replace(/\/+$/g, '')
+  if (withoutTrailing === root) return normalized.endsWith('/') ? './' : '.'
+  if (withoutTrailing.startsWith(`${root}/`)) {
+    const relative = withoutTrailing.slice(root.length + 1)
+    return normalized.endsWith('/') ? `${relative}/` : relative
+  }
+  return normalized
+}
 
 const isTaskSessionName = (name: string) => /^任务[:：]\s*/.test(String(name || '').trim())
 
@@ -437,10 +465,21 @@ const splitTags = (raw?: string) => {
 
 const encodeUserAttachmentTags = (files: string[]) => {
   const normalized = files
-    .map(file => file.replace(/\\/g, '/').trim())
+    .map(file => toAiWorkspacePath(file).trim())
     .filter(Boolean)
   if (normalized.length === 0) return ''
   return `${ATTACHMENTS_PREFIX}${encodeURIComponent(JSON.stringify(normalized))}`
+}
+
+const buildAttachedPathSection = (paths: string[]) => {
+  const normalized = paths.map(path => toAiWorkspacePath(path)).filter(Boolean)
+  if (normalized.length === 0) return ''
+  const lines = normalized.map(path => `- ${path.endsWith('/') ? '文件夹' : '文件'}: \`${path}\``)
+  return [
+    '[本轮附加工作区路径]',
+    '用户勾选了以下工作区路径。路径均按当前 AI 工作目录视角给出。不要假设内容已被直接提供；如需查看，请使用 workspace.manage / workspace.run_command 等可用工作区工具自行读取、列目录或检索。',
+    ...lines,
+  ].join('\n')
 }
 
 const stableStringify = (value: any): string => {
@@ -575,19 +614,20 @@ const restoreActionStatesFromHistory = (messages: ChatMessage[]) => {
 }
 
 const navigateTo = (folder: string) => {
+  emit('refreshFiles')
   currentPath.value = currentPath.value === '' ? folder : `${currentPath.value}/${folder}`
 }
 const navigateBack = () => {
+  emit('refreshFiles')
   const parts = currentPath.value.split('/')
   currentPath.value = parts.length <= 1 ? '' : parts.slice(0, -1).join('/')
 }
 const toggleFileSelection = (file: string) => {
-  const fullPath = currentPath.value === '' ? file : `${currentPath.value}/${file}`
-  if (normalizedAllFiles.value.includes(fullPath + '/')) {
-    navigateTo(file)
-    return
-  }
-  const newSelected = [...normalizedSelectedFiles.value]
+  let fullPath = normalizeSelectionPath(file)
+  if (!fullPath.includes('/') && currentPath.value) fullPath = normalizeSelectionPath(`${currentPath.value}/${fullPath}`)
+  if (!fullPath.endsWith('/') && normalizedAllFiles.value.includes(`${fullPath}/`)) fullPath = `${fullPath}/`
+  if (!isSelectableFilePath(fullPath)) return
+  const newSelected = normalizedSelectedFiles.value.map(path => normalizeSelectionPath(path))
   const idx = newSelected.indexOf(fullPath)
   if (idx > -1) newSelected.splice(idx, 1)
   else newSelected.push(fullPath)
@@ -1857,19 +1897,11 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
   if (!content || isTyping.value || !currentSessionId.value) return
   if (!getAuthToken()) return
 
-  let contextStr = ''
-
-  if (props.selectedFiles.length > 0) {
-    try {
-      const contents = await chatApi.getChatFileContent(props.selectedFiles)
-      contextStr += '\n### Selected Files Content:\n'
-      for (const [filename, text] of Object.entries(contents)) {
-        contextStr += `\nFile: \`${filename}\`\n\`\`\`\n${text}\n\`\`\`\n`
-      }
-    } catch {
-      // best-effort: continue without file context
-    }
-  }
+  const selectedReadableFiles = props.selectedFiles
+    .map(file => normalizeSelectionPath(file))
+    .filter(file => isSelectableFilePath(file))
+  const selectedAiPaths = selectedReadableFiles.map(path => toAiWorkspacePath(path))
+  const attachedPathStr = buildAttachedPathSection(selectedReadableFiles)
 
   // 勾选的工具组：目录进 model_content（每轮动态携带），概要进 tags（气泡下方展示）
   const mcpGroups = checkedToolGroups.value
@@ -1877,10 +1909,10 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
 
   const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话'
   const visibleUserContent = content
-  const fullContentWithContext = [visibleUserContent, contextStr.trim(), mcpCatalogStr]
+  const fullContentWithContext = [visibleUserContent, attachedPathStr, mcpCatalogStr]
     .filter(Boolean)
     .join('\n\n')
-  const visibleTags = [encodeUserAttachmentTags(props.selectedFiles), encodeUserMcpGroupsTags(mcpGroups)]
+  const visibleTags = [encodeUserAttachmentTags(selectedAiPaths), encodeUserMcpGroupsTags(mcpGroups)]
     .filter(Boolean)
     .join(' | ')
   chatInput.value = ''
@@ -1902,6 +1934,9 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       ai_kind: aiKindValue.value,
     })
     currentRunId.value = started.run_id
+    if (selectedReadableFiles.length > 0) {
+      emit('update:selectedFiles', [])
+    }
     // Pull just the freshly-persisted user message instead of reloading and
     // re-parsing the whole page right as the run begins.
     await fetchRunHistoryIncrementalOnce()
@@ -2163,6 +2198,7 @@ onBeforeUnmount(() => {
         :allFiles="allFiles"
         :selectedFiles="selectedFiles"
         :currentPath="currentPath"
+        :selectable-file-root="selectableFileRoot"
         :toolGroups="attachableToolGroups"
         :selectedToolGroups="selectedToolGroupKeys"
         @send="sendChat"

@@ -52,6 +52,10 @@ const isSystemNoticeMessage = computed(() => {
   return text.startsWith('[系统提示]') || text.startsWith('【任务完成回执】')
 })
 
+const isUserMessageBubble = computed(() => {
+  return props.message.role === 'user' && !isSystemNoticeMessage.value
+})
+
 const isTaskCompleteNotice = computed(() => {
   const text = String(props.message.display_text || props.message.content || '').trim()
   return text.startsWith('【任务完成回执】')
@@ -171,6 +175,9 @@ const attachedFiles = computed(() => {
     : []
 })
 
+const attachedPathLabel = (path: string) =>
+  String(path || '').trim().endsWith('/') ? `${String(path || '').trim()}（文件夹）` : String(path || '').trim()
+
 interface AttachedMcpGroup {
   label: string
   kind: 'workspace' | 'device'
@@ -201,7 +208,7 @@ const attachedMcpToolCount = computed(() =>
 
 <template>
   <div
-    class="flex flex-col gap-1.5"
+    class="flex w-full flex-col gap-1.5"
     :class="[
       (isFrontPromptMessage || isTaskCompleteNotice) ? 'items-center' : ((props.message.role === 'user' && !isSystemNoticeMessage) ? 'items-end' : 'items-start'),
       isMcpToolMessage ? '!mt-0.5' : '',
@@ -210,7 +217,10 @@ const attachedMcpToolCount = computed(() =>
   >
     <div
       class="group relative"
-      :class="props.embedded ? 'w-full max-w-full' : (isPlainAssistantMessage ? 'max-w-[95%] sm:max-w-[92%]' : 'max-w-[95%] sm:max-w-[85%]')"
+      :class="[
+        props.embedded ? 'w-full max-w-full' : (isPlainAssistantMessage ? 'max-w-[95%] sm:max-w-[92%]' : 'max-w-[95%] sm:max-w-[85%]'),
+        isUserMessageBubble ? 'ml-auto w-full min-w-0' : ''
+      ]"
     >
       <!-- Think Block — Codex-style: dim/italic body on a quiet left rail -->
       <div v-if="renderedThinkText && !props.hideThink" class="mb-1">
@@ -250,7 +260,8 @@ const attachedMcpToolCount = computed(() =>
                 ? 'bg-zinc-100 border-zinc-200 text-zinc-700 font-mono text-xs dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
                 : 'bg-white border-zinc-200 text-zinc-800 rounded-tl-sm shadow-sm dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-200',
           (isPlainAssistantMessage || isMcpToolMessage) ? '' : 'px-4 py-3 rounded-2xl border hover:shadow-md',
-          isFrontPromptMessage ? 'front-prompt-bubble' : ''
+          isFrontPromptMessage ? 'front-prompt-bubble' : '',
+          isUserMessageBubble ? 'user-message-bubble' : ''
         ]"
       >
         
@@ -362,7 +373,8 @@ const attachedMcpToolCount = computed(() =>
           class="whitespace-pre-wrap text-[13px] leading-relaxed"
           :class="[
             (props.message.role === 'user' && !isSystemNoticeMessage) ? 'text-white' : '',
-            isFrontPromptMessage ? 'text-left w-full front-prompt-content' : ''
+            isFrontPromptMessage ? 'text-left w-full front-prompt-content' : '',
+            isUserMessageBubble ? 'user-message-text' : ''
           ]"
         >
           <template v-if="normalizedInlineContent.length > 0">
@@ -391,7 +403,7 @@ const attachedMcpToolCount = computed(() =>
           class="user-attachment-pill"
           :title="file"
         >
-          {{ file }}
+          {{ attachedPathLabel(file) }}
         </span>
       </div>
 
@@ -479,6 +491,28 @@ const attachedMcpToolCount = computed(() =>
 
 .front-prompt-content {
   min-height: 100%;
+}
+
+.user-message-bubble {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.user-message-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.user-message-text :deep(.inline-content-wrapper),
+.user-message-text :deep(.markdown-text) {
+  max-width: 100%;
+}
+
+.user-message-text :deep(.markdown-text) {
+  width: fit-content;
 }
 
 .mcp-detail-doc {

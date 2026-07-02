@@ -237,6 +237,7 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
         projectName: getProjectName(projectId, row.project_name),
         parentAiConfigId: Number.isFinite(Number(row.parent_ai_config_id)) ? Number(row.parent_ai_config_id) : null,
         managementScope: row.management_scope || 'self',
+        workspaceRoot: row.workspace_root || row.workspaceRoot || '',
         tokensUsed: row.token_used || 0,
         aiConfigId: configId,
         enabled: !!row.enabled,

@@ -4,8 +4,8 @@
 确定性地生成 web/game/assets/ 下的全部 PNG（无随机种子漂移，重跑结果一致）。
 所有素材按 1x 内部分辨率手绘、NEAREST 放大 2 倍输出，统一 32px 瓦片标准：
 
-  tileset.png                 16x16@1x -> 32x32 瓦片 x16 格（8 列 x 2 行）
-  tree.png                    16x24@1x -> 32x48
+  tileset.png                 16x16@1x -> 32x32 瓦片 x24 格（8 列 x 3 行）
+  tree.png                    24x36@1x -> 48x72 x4 变体（橡树/松树/白桦/樱花）
   building_spawn.png          32x32@1x -> 64x64   x4 帧（出生地泉水）
   building_library.png        48x48@1x -> 96x96   x2 帧（传承知识库/图书馆）
   building_workshop_desktop.png 32x32@1x -> 64x64 x4 帧（桌面 agent 作坊·机械坊）
@@ -244,27 +244,156 @@ def gen_tileset():
         for _ in range(3):
             c.px(rng.randrange(T), rng.randrange(T), (150, 148, 158, 255))
         tiles.append(c)
-    # 15 预留空位
-    while len(tiles) < 16:
+    # 15 蓝白野花
+    c = C(T, T)
+    grass_base(c, 110)
+    rng = random.Random(111)
+    for i in range(3):
+        x, y = rng.randrange(2, T - 2), rng.randrange(2, T - 2)
+        c.px(x, y, (150, 180, 240, 255) if i < 2 else (240, 244, 250, 255))
+        c.px(x, y + 1, GRASS_D)
+    tiles.append(c)
+    # 16 蘑菇（红帽 + 橙帽各一颗）
+    c = C(T, T)
+    grass_base(c, 120)
+    c.rect(5, 9, 1, 2, (222, 214, 190, 255))
+    c.hline(4, 8, 3, (200, 70, 60, 255))
+    c.px(5, 7, (200, 70, 60, 255))
+    c.px(4, 8, (240, 230, 220, 255))
+    c.rect(10, 12, 1, 2, (222, 214, 190, 255))
+    c.hline(9, 11, 3, (216, 130, 60, 255))
+    c.px(10, 10, (216, 130, 60, 255))
+    tiles.append(c)
+    # 17 裸土（四角草色过渡）
+    c = C(T, T)
+    rng = random.Random(130)
+    c.rect(0, 0, T, T, (150, 118, 84, 255))
+    for _ in range(8):
+        c.px(rng.randrange(T), rng.randrange(T), (128, 98, 68, 255))
+    for _ in range(4):
+        c.px(rng.randrange(T), rng.randrange(T), (172, 140, 102, 255))
+    for x, y in ((0, 0), (1, 0), (0, 1), (T - 1, 0), (T - 2, 0), (T - 1, 1),
+                 (0, T - 1), (1, T - 1), (0, T - 2), (T - 1, T - 1), (T - 2, T - 1), (T - 1, T - 2)):
+        c.px(x, y, GRASS)
+    tiles.append(c)
+    # 18 嫩芽草（浅绿新芽小簇）
+    c = C(T, T)
+    grass_base(c, 140)
+    rng = random.Random(141)
+    for _ in range(4):
+        x, y = rng.randrange(2, T - 2), rng.randrange(2, T - 2)
+        c.px(x, y, GRASS_L)
+        c.px(x - 1, y - 1, (150, 196, 120, 255))
+        c.px(x + 1, y - 1, (150, 196, 120, 255))
+    tiles.append(c)
+    # 19 落叶（橙棕碎叶点）
+    c = C(T, T)
+    grass_base(c, 150)
+    rng = random.Random(151)
+    for i in range(5):
+        x, y = rng.randrange(1, T - 1), rng.randrange(1, T - 1)
+        c.px(x, y, (196, 140, 72, 255) if i % 2 else (170, 110, 60, 255))
+        if i % 2:
+            c.px(x + 1, y, (170, 110, 60, 255))
+    tiles.append(c)
+    # 20-23 预留空位
+    while len(tiles) < 24:
         tiles.append(C(T, T))
 
-    sheet = C(T * 8, T * 2)
+    sheet = C(T * 8, T * 3)
     for i, t in enumerate(tiles):
         sheet.paste(t, (i % 8) * T, (i // 8) * T)
     sheet.img.resize((sheet.w * SCALE, sheet.h * SCALE), Image.NEAREST).save(os.path.join(OUT_DIR, "tileset.png"))
-    print(f"  tileset.png  {sheet.w * SCALE}x{sheet.h * SCALE} 16 瓦片")
+    print(f"  tileset.png  {sheet.w * SCALE}x{sheet.h * SCALE} 24 瓦片")
 
 
 def gen_tree():
-    c = C(16, 24)
-    c.rect(7, 13, 2, 9, WOOD)
-    c.px(6, 21, WOOD_D)
-    c.px(9, 21, WOOD_D)
-    c.disc(8, 8, 6, GRASS_D)
-    c.disc(6, 7, 4, GRASS)
-    c.disc(10, 5, 3, GRASS_L)
+    """树 x4 变体：0 橡树 / 1 松树 / 2 白桦 / 3 樱花。24x36@1x -> 48x72。
+    树干底部都落在 y≈34（原点约 0.94），世界里按 y 深度排序。"""
+    frames = []
+
+    # --- 0 橡树：宽大分层树冠 + 粗壮树干
+    c = C(24, 36)
+    c.rect(11, 21, 3, 13, WOOD)
+    c.vline(13, 22, 11, WOOD_D)
+    c.px(10, 33, WOOD_D)
+    c.px(14, 33, WOOD_D)
+    c.disc(12, 11, 9, GRASS_D)
+    c.disc(8, 12, 6, GRASS_D)
+    c.disc(16, 13, 6, GRASS_D)
+    c.disc(10, 9, 6, GRASS)
+    c.disc(15, 8, 5, GRASS)
+    c.disc(9, 7, 3, GRASS_L)
+    c.px(14, 5, GRASS_L)
+    c.px(16, 7, GRASS_L)
+    c.px(6, 10, GRASS_L)
     c.add_silhouette_outline()
-    save_strip([c], "tree.png")
+    frames.append(c)
+
+    # --- 1 松树：三层塔形深绿针叶
+    PINE = (58, 112, 78, 255)
+    PINE_D = (42, 88, 62, 255)
+    PINE_L = (92, 148, 100, 255)
+    c = C(24, 36)
+    c.rect(11, 25, 2, 10, WOOD_D)
+
+    def tri(top, h, maxhalf):
+        for i in range(h):
+            half = 1 + (maxhalf - 1) * i / max(h - 1, 1)
+            c.hline(12 - half, top + i, half * 2, PINE_D if i == h - 1 else PINE)
+
+    tri(2, 8, 5)
+    tri(8, 9, 7)
+    tri(15, 10, 9)
+    c.px(12, 1, PINE_L)
+    for x, y in ((10, 4), (9, 6), (8, 11), (7, 13), (6, 18), (5, 20)):
+        c.px(x, y, PINE_L)
+    c.add_silhouette_outline()
+    frames.append(c)
+
+    # --- 2 白桦：浅色细干黑纹 + 松散黄绿冠
+    BIRCH = (226, 220, 206, 255)
+    BIRCH_D = (188, 180, 166, 255)
+    LEAF = (150, 186, 92, 255)
+    LEAF_D = (118, 156, 78, 255)
+    LEAF_L = (184, 210, 116, 255)
+    c = C(24, 36)
+    c.rect(11, 17, 2, 18, BIRCH)
+    c.vline(12, 18, 16, BIRCH_D)
+    for y in (21, 25, 29, 32):
+        c.px(11, y, OUT)
+    c.px(12, 23, OUT)
+    c.px(12, 30, OUT)
+    c.disc(12, 10, 8, LEAF_D)
+    c.disc(8, 8, 5, LEAF)
+    c.disc(16, 8, 5, LEAF)
+    c.disc(12, 5, 4, LEAF_L)
+    c.px(7, 4, LEAF_L)
+    c.px(17, 11, LEAF)
+    c.add_silhouette_outline()
+    frames.append(c)
+
+    # --- 3 樱花：粉色团冠 + 飘落花瓣
+    SAKURA = (232, 158, 186, 255)
+    SAKURA_D = (198, 118, 156, 255)
+    SAKURA_L = (248, 202, 218, 255)
+    c = C(24, 36)
+    c.rect(11, 20, 3, 15, WOOD)
+    c.vline(13, 21, 13, WOOD_D)
+    c.px(9, 22, WOOD)
+    c.px(8, 21, WOOD)
+    c.disc(12, 11, 9, SAKURA_D)
+    c.disc(8, 9, 6, SAKURA)
+    c.disc(16, 10, 6, SAKURA)
+    c.disc(12, 6, 5, SAKURA_L)
+    c.px(6, 6, SAKURA_L)
+    c.px(18, 7, SAKURA_L)
+    c.px(6, 26, SAKURA_L)
+    c.px(19, 29, SAKURA)
+    c.add_silhouette_outline()
+    frames.append(c)
+
+    save_strip(frames, "tree.png")
 
 
 # ================================================================ 建筑
@@ -1013,6 +1142,49 @@ def gen_signpost():
     save_strip([c], "signpost.png")
 
 
+def gen_bush():
+    """灌木丛 x3 变体：0 圆灌木 / 1 浆果灌木 / 2 花灌木。16x12@1x -> 32x24。"""
+    BUSH = (86, 138, 74, 255)
+    BUSH_D = (64, 110, 60, 255)
+    BUSH_L = (118, 166, 92, 255)
+    frames = []
+    for v in range(3):
+        c = C(16, 12)
+        c.disc(8, 7, 5, BUSH_D)
+        c.disc(5, 6, 3, BUSH)
+        c.disc(11, 6, 3, BUSH)
+        c.disc(8, 4, 3, BUSH)
+        c.px(5, 4, BUSH_L)
+        c.px(9, 3, BUSH_L)
+        c.px(12, 5, BUSH_L)
+        c.px(3, 7, BUSH_L)
+        if v == 1:  # 红浆果
+            for x, y in ((5, 5), (10, 4), (8, 7), (12, 7)):
+                c.px(x, y, (216, 80, 70, 255))
+        elif v == 2:  # 粉白小花
+            for i, (x, y) in enumerate(((4, 5), (9, 3), (12, 6), (7, 6))):
+                c.px(x, y, (248, 202, 218, 255) if i % 2 else (244, 240, 235, 255))
+        c.add_silhouette_outline()
+        frames.append(c)
+    save_strip(frames, "bush.png")
+
+
+def gen_petal():
+    """樱花花瓣 x2 帧（飘落翻转，无描边保持轻盈）。8x8@1x -> 16x16。"""
+    frames = []
+    for f in range(2):
+        c = C(8, 8)
+        if f == 0:
+            c.px(3, 3, (248, 202, 218, 255))
+            c.px(4, 3, (232, 158, 186, 255))
+            c.px(3, 4, (232, 158, 186, 255))
+        else:
+            c.px(3, 3, (248, 202, 218, 255))
+            c.px(4, 4, (232, 158, 186, 255))
+        frames.append(c)
+    save_strip(frames, "effect_petal.png")
+
+
 def gen_butterfly():
     """蝴蝶：2 帧扇翅（运行时 tint 出多色）。"""
     frames = []
@@ -1176,6 +1348,8 @@ def main():
     gen_book_stand()
     gen_bench()
     gen_signpost()
+    gen_bush()
+    gen_petal()
     gen_butterfly()
     gen_glow()
     gen_clouds()

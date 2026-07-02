@@ -3,7 +3,7 @@
  * + 成员按锚区规则站位/游荡 + hover tooltip + 状态气泡。只读。
  */
 import Phaser from 'phaser'
-import { TILES } from '../assetManifest'
+import { TILES, TREE_VARIANTS } from '../assetManifest'
 import { bgmTracks, urlForAsset, type BgmTrack } from '../assets'
 import { MemberActor } from '../actors/MemberActor'
 import { createWorldAnims, preloadWorldAssets } from './assetSetup'
@@ -23,10 +23,13 @@ import {
   mulberry32,
   workshopSlotPos,
   workshopZone,
+  workshopBenchSeat,
+  type Point,
   type Rect,
 } from '../world/layout'
 import {
   BENCH_POSITIONS,
+  BUTTERFLY_HOMES,
   BUTTERFLY_TINTS,
   LIBRARY_BANNER_POINTS,
   LIBRARY_BOOK_STAND_POINTS,
@@ -40,6 +43,7 @@ import {
   SPAWN_LAMP_TILES,
   WORKSHOP_STREET_LAMPS,
   generateGroundMap,
+  type ButterflyHome,
 } from '../world/map'
 import { skinFor } from '../world/skins'
 import { WorldStore, type WorldEvent, type WorldMember, type WorldSnapshot } from '../world/store'
@@ -84,7 +88,7 @@ export class WorldScene extends Phaser.Scene {
   private waterTiles: { x: number; y: number; startsAsA: boolean }[] = []
   private waterFlip = false
   private lamps: Phaser.GameObjects.Image[] = []
-  private butterflies: { sprite: Phaser.GameObjects.Sprite; tx: number; ty: number; phase: number }[] = []
+  private butterflies: { sprite: Phaser.GameObjects.Sprite; tx: number; ty: number; phase: number; home: ButterflyHome }[] = []
   /** 夜深度 0..1（昼夜系统每分钟更新，光晕/萤火虫/蝴蝶联动） */
   private nightness = 0
   private worldHour = 12
@@ -96,9 +100,14 @@ export class WorldScene extends Phaser.Scene {
   private firefliesVisible = false
   /** 作坊地坪光效（替代 12 条独立 Phaser tween，统一在 update() 里 sin 驱动） */
   private workshopPads: { img: Phaser.GameObjects.Image; phase: number; halfPeriod: number }[] = []
-  /** 烟雾 / 火花对象池，复用 Sprite 避免频繁 GC */
+  /** 烟雾 / 火花 / 花瓣对象池，复用 Sprite 避免频繁 GC */
   private smokePool: Phaser.GameObjects.Sprite[] = []
   private sparklePool: Phaser.GameObjects.Sprite[] = []
+  private petalPool: Phaser.GameObjects.Sprite[] = []
+  /** 树冠微风摇曳（统一在 update() 里 sin 驱动，不用独立 tween） */
+  private swayTrees: { img: Phaser.GameObjects.Image; phase: number; amp: number }[] = []
+  /** 樱花树位置：花瓣飘落粒子的发射源 */
+  private sakuraSpots: { x: number; y: number; scale: number }[] = []
   /** tooltip 对象缓存：同一对象内移动时跳过 tooltipFor() 重新计算 */
   private _lastTooltipTarget: Phaser.GameObjects.GameObject | null = null
   private _lastTooltipData: TooltipData | null = null
@@ -567,11 +576,29 @@ export class WorldScene extends Phaser.Scene {
     // Phaser 4 可能返回 GPU layer；二者 putTileAt/getTileAt 同接口
     if (tiles) this.groundLayer = (map.createLayer(0, tiles, 0, 0) ?? null) as Phaser.Tilemaps.TilemapLayer | null
 
-    // 沿边与空地点树（避开建筑、道路带）
-    for (const { x, y } of ground.treePositions) {
-      const tree = this.add.image(x, y, 'tree.png', 0)
-      tree.setOrigin(0.5, 0.92)
-      tree.setDepth(y)
+    // 树木：4 变体（橡树/松树/白桦/樱花）+ 随机缩放/镜像，
+    // 边缘林带环抱小镇 + 内部树丛（分布由 map.ts scatterTrees 生成）
+    for (const t of ground.trees) {
+      const tree = this.add.image(t.x, t.y, 'tree.png', t.variant)
+      tree.setOrigin(0.5, 0.94)
+      tree.setScale(t.scale)
+      tree.setFlipX(t.flip)
+      tree.setDepth(t.y)
+      // 微风摇曳：以树干底为轴轻摆，相位按坐标错开；针叶树更"硬"幅度减半
+      this.swayTrees.push({
+        img: tree,
+        phase: (t.x * 0.037 + t.y * 0.021) % (Math.PI * 2),
+        amp: t.variant === TREE_VARIANTS.pine ? 0.55 : 1.1,
+      })
+      if (t.variant === TREE_VARIANTS.sakura) this.sakuraSpots.push({ x: t.x, y: t.y, scale: t.scale })
+    }
+    // 灌木丛：树脚伴生 + 草地独立小簇（深度按 y 排序，与树/角色自然遮挡）
+    for (const b of ground.bushes) {
+      const bush = this.add.image(b.x, b.y, 'bush.png', b.variant)
+      bush.setOrigin(0.5, 0.9)
+      bush.setScale(b.scale)
+      bush.setFlipX(b.flip)
+      bush.setDepth(b.y)
     }
     // 池塘波动：水面格子每 750ms 切帧（每次都真正切换，不再跳帧）
     this.time.addEvent({
@@ -631,27 +658,45 @@ export class WorldScene extends Phaser.Scene {
     deco('signpost.png', SIGNPOST_POS.x, SIGNPOST_POS.y)
     // 广场长椅：落在图书馆和作坊前方的石板街边。
     for (const pos of BENCH_POSITIONS) deco('bench.png', pos.x, pos.y)
-    // 蝴蝶：花丛间飞舞
+    // 蝴蝶：每只绑定一个分散在全图花草区的"家园"，只在家园半径内游荡，
+    // 不再全图直线穿越（原来的目标全图均匀随机，导致航线都挤在地图中部）
     const rnd = mulberry32(99)
-    for (let i = 0; i < 6; i++) {
-      const sprite = this.add.sprite(160 + rnd() * (WORLD_W - 320), 160 + rnd() * (WORLD_H - 320), 'butterfly.png', 0)
+    const addButterfly = (home: ButterflyHome, tint: number, scale: number) => {
+      const sprite = this.add.sprite(
+        home.x + (rnd() - 0.5) * home.r,
+        home.y + (rnd() - 0.5) * home.r,
+        'butterfly.png', 0,
+      )
       sprite.play('butterfly.png:loop')
-      sprite.setTint(BUTTERFLY_TINTS[i % BUTTERFLY_TINTS.length])
-      sprite.setDepth(95000)
-      this.butterflies.push({ sprite, tx: sprite.x, ty: sprite.y, phase: rnd() * Math.PI * 2 })
-    }
-    for (let i = 0; i < SPAWN_BUTTERFLY_POINTS.length; i++) {
-      const pos = SPAWN_BUTTERFLY_POINTS[i]
-      const sprite = this.add.sprite(pos.x, pos.y, 'butterfly.png', 0)
-      sprite.play('butterfly.png:loop')
-      sprite.setTint(BUTTERFLY_TINTS[(i + 1) % BUTTERFLY_TINTS.length])
-      sprite.setScale(1.15)
+      sprite.setTint(tint)
+      sprite.setScale(scale)
       sprite.setDepth(95000)
       this.butterflies.push({
         sprite,
-        tx: pos.x + (rnd() - 0.5) * 44,
-        ty: pos.y + (rnd() - 0.5) * 34,
+        tx: home.x + (rnd() - 0.5) * home.r,
+        ty: home.y + (rnd() - 0.5) * home.r,
         phase: rnd() * Math.PI * 2,
+        home,
+      })
+    }
+    BUTTERFLY_HOMES.forEach((home, i) => {
+      addButterfly(home, BUTTERFLY_TINTS[i % BUTTERFLY_TINTS.length], 0.95 + rnd() * 0.3)
+      // 隔一个家园多放一只，形成 1~2 只的小群
+      if (i % 2 === 0) addButterfly(home, BUTTERFLY_TINTS[(i + 2) % BUTTERFLY_TINTS.length], 0.9 + rnd() * 0.25)
+    })
+    SPAWN_BUTTERFLY_POINTS.forEach((pos, i) => {
+      addButterfly({ ...pos, r: 46 }, BUTTERFLY_TINTS[(i + 1) % BUTTERFLY_TINTS.length], 1.15)
+    })
+    // 樱花树飘落花瓣（白天与黄昏；深夜看不见就不发射）
+    if (this.sakuraSpots.length) {
+      this.time.addEvent({
+        delay: 640,
+        loop: true,
+        callback: () => {
+          if (this.nightness > 0.6) return
+          const s = this.sakuraSpots[Math.floor(Math.random() * this.sakuraSpots.length)]
+          this.spawnPetal(s)
+        },
       })
     }
     // 作坊执行任务时（reconcile 标记 active）烟囱冒烟
@@ -857,6 +902,29 @@ export class WorldScene extends Phaser.Scene {
       onComplete: () => {
         s.setActive(false).setVisible(false)
         this.smokePool.push(s)
+      },
+    })
+  }
+
+  /** 樱花花瓣：从树冠飘落，左右摇摆 + 渐隐（对象池复用） */
+  private spawnPetal(spot: { x: number; y: number; scale: number }) {
+    if (!this.introDone) return
+    const startX = spot.x + (Math.random() - 0.5) * 34 * spot.scale
+    const startY = spot.y - (34 + Math.random() * 18) * spot.scale
+    const p = this.petalPool.pop() ?? this.add.sprite(0, 0, 'effect_petal.png', 0)
+    p.setPosition(startX, startY).setAlpha(0.95).setActive(true).setVisible(true).setDepth(spot.y + 1)
+    p.play('effect_petal.png:loop')
+    const drift = (Math.random() - 0.5) * 30
+    this.tweens.add({
+      targets: p,
+      y: startY + 40 + Math.random() * 22,
+      x: startX + drift,
+      alpha: 0,
+      duration: 2200 + Math.random() * 900,
+      ease: 'Sine.easeIn',
+      onComplete: () => {
+        p.setActive(false).setVisible(false)
+        this.petalPool.push(p)
       },
     })
   }
@@ -1284,14 +1352,29 @@ export class WorldScene extends Phaser.Scene {
         continue
       }
       const skin = skinFor(m.role, m.id, m.skin)
+      const lockedSeat = this.getLockedBenchSeat(m)
       const zone = this.anchorFor(m)
       let actor = existing
       if (actor) {
         actor.setMember(m, skin)
-        actor.setAnchor(zone)
+        if (lockedSeat) {
+          actor.lockSitOnBench(lockedSeat)
+        } else {
+          if (actor.isBenchLocked) actor.unlockBench()
+          actor.setAnchor(zone)
+        }
       } else {
-        actor = new MemberActor(this, m, skin, zone)
+        // 新建时用一个小区域避免 walkablePointIn 报错，lock 后会立即定位
+        const initZone = lockedSeat
+          ? { x: lockedSeat.x - 2, y: lockedSeat.y - 2, w: 4, h: 4 }
+          : zone
+        actor = new MemberActor(this, m, skin, initZone)
         actor.setMember(m, skin)
+        if (lockedSeat) {
+          actor.lockSitOnBench(lockedSeat)
+        } else {
+          actor.setAnchor(zone)
+        }
         this.input.setDraggable(actor)
         this.actors.set(m.id, actor)
       }
@@ -1328,29 +1411,34 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** §4.3 锚区规则：自上而下取第一条命中 */
+  /** §4.3 锚区规则：自上而下取第一条命中。
+   *  绑定到设备的 AI 成员始终在对应设备边上；
+   *  离线设备时通过 getLockedBenchSeat + lockSitOnBench 锁死坐在前方长椅上。
+   */
   private anchorFor(m: WorldMember): Rect {
     if (m.role === 'core_admin') return ZONES.plaza
     if (m.role === 'librarian') return ZONES.library
     if (m.role === 'assistant_admin') return ZONES.wanderAll
-    const boundAgent = m.boundAgentIds.find(id => this.workshops.get(id)?.offlineSince === null)
-    if (boundAgent !== undefined) {
-      const view = this.workshops.get(boundAgent)
+    // 绑定设备（在线或离线）→ 坐在设备门口区
+    const boundDeviceId = m.boundAgentIds.find(id => this.workshops.has(id))
+    if (boundDeviceId !== undefined) {
+      const view = this.workshops.get(boundDeviceId)
       if (view) return view.data.type === 'workshop' ? ZONES.library : workshopZone(view.slot)
     }
-    // 已绑定作坊但全部离线时，成员回到出生地等待重连。
-    let hasOfflineBinding = m.boundAgentIds.length > 0
-    if (!hasOfflineBinding) {
-      for (const view of this.workshops.values()) {
-        if (view.offlineSince !== null && view.data.aiConfigId === m.id) {
-          hasOfflineBinding = true
-          break
-        }
-      }
-    }
-    if (hasOfflineBinding) return ZONES.spawn
     if (!m.projectId || m.lifecycle === 'learning') return ZONES.spawn
     return ZONES.wanderAll
+  }
+
+  /** 离线设备绑定：返回对应的长椅就坐位置（只有 slot >=0 的普通设备有） */
+  private getLockedBenchSeat(m: WorldMember): Point | null {
+    if (!m.boundAgentIds?.length) return null
+    for (const deviceId of m.boundAgentIds) {
+      const view = this.workshops.get(deviceId)
+      if (view && view.offlineSince !== null && view.data.aiConfigId === m.id && view.slot >= 0) {
+        return workshopBenchSeat(view.slot)
+      }
+    }
+    return null
   }
 
   private reconcileWorkshops(snap: WorldSnapshot) {
@@ -1520,6 +1608,10 @@ export class WorldScene extends Phaser.Scene {
       p.img.setAlpha(0.12 + pulse * 0.10)
       p.img.setScale(3.4 + pulse * 0.5, 1.05)
     }
+    // 树冠微风摇曳：以树干底为轴的极小角度摆动，相位错开避免整片同步
+    for (const t of this.swayTrees) {
+      t.img.setAngle(Math.sin(time / 1400 + t.phase) * t.amp)
+    }
     // 蝴蝶：白天飘向目标 + 正弦浮动；夜间一次性隐去后不再每帧更新
     const day = 1 - this.nightness
     if (day >= 0.05) {
@@ -1530,8 +1622,9 @@ export class WorldScene extends Phaser.Scene {
         const dy = b.ty - b.sprite.y
         const dist = Math.hypot(dx, dy)
         if (dist < 6) {
-          b.tx = 120 + Math.random() * (WORLD_W - 240)
-          b.ty = 120 + Math.random() * (WORLD_H - 240)
+          // 只在自己家园半径内选新目标，避免全图横穿挤在地图中部
+          b.tx = Math.min(Math.max(b.home.x + (Math.random() * 2 - 1) * b.home.r, 40), WORLD_W - 40)
+          b.ty = Math.min(Math.max(b.home.y + (Math.random() * 2 - 1) * b.home.r, 60), WORLD_H - 40)
         } else {
           const step = (26 * delta) / 1000
           b.sprite.x += (dx / dist) * step

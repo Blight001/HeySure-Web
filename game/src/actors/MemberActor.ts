@@ -118,6 +118,10 @@ export class MemberActor extends Phaser.GameObjects.Container {
   /** 角色当前朝向：驱动挎包挂在身体哪一侧（转身时同步切换） */
   private facing: 'down' | 'up' | 'left' | 'right' = 'down'
 
+  /** 离线设备锁死状态：强制坐在对应作坊前方的长椅上，不游荡 */
+  private benchLocked = false
+  private benchSeat: Point | null = null
+
   constructor(scene: Phaser.Scene, member: WorldMember, skin: string, zone: Rect) {
     const start = walkablePointIn(zone)
     super(scene, start.x, start.y)
@@ -227,6 +231,14 @@ export class MemberActor extends Phaser.GameObjects.Container {
   endDrag() {
     this.dragging = false
     this.setAlpha(this.member.enabled ? 1 : 0.75)
+    if (this.benchLocked && this.benchSeat) {
+      // 锁死时拖拽结束后立刻弹回长椅
+      this.setPosition(this.benchSeat.x, this.benchSeat.y)
+      this.sprite.stop()
+      this.sprite.setFrame(17)
+      this.target = null
+      return
+    }
     // 回到锚区（从拖放点走回去，调度可见）
     this.target = walkablePointIn(this.zone)
   }
@@ -241,6 +253,11 @@ export class MemberActor extends Phaser.GameObjects.Container {
     this.controlled = on
     this.controlVx = 0
     this.controlVy = 0
+    if (this.benchLocked) {
+      // 锁死长椅时忽略接管请求，保持坐姿
+      this.refreshTokenBar()
+      return
+    }
     if (on) {
       this.target = null
       this.via = null
@@ -263,6 +280,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
   setStationary(on: boolean) {
     if (this.stationary === on) return
     this.stationary = on
+    if (this.benchLocked) return // 离线锁死优先，不被对话驻足覆盖
     if (on) {
       this.target = null
       this.via = null
@@ -324,6 +342,15 @@ export class MemberActor extends Phaser.GameObjects.Container {
     } else {
       this.sprite.setAlpha(1)
     }
+
+    // 离线锁死长椅：即使 enabled 也强制坐姿 + 定位（覆盖任何其他帧）
+    if (this.benchLocked && this.benchSeat && !this.dying) {
+      this.setPosition(this.benchSeat.x, this.benchSeat.y)
+      this.target = null
+      this.stopBob()
+      this.sprite.stop()
+      this.sprite.setFrame(17)
+    }
   }
 
   /** 应用外观自定义（调色 / 体型 / 光环）；抽屉调参时也用于实时预览 */
@@ -372,6 +399,7 @@ export class MemberActor extends Phaser.GameObjects.Container {
   }
 
   setAnchor(zone: Rect) {
+    if (this.benchLocked) return // 离线锁死长椅，不接受锚区游荡
     if (zone === this.zone) return
     this.zone = zone
     // 玩家接管时不被锚区拉走
@@ -379,6 +407,33 @@ export class MemberActor extends Phaser.GameObjects.Container {
     // 锚区变化：走过去（不瞬移，让调度可见）
     this.target = walkablePointIn(zone)
     this.idleUntil = 0
+  }
+
+  /** 锁死坐在指定长椅位置（离线设备专用）。会清除游荡目标并强制坐姿帧。 */
+  lockSitOnBench(seat: Point) {
+    if (this.dying || this.dragging) return
+    this.benchLocked = true
+    this.benchSeat = { x: seat.x, y: seat.y }
+    this.target = null
+    this.via = null
+    this.idleUntil = Number.MAX_SAFE_INTEGER
+    this.idlePhaseUntil = Number.MAX_SAFE_INTEGER
+    this.stopBob()
+    this.setPosition(seat.x, seat.y)
+    this.sprite.stop()
+    this.sprite.setFrame(17) // sit
+    this.refreshEmote()
+  }
+
+  /** 解除长椅锁死（设备恢复在线后由场景调用） */
+  unlockBench() {
+    this.benchLocked = false
+    this.benchSeat = null
+    // idleUntil 等由后续 setAnchor 处理
+  }
+
+  get isBenchLocked(): boolean {
+    return this.benchLocked
   }
 
   private refreshBag() {
@@ -430,7 +485,8 @@ export class MemberActor extends Phaser.GameObjects.Container {
     if (Date.now() < this.emoteOverrideUntil) return
     const m = this.member
     let kind: EmoteKind = null
-    if (m.taskStatus === 'running') kind = null
+    if (this.benchLocked) kind = 'zzz'  // 离线锁死坐着时显示睡觉表情
+    else if (m.taskStatus === 'running') kind = null
     else if (!m.enabled) kind = 'zzz'
     else if (m.tokenLimit > 0 && m.tokensUsed / m.tokenLimit >= 0.9) kind = 'hourglass'
     else if (m.runtimeStatus === 'running') kind = 'scroll'
@@ -614,6 +670,20 @@ export class MemberActor extends Phaser.GameObjects.Container {
       this.syncDepth()
       return true
     }
+
+    // 离线设备锁死：强制定位到长椅 + 坐姿，不允许自治移动
+    if (this.benchLocked) {
+      if (this.benchSeat) {
+        this.x = this.benchSeat.x
+        this.y = this.benchSeat.y
+      }
+      this.sprite.stop()
+      this.sprite.setFrame(17) // 强制坐
+      this.syncDepth()
+      this.syncBag()
+      return true
+    }
+
     // 玩家接管：用 WSAD 速度移动，跳过自治游荡
     if (this.controlled) {
       if (this.controlVx !== 0 || this.controlVy !== 0) {

@@ -1,4 +1,4 @@
-import { TILES } from '../assetManifest'
+import { TILES, TREE_VARIANTS } from '../assetManifest'
 import {
   FIXED_BUILDINGS,
   MAP_H,
@@ -15,10 +15,25 @@ import {
   type Rect,
 } from './layout'
 
+export interface TreeSpot extends Point {
+  /** tree.png 帧索引（TREE_VARIANTS） */
+  variant: number
+  scale: number
+  flip: boolean
+}
+
+export interface BushSpot extends Point {
+  /** bush.png 帧索引（0 圆灌木 / 1 浆果 / 2 花灌木） */
+  variant: number
+  scale: number
+  flip: boolean
+}
+
 export interface GroundMap {
   grid: number[][]
   waterTiles: Point[]
-  treePositions: Point[]
+  trees: TreeSpot[]
+  bushes: BushSpot[]
 }
 
 export interface NightGlowSource extends Point {
@@ -96,6 +111,23 @@ export const SPAWN_BUTTERFLY_POINTS: Point[] = [
   { x: 246, y: 674 },
   { x: 299, y: 811 },
 ] as const
+
+export interface ButterflyHome extends Point {
+  /** 游荡半径（像素）：蝴蝶只在自己家园附近选新目标，不再全图直线穿越 */
+  r: number
+}
+
+/** 蝴蝶家园：分散在全图各处的花草区（避开作坊街与建筑），每处 1~2 只 */
+export const BUTTERFLY_HOMES: ButterflyHome[] = [
+  { x: 250, y: 210, r: 110 }, // 池塘畔花甸
+  { x: 610, y: 150, r: 130 }, // 北部草原
+  { x: 1060, y: 170, r: 120 }, // 东北草地
+  { x: 1330, y: 430, r: 90 }, // 东缘林间
+  { x: 1240, y: 860, r: 110 }, // 东南草甸
+  { x: 780, y: 895, r: 120 }, // 南部草地
+  { x: 470, y: 870, r: 100 }, // 西南绿地
+  { x: 330, y: 630, r: 80 }, // 图书馆南侧
+] as const
 // 图书馆四周装饰精简：每类仅保留一对，避免广场过于拥挤。
 export const LIBRARY_CORE_LAMP_POINTS: Point[] = [
   { x: LIBRARY_DEVICE_POS.x - 112, y: LIBRARY_DEVICE_POS.y + 40 },
@@ -155,27 +187,66 @@ export const generateGroundMap = (): GroundMap => {
   paveRoads(path)
   decorateSpawnGround(grid, rnd)
 
+  const trees = scatterTrees(grid)
   return {
     grid,
     waterTiles,
-    treePositions: scatterTrees(grid),
+    trees,
+    bushes: scatterBushes(grid, trees),
+  }
+}
+
+/** 低频值噪声：粗网格随机值 + smoothstep 双线性插值，让草色/花丛成片分布而非均匀噪点 */
+const makeValueNoise = (seed: number, cell: number) => {
+  const rnd = mulberry32(seed)
+  const gw = Math.ceil(MAP_W / cell) + 2
+  const gh = Math.ceil(MAP_H / cell) + 2
+  const g: number[][] = Array.from({ length: gh }, () => Array.from({ length: gw }, () => rnd()))
+  return (x: number, y: number): number => {
+    const fx = x / cell
+    const fy = y / cell
+    const x0 = Math.floor(fx)
+    const y0 = Math.floor(fy)
+    const tx = fx - x0
+    const ty = fy - y0
+    const sx = tx * tx * (3 - 2 * tx)
+    const sy = ty * ty * (3 - 2 * ty)
+    const a = g[y0][x0] * (1 - sx) + g[y0][x0 + 1] * sx
+    const b = g[y0 + 1][x0] * (1 - sx) + g[y0 + 1][x0 + 1] * sx
+    return a * (1 - sy) + b * sy
   }
 }
 
 const createGrassField = (rnd: () => number): number[][] => {
+  const shade = makeValueNoise(101, 6) // 草色明暗成片（草甸/浅草/深草过渡）
+  const meadow = makeValueNoise(202, 5) // 花甸分布（高值区聚成花丛）
   const grid: number[][] = []
   for (let y = 0; y < MAP_H; y++) {
     const row: number[] = []
     for (let x = 0; x < MAP_W; x++) {
+      const s = shade(x, y)
+      const m = meadow(x, y)
       const r = rnd()
-      let t: number = TILES.grassA
-      if (r > 0.93) t = TILES.flowerYellow
-      else if (r > 0.88) t = TILES.flowerRed
-      else if (r > 0.8) t = TILES.tallGrass
-      else if (r > 0.55) t = TILES.grassB
-      else if (r > 0.35) t = TILES.grassC
-      else if (r > 0.33) t = TILES.bush
-      else if (r > 0.31) t = TILES.stone
+      // 基底草色按低频噪声成片
+      let t: number =
+        s < 0.34 ? TILES.grassC :
+        s < 0.62 ? TILES.grassA :
+        s < 0.86 ? TILES.grassB : TILES.grassDark
+      if (m > 0.72) {
+        // 花甸核心：红/黄/蓝白野花混开，间杂高草
+        if (r > 0.5) t = [TILES.flowerRed, TILES.flowerYellow, TILES.flowerBlue][Math.floor(rnd() * 3)]
+        else if (r > 0.3) t = TILES.tallGrass
+      } else if (m > 0.64 && r > 0.7) {
+        // 花甸边缘：高草过渡
+        t = TILES.tallGrass
+      } else {
+        // 零星点缀：蘑菇/灌木/碎石/嫩芽/落叶
+        if (r > 0.985) t = TILES.mushroom
+        else if (r > 0.97) t = TILES.bush
+        else if (r > 0.955) t = TILES.stone
+        else if (r > 0.94) t = TILES.sprout
+        else if (r > 0.928) t = TILES.leafLitter
+      }
       row.push(t)
     }
     grid.push(row)
@@ -278,25 +349,117 @@ const decorateSpawnGround = (grid: number[][], rnd: () => number) => {
   }
 }
 
-const scatterTrees = (grid: number[][]): Point[] => {
+/** 种植禁区：建筑/广场/主街一带不长树与灌木 */
+const PLANT_BLOCKED: Rect[] = [
+  { x: 100, y: 330, w: 400, h: 470 }, // 图书馆与出生地一带
+  { x: 400, y: 250, w: 860, h: 540 }, // 作坊街区与主街
+  { x: 60, y: 90, w: 360, h: 300 }, // 池塘
+]
+
+const inPlantBlocked = (px: number, py: number) =>
+  PLANT_BLOCKED.some(b => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h)
+
+const plantGroundOk = (grid: number[][], px: number, py: number): boolean => {
+  const t = grid[Math.floor(py / TILE)]?.[Math.floor(px / TILE)]
+  return t !== undefined && t !== TILES.path && t !== TILES.waterA && t !== TILES.waterB && t !== TILES.plazaA && t !== TILES.plazaB
+}
+
+const scatterTrees = (grid: number[][]): TreeSpot[] => {
   const rnd = mulberry32(7)
-  const blocked: Rect[] = [
-    { x: 100, y: 330, w: 400, h: 470 }, // 图书馆与出生地一带
-    { x: 400, y: 250, w: 860, h: 540 }, // 作坊街区与主街
-    { x: 60, y: 90, w: 360, h: 300 }, // 池塘
-  ]
-  const inBlocked = (px: number, py: number) =>
-    blocked.some(b => px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h)
-  const treePositions: Point[] = []
-  for (let i = 0; i < 80; i++) {
-    const px = 40 + rnd() * (WORLD_W - 80)
-    const py = 60 + rnd() * (WORLD_H - 120)
-    const ty = Math.floor(py / TILE)
-    const tx = Math.floor(px / TILE)
-    if (inBlocked(px, py)) continue
-    const t = grid[ty]?.[tx]
-    if (t === TILES.path || t === TILES.waterA || t === TILES.waterB || t === TILES.plazaA || t === TILES.plazaB) continue
-    treePositions.push({ x: px, y: py })
+  const trees: TreeSpot[] = []
+  const usedTiles = new Set<string>()
+
+  const tryPlant = (px: number, py: number, variant: number, scale: number, force = false) => {
+    if (!force && inPlantBlocked(px, py)) return
+    if (!plantGroundOk(grid, px, py)) return
+    // 同一瓦片只种一棵，避免树冠完全重叠成一团
+    const key = `${Math.floor(px / TILE)},${Math.floor(py / TILE)}`
+    if (usedTiles.has(key)) return
+    usedTiles.add(key)
+    trees.push({ x: px, y: py, variant, scale, flip: rnd() > 0.5 })
   }
-  return treePositions
+
+  // 边缘林带偏针叶/橡树（森林感），内部偏阔叶；樱花全图稀有点缀
+  const pickVariant = (edge: boolean): number => {
+    const r = rnd()
+    if (edge) {
+      if (r < 0.45) return TREE_VARIANTS.pine
+      if (r < 0.82) return TREE_VARIANTS.oak
+      if (r < 0.96) return TREE_VARIANTS.birch
+      return TREE_VARIANTS.sakura
+    }
+    if (r < 0.36) return TREE_VARIANTS.oak
+    if (r < 0.62) return TREE_VARIANTS.birch
+    if (r < 0.92) return TREE_VARIANTS.pine
+    return TREE_VARIANTS.sakura
+  }
+
+  // 1) 边缘林带：四周种树形成"森林环抱小镇"的边界；
+  //    间距随机并留 ~15% 缺口，避免排成整齐的树篱
+  for (let x = 30; x < WORLD_W - 20; x += 30 + rnd() * 42) {
+    if (rnd() > 0.85) continue
+    tryPlant(x + rnd() * 14, 84 + rnd() * 60, pickVariant(true), 1.05 + rnd() * 0.4)
+    if (rnd() > 0.85) continue
+    tryPlant(x + rnd() * 14, WORLD_H - 16 - rnd() * 52, pickVariant(true), 1.05 + rnd() * 0.4)
+  }
+  for (let y = 150; y < WORLD_H - 70; y += 34 + rnd() * 40) {
+    if (rnd() > 0.85) continue
+    tryPlant(24 + rnd() * 46, y + rnd() * 12, pickVariant(true), 1.0 + rnd() * 0.4)
+    if (rnd() > 0.85) continue
+    tryPlant(WORLD_W - 22 - rnd() * 50, y + rnd() * 12, pickVariant(true), 1.0 + rnd() * 0.4)
+  }
+  // 2) 内部树丛：随机丛心，每丛 2~5 棵聚成小林子（比均匀散点自然）
+  for (let g = 0; g < 22; g++) {
+    const cx = 70 + rnd() * (WORLD_W - 140)
+    const cy = 90 + rnd() * (WORLD_H - 180)
+    const n = 2 + Math.floor(rnd() * 4)
+    for (let i = 0; i < n; i++) {
+      tryPlant(cx + (rnd() - 0.5) * 170, cy + (rnd() - 0.5) * 130, pickVariant(false), 0.85 + rnd() * 0.45)
+    }
+  }
+  // 3) 零星独树填空
+  for (let i = 0; i < 26; i++) {
+    tryPlant(40 + rnd() * (WORLD_W - 80), 60 + rnd() * (WORLD_H - 120), pickVariant(false), 0.85 + rnd() * 0.4)
+  }
+  // 4) 手植地标樱花：池塘东南 + 出生地西北各一棵大树
+  tryPlant(392, 300, TREE_VARIANTS.sakura, 1.55)
+  tryPlant(88, 620, TREE_VARIANTS.sakura, 1.45, true)
+  return trees
+}
+
+/** 灌木丛：一部分簇拥在树脚下，一部分独立成小簇散在草地上 */
+const scatterBushes = (grid: number[][], trees: TreeSpot[]): BushSpot[] => {
+  const rnd = mulberry32(17)
+  const bushes: BushSpot[] = []
+
+  const tryPlant = (px: number, py: number, force = false) => {
+    if (!force && inPlantBlocked(px, py)) return
+    if (!plantGroundOk(grid, px, py)) return
+    bushes.push({
+      x: px,
+      y: py,
+      variant: Math.floor(rnd() * 3),
+      scale: 0.8 + rnd() * 0.5,
+      flip: rnd() > 0.5,
+    })
+  }
+
+  // 1) 约 1/3 的树脚下伴生 1~2 丛灌木（长在树前侧，深度排序天然在树冠之下）
+  for (const t of trees) {
+    if (rnd() > 0.34) continue
+    const n = 1 + Math.floor(rnd() * 2)
+    for (let i = 0; i < n; i++) {
+      tryPlant(t.x + (rnd() - 0.5) * 56, t.y + 8 + rnd() * 22)
+    }
+  }
+  // 2) 独立灌木小簇：草地上 2~3 丛一组
+  for (let g = 0; g < 14; g++) {
+    const cx = 60 + rnd() * (WORLD_W - 120)
+    const cy = 90 + rnd() * (WORLD_H - 170)
+    const n = 2 + Math.floor(rnd() * 2)
+    for (let i = 0; i < n; i++) {
+      tryPlant(cx + (rnd() - 0.5) * 60, cy + (rnd() - 0.5) * 44)
+    }
+  }
+  return bushes
 }

@@ -269,6 +269,7 @@ const openAllMcpToolsFromSystemSettings = async () => {
 const openAgentChat = (agent: Agent) => {
   if (!agent.aiConfigId) return
   chatTarget.value = agent
+  selectedFiles.value = []
   chatInitialSessionId.value = ''
   chatCurrentSessionId.value = ''
   chatTaskPlanRefreshSignal.value = 0
@@ -292,9 +293,22 @@ const chatTargetAiKind = computed<'assistant' | 'core'>(() => {
   return chatTarget.value?.aiRole === 'assistant_admin' ? 'assistant' : 'core'
 })
 
+const aiWorkspaceDirname = (agent: Agent | null) => {
+  if (!agent?.aiConfigId) return ''
+  if (agent.aiRole === 'digital_member' && agent.digitalMemberRole === 'manager') return ''
+  const raw = String(agent.name || '').trim().toLowerCase()
+  const slug = raw
+    .replace(/[^0-9a-z\u4e00-\u9fff]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/g, '') || 'ai'
+  return `${agent.aiConfigId}-${slug}`
+}
+
 const openAgentTaskDetail = (agent: Agent, jobId: string, sessionId?: string) => {
   if (!agent.aiConfigId || !jobId) return
   chatTarget.value = agent
+  selectedFiles.value = []
   chatInitialSessionId.value = String(sessionId || `session_task_${jobId}`).trim()
   chatCurrentSessionId.value = ''
   chatTaskPlanRefreshSignal.value = 0
@@ -633,6 +647,7 @@ onUnmounted(() => {
                 :mcpDynamicRule="mcpDynamicRule"
                 :selectedFiles="selectedFiles"
                 :allFiles="allFiles"
+                :selectable-file-root="aiWorkspaceDirname(chatTarget)"
                 @update:selectedFiles="selectedFiles = $event"
                 @update:currentSessionId="chatCurrentSessionId = $event"
                 @taskPlanRefresh="chatTaskPlanRefreshSignal = $event"

@@ -144,11 +144,6 @@ export const patchChatMessageTags = (messageId: number, tags: string) =>
     fallbackError: '更新消息状态失败',
   })
 
-export const getChatFileContent = (filenames: string[]) =>
-  post<Record<string, string>>('/api/chat/file-content', { filenames }, {
-    fallbackError: '读取文件内容失败',
-  })
-
 export const executeChatAction = (payload: {
   action: string
   filename?: string
