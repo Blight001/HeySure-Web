@@ -21,7 +21,7 @@ export const memberTooltipData = (member: WorldMember): TooltipData => {
     tokenRatio: ratio,
     tokenText: member.tokenLimit > 0 ? `${member.tokensUsed} / ${member.tokenLimit}` : `${member.tokensUsed}（无上限）`,
     rows: [
-      { label: '状态', value: member.enabled ? member.lifecycle : '已停用' },
+      { label: '状态', value: member.lifecycle },
       { label: '行为', value: member.currentBehavior },
       { label: '任务', value: member.taskTitle ? `${member.taskTitle}（${member.taskStatus}）` : '' },
       { label: '工具', value: member.runtimeStatus === 'running' ? member.runtimeTool : '' },

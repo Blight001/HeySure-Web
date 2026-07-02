@@ -37,12 +37,12 @@ export const openMemberPanel = (
     portrait,
     tabs: [
       { name: '派任务', build: () => memberTaskTab(panel, m) },
-      { name: '操作', build: () => memberOpsTab(panel, m) },
       { name: '端侧绑定', build: () => memberBindTab(panel, m, snap) },
       { name: '外观', build: () => appearanceSection(panel, m) },
     ],
   })
   renderMemberInfo(panel, m)
+  renderMemberActions(panel, m)
   renderMemberSpeech(panel, m)
   panel.setActiveMemberId(m.id)
 }
@@ -60,7 +60,7 @@ const renderMemberInfo = (panel: PanelController, m: WorldMember) => {
   }
   panel.rows(info, [
     ['token', m.tokenLimit > 0 ? `${m.tokensUsed} / ${m.tokenLimit}` : `${m.tokensUsed}（无上限）`],
-    ['状态', m.enabled ? m.lifecycle : '已停用'],
+    ['状态', m.lifecycle],
     ['行为', m.currentBehavior],
     ['任务', m.taskTitle ? `${m.taskTitle}（${m.taskStatus}）` : '无'],
     ['项目', m.projectName],
@@ -68,52 +68,52 @@ const renderMemberInfo = (panel: PanelController, m: WorldMember) => {
   ])
 }
 
+/** 有最近对话时才展开右侧栏；没有就整栏隐藏，不占空间 */
 const renderMemberSpeech = (panel: PanelController, m: WorldMember) => {
   const host = panel.sideHost
   host.innerHTML = ''
+  const text = speechPreview(m.latestSpeech)
+  if (!text) {
+    host.classList.remove('open')
+    return
+  }
   host.classList.add('open')
   const title = document.createElement('div')
   title.className = 'd-sec-title'
   title.textContent = '对话内容'
   host.appendChild(title)
-
-  const text = speechPreview(m.latestSpeech)
-  if (text) {
-    const pre = document.createElement('div')
-    pre.className = 'd-pre d-talk'
-    pre.textContent = text
-    host.appendChild(pre)
-  } else {
-    const empty = document.createElement('div')
-    empty.className = 'd-dim'
-    empty.textContent = '暂无对话内容'
-    host.appendChild(empty)
-  }
+  const pre = document.createElement('div')
+  pre.className = 'd-pre d-talk'
+  pre.textContent = text
+  host.appendChild(pre)
 }
 
-const memberOpsTab = (panel: PanelController, m: WorldMember) => {
-  const ops = panel.section('')
-  const fb = panel.feedback(ops)
-  const toggleBtn = document.createElement('button')
-  toggleBtn.type = 'button'
-  toggleBtn.className = `d-btn ${m.enabled ? 'warn' : 'ok'}`
-  toggleBtn.textContent = m.enabled ? '停用' : '启用'
-  toggleBtn.onclick = () =>
-    void panel.runAction(toggleBtn, fb, () => panel.actions.toggleRun(m.id), m.enabled ? '已停用' : '已启用')
-  ops.appendChild(toggleBtn)
+/** 头部快捷操作：对话 / 定位，不用切标签页 */
+const renderMemberActions = (panel: PanelController, m: WorldMember) => {
+  const host = panel.actionsHost
+  host.innerHTML = ''
+  const row = document.createElement('div')
+  row.className = 'd-btnrow'
+  const fb = document.createElement('div')
+
   const chatBtn = document.createElement('button')
   chatBtn.type = 'button'
   chatBtn.className = 'd-btn'
-  chatBtn.textContent = '打开对话'
+  chatBtn.textContent = '💬 对话'
+  chatBtn.title = '打开与该成员的对话'
   chatBtn.onclick = () => panel.actions.openChat(m.id)
-  ops.appendChild(chatBtn)
+  row.appendChild(chatBtn)
+
   const locateBtn = document.createElement('button')
   locateBtn.type = 'button'
   locateBtn.className = 'd-btn'
-  locateBtn.textContent = '📍 地图定位'
+  locateBtn.textContent = '📍 定位'
   locateBtn.title = '将镜头移到该成员位置'
   locateBtn.onclick = () => panel.actions.focusMember(m.id)
-  ops.appendChild(locateBtn)
+  row.appendChild(locateBtn)
+
+  host.appendChild(row)
+  host.appendChild(fb)
 }
 
 const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapshot) => {
@@ -122,17 +122,16 @@ const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapsh
   for (const deviceId of m.boundAgentIds) {
     const w = snap.workshops.find(x => x.deviceId === deviceId)
     const item = document.createElement('div')
-    item.className = 'd-item'
+    item.className = 'd-item d-flex'
     const label = document.createElement('span')
     label.textContent = `${w?.name || deviceId}（${workshopTypeLabel(w?.type)}）`
     const un = document.createElement('button')
     un.type = 'button'
     un.className = 'd-btn warn'
-    un.style.float = 'right'
     un.textContent = '解绑'
     un.onclick = () => void panel.runAction(un, bindFb, () => panel.actions.assignAgent(deviceId, null), '已解绑')
-    item.appendChild(un)
     item.appendChild(label)
+    item.appendChild(un)
     bind.appendChild(item)
   }
   const freeWorkshops = snap.workshops.filter(w => w.online && !m.boundAgentIds.includes(w.deviceId))
@@ -152,8 +151,11 @@ const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapsh
       if (!sel.value) return
       void panel.runAction(bd, bindFb, () => panel.actions.assignAgent(sel.value, m.id), '已绑定')
     }
-    bind.appendChild(sel)
-    bind.appendChild(bd)
+    const formRow = document.createElement('div')
+    formRow.className = 'd-formrow'
+    formRow.appendChild(sel)
+    formRow.appendChild(bd)
+    bind.appendChild(formRow)
   } else if (!m.boundAgentIds.length) {
     bind.innerHTML += `<div class="d-dim">当前无在线端侧 agent</div>`
   }
@@ -187,9 +189,13 @@ const memberTaskTab = (panel: PanelController, m: WorldMember) => {
       }
     })
   }
+  sendBtn.classList.add('grow')
+  const btnRow = document.createElement('div')
+  btnRow.className = 'd-btnrow'
+  btnRow.appendChild(sendBtn)
   task.appendChild(titleIn)
   task.appendChild(instrTa)
-  task.appendChild(sendBtn)
+  task.appendChild(btnRow)
 }
 
 /** 外观自定义面板：改动即在地图上实时预览，点"保存外观"才落库 */
@@ -329,7 +335,7 @@ const appearanceSection = (panel: PanelController, m: WorldMember) => {
   sec.appendChild(scaleWrap)
 
   const btnRow = document.createElement('div')
-  btnRow.style.marginTop = '8px'
+  btnRow.className = 'd-btnrow'
   const save = document.createElement('button')
   save.type = 'button'
   save.className = 'd-btn ok'

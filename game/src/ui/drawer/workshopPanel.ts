@@ -72,8 +72,11 @@ export const openWorkshopPanel = (
             const v = sel.value === '' ? null : Number(sel.value)
             void panel.runAction(btn, fb, () => panel.actions.assignAgent(w.deviceId, v), v === null ? '已解绑' : '已分配')
           }
-          assign.appendChild(sel)
-          assign.appendChild(btn)
+          const formRow = document.createElement('div')
+          formRow.className = 'd-formrow'
+          formRow.appendChild(sel)
+          formRow.appendChild(btn)
+          assign.appendChild(formRow)
           if (bound) {
             const hint = document.createElement('div')
             hint.className = 'd-dim'
@@ -196,13 +199,16 @@ const mcpScopeSection = (panel: PanelController, deviceId: string) => {
     }
     const save = document.createElement('button')
     save.type = 'button'
-    save.className = 'd-btn ok'
+    save.className = 'd-btn ok push'
     save.textContent = '保存 MCP 权限'
     save.onclick = () =>
       void panel.runAction(save, saveFb, () => panel.actions.saveDeviceMcpScope(deviceId, Array.from(selected)), 'MCP 权限已保存')
-    sec.appendChild(all)
-    sec.appendChild(none)
-    sec.appendChild(save)
+    const btnRow = document.createElement('div')
+    btnRow.className = 'd-btnrow'
+    btnRow.appendChild(all)
+    btnRow.appendChild(none)
+    btnRow.appendChild(save)
+    sec.appendChild(btnRow)
   }).catch(err => {
     fb.className = 'd-err'
     fb.textContent = err instanceof Error ? err.message : 'MCP 权限加载失败'

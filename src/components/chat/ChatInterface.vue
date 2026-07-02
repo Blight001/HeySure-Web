@@ -218,29 +218,22 @@ const copyFrontPrompt = async () => {
     console.warn('copy front prompt failed', error)
   }
 }
-// Live per-phase elapsed counters, updated by timeTick every 200 ms
-const liveMcpMs = computed(() => {
-  const base = mcpElapsedMs.value
-  if (currentRunPhase.value === 'waiting_mcp' && phaseEnterTs.value != null) {
-    return base + (timeTick.value - phaseEnterTs.value)
-  }
-  return base
-})
-const liveThinkMs = computed(() => {
-  const base = thinkElapsedMs.value
-  if (currentRunPhase.value === 'generating' && phaseEnterTs.value != null) {
-    return base + (timeTick.value - phaseEnterTs.value)
-  }
-  return base
+// Live elapsed of the CURRENT segment only, updated by timeTick every 200 ms.
+// The segment restarts on every phase change and on every MCP tool switch (see
+// resetSegmentTimer); per-phase totals still accumulate into mcpElapsedMs /
+// thinkElapsedMs for the post-run summary.
+const liveSegmentMs = computed(() => {
+  if (phaseEnterTs.value == null) return 0
+  return Math.max(0, timeTick.value - phaseEnterTs.value)
 })
 
 const runTimingText = computed(() => {
   if (isRunActive.value) {
     if (currentRunPhase.value === 'waiting_mcp') {
       const label = currentMcpTool.value ? `MCP: ${currentMcpTool.value}` : 'MCP 等待中'
-      return `${label} · ${formatDurationMs(liveMcpMs.value)}`
+      return `${label} · ${formatDurationMs(liveSegmentMs.value)}`
     }
-    return `AI 思考中 · ${formatDurationMs(liveThinkMs.value)}`
+    return `AI 思考中 · ${formatDurationMs(liveSegmentMs.value)}`
   }
   if (lastRunDurations.value) {
     const d = lastRunDurations.value

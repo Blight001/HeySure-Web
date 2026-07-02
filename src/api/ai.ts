@@ -75,8 +75,3 @@ export const updateAiConfigFields = (configId: number, payload: Partial<AiConfig
 
 export const deleteAiConfig = (configId: number) =>
   del<void>(`/api/ai/configs/${configId}`, { fallbackError: 'AI 删除失败' })
-
-export const toggleAiRun = (configId: number) =>
-  post<void>(`/api/ai/configs/${configId}/toggle-run`, undefined, {
-    fallbackError: 'AI 启停切换失败',
-  })

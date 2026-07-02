@@ -19,7 +19,6 @@ interface UseAiConfigManagementOptions {
   modelPresets: Ref<ModelPreset[]>
   normalizeSystemAutoControl: (raw: unknown) => any
   alert?: (options: { title?: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' }) => Promise<void>
-  onToggleAiRunByConfigId: (configId?: number) => Promise<void>
   onReloadAgents: () => Promise<void>
   onPatchChatTargetAutoApprove?: (configId: number, enabled: boolean) => void
 }
@@ -106,7 +105,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     modelPresets,
     normalizeSystemAutoControl,
     alert,
-    onToggleAiRunByConfigId,
     onReloadAgents,
     onPatchChatTargetAutoApprove,
   } = options
@@ -324,7 +322,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       model_preset_id: presetIdForModel(cfg.model_preset_id, cfg.model),
       model: cfg.model ?? aiConfigForm.value.model,
       prompt: cfg.prompt || '',
-      enabled: !!cfg.enabled,
       mcp_tools: parsedTools,
       mcp_auto_approve: !!aiConfigForm.value.mcp_auto_approve,
       bot_channel: cfg.bot_channel === 'qq' ? 'qq' : 'feishu',
@@ -359,7 +356,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       model_preset_id: presetIdForModel('', agent.model),
       model: agent.model || '',
       prompt: '',
-      enabled: !!agent.enabled,
       mcp_tools: parsedTools,
       mcp_auto_approve: !!agent.mcpAutoApprove,
       bot_channel: agent.botChannel === 'qq' ? 'qq' : 'feishu',
@@ -368,16 +364,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     }
     aiConfigModalOpen.value = true
     void loadAiConfigDetail(agent.aiConfigId)
-  }
-
-  const toggleAiRunInSettings = async () => {
-    if (!aiConfigForm.value?.id) return
-    await onToggleAiRunByConfigId(aiConfigForm.value.id)
-    if (typeof aiConfigForm.value.enabled === 'boolean') {
-      aiConfigForm.value.enabled = !aiConfigForm.value.enabled
-    } else {
-      aiConfigForm.value.enabled = true
-    }
   }
 
   const saveAiConfig = async () => {
@@ -529,7 +515,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     toggleAiConfigSettingsSection,
     openCreateAiConfig,
     openAgentSettings,
-    toggleAiRunInSettings,
     saveAiConfig,
     deleteAiConfig,
     onToolCheckboxChange,

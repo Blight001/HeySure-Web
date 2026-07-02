@@ -4,8 +4,8 @@
  * 布局：右侧抽屉，顶部头像 + 横排标签页 + 内容区（含可选的对话侧栏）。
  *
  * 设计原则（方案 §0①）：面板只是现有 REST 链路的调用方——
- * 启停=toggleAiRun、绑定=assignDeviceAi、审批=librarian approve/reject、
- * 派任务=task-trigger、皮肤=world meta。操作完成后 store.refreshNow()，
+ * 绑定=assignDeviceAi、审批=librarian approve/reject、派任务=task-trigger、
+ * 皮肤=world meta。操作完成后 store.refreshNow()，
  * 地图与主控制台两边自然同步。
  */
 import type { WorldMember, WorldSnapshot } from '../world/store'
@@ -28,11 +28,14 @@ export class Drawer implements PanelController {
   private portraitName: HTMLDivElement
   private portraitSub: HTMLDivElement
   private portraitInfo: HTMLDivElement
+  private actionsEl: HTMLDivElement
   private tabsEl: HTMLDivElement
   private bodyEl: HTMLDivElement
   private sideEl: HTMLDivElement
   /** 当前正文挂起的资源清理回调；切标签 / 关面板时统一执行并清空 */
   private cleanups: Array<() => void> = []
+  /** 关闭后延迟清空内容的定时器（等滑出动画结束，避免面板空着滑走） */
+  private clearTimer: number | null = null
   readonly actions: DrawerActions
 
   constructor(parent: HTMLElement, actions: DrawerActions) {
@@ -43,7 +46,7 @@ export class Drawer implements PanelController {
     this.el.className = 'gw-panel'
     this.el.innerHTML = `
       <div class="gp-rail">
-        <button class="gp-close" type="button">✕</button>
+        <button class="gp-close" type="button" title="关闭 (Esc)" aria-label="关闭">✕</button>
         <div class="gp-head">
           <div class="gp-port-frame"></div>
           <div class="gp-port-meta">
@@ -52,6 +55,7 @@ export class Drawer implements PanelController {
           </div>
         </div>
         <div class="gp-port-info"></div>
+        <div class="gp-actions"></div>
         <div class="gp-tabs"></div>
       </div>
       <div class="gp-main">
@@ -66,11 +70,15 @@ export class Drawer implements PanelController {
     this.portraitName = this.el.querySelector('.gp-port-name') as HTMLDivElement
     this.portraitSub = this.el.querySelector('.gp-port-sub') as HTMLDivElement
     this.portraitInfo = this.el.querySelector('.gp-port-info') as HTMLDivElement
+    this.actionsEl = this.el.querySelector('.gp-actions') as HTMLDivElement
     this.tabsEl = this.el.querySelector('.gp-tabs') as HTMLDivElement
     this.bodyEl = this.el.querySelector('.gp-body') as HTMLDivElement
     this.sideEl = this.el.querySelector('.gp-side') as HTMLDivElement
     this.host = this.bodyEl
     ;(this.el.querySelector('.gp-close') as HTMLButtonElement).onclick = () => this.close()
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && this.isOpen) this.close()
+    })
   }
 
   onCleanup(fn: () => void) {
@@ -87,11 +95,17 @@ export class Drawer implements PanelController {
     this.runCleanups()
     this.activeMemberId = null
     this.el.classList.remove('open')
-    this.bodyEl.innerHTML = ''
-    this.tabsEl.innerHTML = ''
-    this.portraitInfo.innerHTML = ''
-    this.sideEl.innerHTML = ''
-    this.sideEl.classList.remove('open')
+    // 内容等滑出动画（0.22s）结束再清空；期间若重新打开，openPanel 会取消该定时器
+    if (this.clearTimer !== null) window.clearTimeout(this.clearTimer)
+    this.clearTimer = window.setTimeout(() => {
+      this.clearTimer = null
+      this.bodyEl.innerHTML = ''
+      this.tabsEl.innerHTML = ''
+      this.portraitInfo.innerHTML = ''
+      this.actionsEl.innerHTML = ''
+      this.sideEl.innerHTML = ''
+      this.sideEl.classList.remove('open')
+    }, 240)
   }
 
   get isOpen(): boolean {
@@ -100,6 +114,10 @@ export class Drawer implements PanelController {
 
   get memberInfoHost(): HTMLElement {
     return this.portraitInfo
+  }
+
+  get actionsHost(): HTMLElement {
+    return this.actionsEl
   }
 
   get sideHost(): HTMLElement {
@@ -113,11 +131,16 @@ export class Drawer implements PanelController {
   /** 打开面板：设置头像 + 标题 + 标签页，默认展示第一栏。 */
   openPanel(opts: { title: string; subtitle?: string; portrait?: PortraitSpec | null; tabs: PanelTab[] }) {
     this.runCleanups()
+    if (this.clearTimer !== null) {
+      window.clearTimeout(this.clearTimer)
+      this.clearTimer = null
+    }
     this.activeMemberId = null
     this.portraitName.textContent = opts.title
     this.portraitSub.textContent = opts.subtitle || ''
     this.portraitFrame.innerHTML = ''
     this.portraitInfo.innerHTML = ''
+    this.actionsEl.innerHTML = ''
     this.sideEl.innerHTML = ''
     this.sideEl.classList.remove('open')
     if (opts.portrait) this.portraitFrame.appendChild(renderPortrait(opts.portrait, 52))

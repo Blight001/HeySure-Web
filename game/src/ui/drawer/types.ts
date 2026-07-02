@@ -21,7 +21,6 @@ export interface AppearanceDraft {
 }
 
 export interface DrawerActions {
-  toggleRun(aiConfigId: number): Promise<void>
   assignAgent(deviceId: string, aiConfigId: number | null): Promise<void>
   loadDeviceMcpScope(deviceId: string): Promise<DeviceMcpScopeView>
   saveDeviceMcpScope(deviceId: string, tools: string[]): Promise<void>
@@ -36,6 +35,8 @@ export interface DrawerActions {
 export interface PanelController {
   readonly actions: DrawerActions
   readonly memberInfoHost: HTMLElement
+  /** 头部快捷操作栏（信息区与标签页之间），高频操作不用切标签 */
+  readonly actionsHost: HTMLElement
   readonly sideHost: HTMLElement
   openPanel(opts: { title: string; subtitle?: string; portrait?: PortraitSpec | null; tabs: PanelTab[] }): void
   setActiveMemberId(id: WorldMember['id'] | null): void

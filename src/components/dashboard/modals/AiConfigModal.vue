@@ -22,7 +22,6 @@ interface Props {
   onToggleSettingsSection: (section: SettingsSection) => void
   // onToolCheckboxChange kept in signature for compatibility (Task modal / callers still use the composable)
   onToolCheckboxChange?: (tool: string, event: Event) => void
-  onToggleRun: () => void
   onToggleDeleteConfirm: () => void
   onSave: () => void
   onDelete: () => void
@@ -274,16 +273,6 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
 
         <div class="mt-5 flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <button
-              v-if="mode === 'edit'"
-              class="text-xs px-3 py-1.5 rounded border"
-              :class="form.enabled
-                ? 'text-red-600 border-red-200 bg-red-50 dark:text-red-300 dark:border-red-500/30 dark:bg-red-900/20'
-                : 'text-emerald-600 border-emerald-200 bg-emerald-50 dark:text-emerald-300 dark:border-emerald-500/30 dark:bg-emerald-900/20'"
-              @click="onToggleRun"
-            >
-              {{ form.enabled ? '停止 AI' : '启动 AI' }}
-            </button>
             <button
               v-if="mode === 'edit'"
               class="text-xs px-3 py-1.5 rounded border border-red-200 text-red-600 bg-red-50 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300"

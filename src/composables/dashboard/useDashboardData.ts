@@ -11,7 +11,7 @@ import type {
 } from '@/types'
 import { listEntries, type KnowledgeEntryItem } from '@/api/librarian'
 import { formatDate } from '@/utils/datetime'
-import { listAiCards, toggleAiRun } from '@/api/ai'
+import { listAiCards } from '@/api/ai'
 import {
   createProject as apiCreateProject,
   deleteProject as apiDeleteProject,
@@ -341,17 +341,6 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     await loadAIAgents()
   }
 
-  const toggleAiRunByConfigId = async (configId?: number) => {
-    if (!configId) return
-    if (!getAuthToken()) return
-    try {
-      await toggleAiRun(configId)
-    } catch {
-      // best-effort
-    }
-    await loadAIAgents()
-  }
-
   const applyMcpStatusLive = (payload: McpStatusPayload) => {
     const currentUserId = Number(getCurrentUserId())
     const payloadUserId = Number(payload?.userId)
@@ -598,7 +587,6 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     createProject,
     updateProject,
     deleteProject,
-    toggleAiRunByConfigId,
     addKnowledge,
     createSeedData,
     refreshDashboardLive,

@@ -1,4 +1,3 @@
-import { toggleAiRun } from '@/api/ai'
 import { assignDeviceAi, getDeviceMcpScope, setDeviceMcpScope } from '@/api/devices'
 import { getAuthToken } from '@/api/http'
 import { triggerTaskForAgent } from '@/api/task'
@@ -30,11 +29,6 @@ const defaultTaskPayload = (title: string, instruction: string) => ({
 })
 
 export const createDrawerActions = (deps: DrawerActionDeps): DrawerActions => ({
-  toggleRun: async id => {
-    await toggleAiRun(id)
-    await deps.refresh()
-    deps.reopenMember(id)
-  },
   assignAgent: async (deviceId, aiConfigId) => {
     await assignDeviceAi(deviceId, aiConfigId)
     await deps.refresh()

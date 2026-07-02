@@ -122,7 +122,6 @@ const {
   syncChatTokensToAgents,
   loadProjectContext,
   loadAIAgents,
-  toggleAiRunByConfigId,
   createSeedData,
   refreshDashboardLive,
 } = useDashboardData({
@@ -177,7 +176,6 @@ const {
   toggleAiConfigSettingsSection,
   openCreateAiConfig,
   openAgentSettings,
-  toggleAiRunInSettings,
   saveAiConfig,
   deleteAiConfig,
   onToolCheckboxChange,
@@ -188,7 +186,6 @@ const {
   modelPresets,
   normalizeSystemAutoControl,
   alert,
-  onToggleAiRunByConfigId: toggleAiRunByConfigId,
   onReloadAgents: loadAIAgents,
   onPatchChatTargetAutoApprove: (configId, enabled) => {
     const currentTarget = chatTarget.value
@@ -653,7 +650,6 @@ onUnmounted(() => {
       :on-close="() => aiConfigModalOpen = false"
       :on-toggle-settings-section="toggleAiConfigSettingsSection"
       :on-tool-checkbox-change="onToolCheckboxChange"
-      :on-toggle-run="toggleAiRunInSettings"
       :on-toggle-delete-confirm="() => aiConfigDeleteConfirm = !aiConfigDeleteConfirm"
       :on-save="saveAiConfigAndRefresh"
       :on-delete="deleteAiConfigAndRefresh"

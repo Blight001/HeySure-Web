@@ -1060,7 +1060,7 @@ const closeDetail = () => {
                         <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">ID {{ agent.id }}</span>
                         <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ agent.role }}</span>
                         <span v-if="agent.is_librarian" class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">图书管理员</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ agent.enabled ? '启用' : '停用' }}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">可用</span>
                         <button
                           v-if="agent.id && editingPersonaId !== agent.id"
                           type="button"

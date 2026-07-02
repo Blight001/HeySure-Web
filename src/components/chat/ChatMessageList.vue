@@ -36,35 +36,41 @@ const props = defineProps<{
 
 const renderItems = computed(() => buildChatRenderItems(props.messages))
 
+// Persisted messages carry created_at stamped when the message is SAVED, i.e.
+// at the END of the work it represents (thinking finishes → assistant message
+// saved; tool finishes → MCP bubble saved). So a message's segment duration is
+// its own created_at minus the previous message's created_at — never "until the
+// next message", which would attribute the following segment (e.g. an MCP run)
+// to this bubble. Only the live (unsaved) bubble counts up against `now`, and
+// its created_at is the segment start.
 const messageTimeLabels = computed<Record<number, string>>(() => {
   const labels: Record<number, string> = {}
   const now = Number(props.nowTimestamp || 0) || null
 
   const getMessageTimeMs = (message?: Message) => {
     const ts = Number(message?.created_at || 0)
-    return ts > 0 ? ts * 1000 : null
+    if (ts <= 0) return null
+    // Backend timestamps are epoch seconds; the live bubble passes epoch ms.
+    return ts > 1e12 ? ts : ts * 1000
   }
 
+  let prevEnd: number | null = null
   for (let idx = 0; idx < props.messages.length; idx += 1) {
     const current = props.messages[idx]
-    const start = getMessageTimeMs(current)
-    if (start == null) continue
+    const ts = getMessageTimeMs(current)
+    if (ts == null) continue
 
-    let end: number | null = null
-    for (let nextIdx = idx + 1; nextIdx < props.messages.length; nextIdx += 1) {
-      const nextStart = getMessageTimeMs(props.messages[nextIdx])
-      if (nextStart != null) {
-        end = nextStart
-        break
-      }
+    if (current.id === -1) {
+      // Live streaming bubble: created_at is the current segment's start.
+      if (now != null && now > ts) labels[idx] = formatDurationMs(now - ts)
+      continue
     }
 
-    if (end == null && now != null && now > start) {
-      end = now
+    if (prevEnd != null && ts > prevEnd) {
+      const duration = formatDurationMs(ts - prevEnd)
+      if (duration) labels[idx] = duration
     }
-
-    const duration = end != null && end > start ? formatDurationMs(end - start) : ''
-    if (duration) labels[idx] = duration
+    prevEnd = ts
   }
 
   return labels

@@ -79,7 +79,7 @@ cd web && npm install && npm run dev   # 拉取后先 npm install（游戏世界
 ```
 
 数据来自现有 REST 轮询（8s）+ Socket.IO 实时事件；**所有写操作 1:1 走现有接口**
-（启停=toggle-run、绑定=agents/bind、审批=librarian、派任务=task-trigger），
+（绑定=agents/bind、审批=librarian、派任务=task-trigger），
 外观（皮肤/调色/体型/光环）走 `/api/world/actors/*/meta`（表 `worldactormeta`，纯表现层）。
 锚区规则（谁站在哪）见设计方案 §4.3，实现在 `scenes/WorldScene.ts` 的 `anchorFor`。
 
