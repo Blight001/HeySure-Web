@@ -344,6 +344,7 @@ function resetSegmentTimer() {
 }
 
 const STATE_PREFIX = '__HS_MCP_STATE__='
+const ATTACHMENTS_PREFIX = '__HS_ATTACHMENTS__='
 
 const normalizedAllFiles = computed(() => props.allFiles.map(file => file.replace(/\\/g, '/')))
 const normalizedSelectedFiles = computed(() => props.selectedFiles.map(file => file.replace(/\\/g, '/')))
@@ -373,6 +374,14 @@ const splitTags = (raw?: string) => {
   const base = text.slice(0, idx).replace(/\s*\|\s*$/, '').trim()
   const encoded = text.slice(idx + STATE_PREFIX.length).trim()
   return { base, encoded }
+}
+
+const encodeUserAttachmentTags = (files: string[]) => {
+  const normalized = files
+    .map(file => file.replace(/\\/g, '/').trim())
+    .filter(Boolean)
+  if (normalized.length === 0) return ''
+  return `${ATTACHMENTS_PREFIX}${encodeURIComponent(JSON.stringify(normalized))}`
 }
 
 const stableStringify = (value: any): string => {
@@ -1804,10 +1813,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
   }
 
   const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话'
-  const selectedFileNote = props.selectedFiles.length > 0
-    ? `\n\n[已附加文件]\n${props.selectedFiles.map(path => `- ${path}`).join('\n')}`
-    : ''
-  const visibleUserContent = `${content}${selectedFileNote}`
+  const visibleUserContent = content
   const fullContentWithContext = contextStr ? `${visibleUserContent}\n\n${contextStr}` : visibleUserContent
   chatInput.value = ''
   isTyping.value = true
@@ -1821,6 +1827,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
     const started = await chatApi.startRun({
       visible_content: visibleUserContent,
       model_content: fullContentWithContext,
+      visible_tags: encodeUserAttachmentTags(props.selectedFiles),
       session_id: currentSessionId.value,
       session_name: currentSessionName,
       ai_config_id: props.aiConfigId,

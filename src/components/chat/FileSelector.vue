@@ -19,7 +19,14 @@ const emit = defineEmits<{
   (e: 'refresh'): void
 }>()
 
-const normalizedAllFiles = computed(() => props.allFiles.map(file => file.replace(/\\/g, '/')))
+const isHiddenSandboxPath = (path: string) => {
+  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean)
+  return parts.some(part => part === '_admins' || part === '.sandbox_home' || part === '.sandbox_tmp' || part.startsWith('.sandbox'))
+}
+
+const normalizedAllFiles = computed(() => props.allFiles
+  .map(file => file.replace(/\\/g, '/'))
+  .filter(file => !isHiddenSandboxPath(file)))
 const normalizedSelectedFiles = computed(() => props.selectedFiles.map(file => file.replace(/\\/g, '/')))
 
 const currentFolderItems = computed(() => {

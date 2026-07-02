@@ -23,6 +23,7 @@ const props = defineProps<{
     inlineContent?: InlineContentType[]
     front_prompt_details?: string
     id?: number
+    tags?: string
     created_at?: number
   }
   appliedEdits: string[]
@@ -146,6 +147,24 @@ const renderedThinkText = computed(() => {
 })
 
 const segmentTimeLabel = computed(() => String(props.timeLabel || '').trim())
+
+const ATTACHMENTS_PREFIX = '__HS_ATTACHMENTS__='
+
+const attachedFiles = computed(() => {
+  const tags = String(props.message.tags || '')
+  const idx = tags.indexOf(ATTACHMENTS_PREFIX)
+  if (idx < 0) return []
+  const raw = tags.slice(idx + ATTACHMENTS_PREFIX.length).split(/\s*\|\s*/)[0]?.trim()
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw))
+    return Array.isArray(parsed)
+      ? parsed.map(item => String(item || '').trim()).filter(Boolean)
+      : []
+  } catch {
+    return []
+  }
+})
 </script>
 
 <template>
@@ -329,6 +348,20 @@ const segmentTimeLabel = computed(() => String(props.timeLabel || '').trim())
           </template>
         </div>
       </div>
+
+      <div
+        v-if="props.message.role === 'user' && !isSystemNoticeMessage && attachedFiles.length > 0"
+        class="mt-1.5 flex max-w-full flex-wrap justify-end gap-1"
+      >
+        <span
+          v-for="file in attachedFiles"
+          :key="file"
+          class="user-attachment-pill"
+          :title="file"
+        >
+          {{ file }}
+        </span>
+      </div>
     </div>
 
     <div
@@ -456,6 +489,27 @@ const segmentTimeLabel = computed(() => String(props.timeLabel || '').trim())
   font-weight: 700;
   letter-spacing: 0.01em;
   white-space: nowrap;
+}
+
+.user-attachment-pill {
+  max-width: min(20rem, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid rgb(199 210 254);
+  background: rgb(238 242 255);
+  padding: 2px 8px;
+  color: rgb(79 70 229);
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.dark .user-attachment-pill {
+  border-color: rgba(129, 140, 248, 0.35);
+  background: rgba(79, 70, 229, 0.16);
+  color: rgb(199 210 254);
 }
 
 .dark .segment-time-badge {

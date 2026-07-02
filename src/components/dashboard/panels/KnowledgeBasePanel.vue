@@ -704,6 +704,26 @@ const openInstalledClawHubSkill = async (slug: string) => {
   }
 }
 
+type InheritanceThoughtItem = NonNullable<KnowledgeEntryItem['inheritance_tools']>['installed'][number]
+
+const openInheritanceThoughtItem = async (item: InheritanceThoughtItem) => {
+  const memoryId = String(item.memory_id || '').trim()
+  if (item.kind === 'knowledge' && memoryId) {
+    detailLoading.value = true
+    detailError.value = ''
+    try {
+      const token = getAuthToken()
+      currentDetail.value = await readEntry(token, memoryId)
+    } catch (err) {
+      detailError.value = (err as Error).message || '条目加载失败'
+    } finally {
+      detailLoading.value = false
+    }
+    return
+  }
+  await openInstalledClawHubSkill(item.slug)
+}
+
 const closeInstalledClawHubModal = () => {
   installedClawhubModalOpen.value = false
   installedClawhubLoading.value = false
@@ -1488,7 +1508,7 @@ const closeDetail = () => {
                     :key="skill.slug"
                     type="button"
                     class="w-full text-left rounded-lg border border-zinc-100 bg-zinc-50 hover:border-indigo-200 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-indigo-700 px-3 py-2 transition-colors"
-                    @click.stop.prevent="openInstalledClawHubSkill(skill.slug)"
+                    @click.stop.prevent="openInheritanceThoughtItem(skill)"
                   >
                     <div class="flex flex-wrap items-center justify-between gap-2">
                       <div class="min-w-0">
@@ -1497,9 +1517,9 @@ const closeDetail = () => {
                       </div>
                       <div class="flex flex-wrap items-center gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
                         <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">{{ endpointLabel(skill.endpoint_kind) }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ skill.version || 'latest' }}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ skill.kind === 'knowledge' ? '知识' : (skill.version || 'latest') }}</span>
                         <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ skill.present ? '文件可用' : '文件缺失' }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-300">查看/编辑</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-300">{{ skill.kind === 'knowledge' ? '查看' : '查看/编辑' }}</span>
                       </div>
                     </div>
                   </button>

@@ -111,6 +111,7 @@ export const stopRun = (runId: string) =>
 export const startRun = (payload: {
   visible_content: string
   model_content: string
+  visible_tags?: string
   session_id: string
   session_name: string
   ai_config_id?: number

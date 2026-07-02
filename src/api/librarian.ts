@@ -95,13 +95,15 @@ export interface KnowledgeEntryItem {
     installed_total: number
     installed: Array<{
       slug: string
+      memory_id?: string
       displayName: string
       summary: string
       version?: string | null
       ownerHandle: string
       source: string
+      kind?: 'knowledge' | string
       path: string
-      registry_url: string
+      registry_url?: string
       installed_at: number
       auto_enabled: boolean
       present: boolean

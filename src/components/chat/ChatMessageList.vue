@@ -15,6 +15,7 @@ interface Message {
   inlineContent?: InlineContentType[]
   front_prompt_details?: string
   id?: number
+  tags?: string
   created_at?: number
 }
 
