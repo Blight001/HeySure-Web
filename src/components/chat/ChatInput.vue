@@ -84,7 +84,7 @@ watch(() => props.modelValue, async () => {
 <template>
   <div class="pt-2">
     <div
-      class="relative flex items-end gap-1.5 rounded-2xl border border-zinc-200/90 bg-white px-1.5 py-1.5 shadow-sm transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900"
+      class="relative flex items-end gap-1.5 rounded-2xl acrylic-input px-1.5 py-1.5 shadow-sm transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900/60"
     >
       <!-- 加号：附加文件 / 工具调用 -->
       <button
@@ -135,7 +135,7 @@ watch(() => props.modelValue, async () => {
         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200"
         :class="canSend
           ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500 active:scale-95'
-          : 'cursor-not-allowed bg-zinc-100 text-zinc-300 dark:bg-zinc-800 dark:text-zinc-600'"
+          : 'cursor-not-allowed bg-zinc-100/60 text-zinc-300 dark:bg-zinc-800/60 dark:text-zinc-600'"
         @click="emit('send')"
         :disabled="!canSend"
         title="发送"

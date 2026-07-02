@@ -410,7 +410,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative isolate h-screen flex flex-col bg-zinc-50 text-zinc-900 overflow-hidden font-sans dark:bg-zinc-950 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
+  <div class="relative isolate h-screen flex flex-col bg-zinc-50/60 text-zinc-900 overflow-hidden font-sans dark:bg-zinc-950/60 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
     <div class="app-background-glow pointer-events-none absolute inset-0"></div>
     <div class="pointer-events-none absolute inset-0 opacity-60">
       <div class="app-background-orb app-background-orb-left"></div>
@@ -434,21 +434,25 @@ onUnmounted(() => {
            <span class="text-xs text-zinc-400 uppercase font-semibold">AI成员</span>
            <span class="text-lg font-bold text-indigo-600 leading-none">{{ agents.length }}</span>
         </div>
-        <div class="hidden sm:block w-px h-8 bg-zinc-200 dark:bg-zinc-700"></div>
+        <div class="hidden sm:block w-px h-8 bg-zinc-200 dark:bg-zinc-700/70"></div>
         <div class="hidden sm:flex flex-col items-end">
            <span class="text-xs text-zinc-400 uppercase font-semibold">文明代数</span>
            <span class="text-lg font-bold text-emerald-600 leading-none">Gen {{ globalGeneration }}</span>
         </div>
         <button
           v-if="isAdminUser"
-          class="ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-amber-200 bg-white text-amber-600 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 transition-colors dark:bg-zinc-800 dark:border-amber-700/60 dark:text-amber-300 dark:hover:text-amber-200 shadow-sm hover:shadow-md flex items-center justify-center"
+          class="ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-amber-200/70 bg-white/60 backdrop-blur-sm text-amber-600 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50/70 transition-colors dark:bg-zinc-800/60 dark:border-amber-700/60 dark:text-amber-300 dark:hover:text-amber-200 shadow-sm hover:shadow-md flex items-center justify-center"
           title="管理员控制台"
           @click.stop="adminModalOpen = true"
         >
           <AppIcon name="shield" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
         </button>
-        <button class="ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-zinc-200 bg-white text-zinc-600 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300 shadow-sm hover:shadow-md flex items-center justify-center" @click.stop="settingsOpen = true">
-          <span class="block hover:rotate-90 transition-transform duration-500 ease-spring"><AppIcon name="gear" class="w-4 h-4 md:w-[18px] md:h-[18px]" /></span>
+        <button
+          class="ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
+          title="系统设置"
+          @click.stop="settingsOpen = true"
+        >
+          <AppIcon name="gear" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
         </button>
 
         <!-- User Profile -->
@@ -456,7 +460,7 @@ onUnmounted(() => {
           <template v-if="currentUser">
             <button class="flex items-center gap-2 hover:bg-zinc-50 p-1 rounded-lg transition-colors dark:hover:bg-zinc-800" @click.stop="userMenuOpen = !userMenuOpen">
               <img :src="resolveAvatarUrl(currentUser.avatar) || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + currentUser.name"
-                   class="w-7 h-7 md:w-8 md:h-8 rounded-full border border-zinc-200 bg-zinc-50 object-cover" />
+                   class="w-7 h-7 md:w-8 md:h-8 rounded-full border border-zinc-200 bg-zinc-50/60 object-cover" />
               <div class="hidden md:flex flex-col items-start text-left">
                 <span class="text-sm font-bold text-zinc-700 dark:text-zinc-200 leading-none mb-1">{{ currentUser.name }}</span>
                 <span class="text-[10px] text-zinc-400 leading-none">ID: {{ currentUser.account }}</span>
@@ -468,11 +472,11 @@ onUnmounted(() => {
 
             <!-- User Dropdown Menu -->
             <Transition name="fade">
-              <div v-if="userMenuOpen" class="absolute right-0 top-12 w-48 bg-white border border-zinc-200 rounded-xl shadow-lg py-1 z-50 dark:bg-zinc-900 dark:border-zinc-700" @click.stop>
-                <button @click="$emit('updateProfile'); userMenuOpen = false" class="w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 flex items-center gap-2 dark:text-zinc-300 dark:hover:bg-zinc-800">
+              <div v-if="userMenuOpen" class="absolute right-0 top-12 w-48 acrylic-modal rounded-xl shadow-lg py-1 z-50" @click.stop>
+                <button @click="$emit('updateProfile'); userMenuOpen = false" class="w-full text-left px-4 py-2 text-sm text-zinc-700 hover:bg-white/60 flex items-center gap-2 dark:text-zinc-300 dark:hover:bg-zinc-800/70">
                   <AppIcon name="pen" class="w-4 h-4" /> 修改资料
                 </button>
-                <div class="h-px bg-zinc-100 my-1 dark:bg-zinc-800"></div>
+                <div class="h-px bg-zinc-100/60 my-1 dark:bg-zinc-800/60"></div>
                 <button @click="$emit('logout'); userMenuOpen = false" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 dark:text-red-400 dark:hover:bg-red-900/20">
                   <AppIcon name="exit" class="w-4 h-4" /> 退出登录
                 </button>
@@ -500,7 +504,7 @@ onUnmounted(() => {
           mobileTab !== 'console' ? 'max-lg:hidden' : '',
         ]"
       >
-        <button class="hidden lg:block absolute -right-3 top-4 w-6 h-6 rounded-full border border-zinc-200 bg-white text-zinc-500 text-xs shadow hover:text-indigo-600 hover:border-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300 z-10 transition-transform hover:scale-110" @click="leftCollapsed = !leftCollapsed">
+        <button class="hidden lg:block absolute -right-3 top-4 w-6 h-6 rounded-full acrylic-chip backdrop-blur-sm text-zinc-500 text-xs shadow hover:text-indigo-600 hover:border-indigo-200 dark:text-zinc-300 dark:hover:text-indigo-300 z-10 transition-transform hover:scale-110" @click="leftCollapsed = !leftCollapsed">
           {{ leftCollapsed ? '⟩' : '⟨' }}
         </button>
         <div v-if="leftCollapsed" class="hidden lg:flex flex-1 items-center justify-center text-zinc-400 text-xs dark:text-zinc-500">
@@ -548,7 +552,7 @@ onUnmounted(() => {
     </main>
 
     <!-- 移动端底部 Tab 栏 -->
-    <nav class="lg:hidden shrink-0 z-20 flex items-stretch border-t border-zinc-200/70 bg-white/85 backdrop-blur-md dark:border-zinc-800/70 dark:bg-zinc-900/85 pb-[env(safe-area-inset-bottom)]">
+    <nav class="lg:hidden shrink-0 z-20 flex items-stretch border-t border-zinc-200/50 acrylic-modal !border-x-0 !border-b-0 rounded-none dark:border-zinc-800/50 pb-[env(safe-area-inset-bottom)]">
       <button
         class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors"
         :class="mobileTab === 'console' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-400'"
@@ -610,8 +614,8 @@ onUnmounted(() => {
       <Transition name="fade">
         <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
           <!-- 手机比例：对话界面覆盖整个页面（无圆角/无边框/无外边距）；≥sm 恢复居中弹窗 -->
-          <div class="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl border-0 sm:border border-zinc-200 dark:border-zinc-700 shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
-            <div class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200 bg-white/80 px-2 py-2 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/80 sm:px-3 sm:py-2.5">
+          <div class="acrylic-modal rounded-none sm:rounded-2xl !border-0 sm:!border shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
+            <div class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200/60 bg-white/40 px-2 py-2 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:px-3 sm:py-2.5">
               <!-- 脱出按钮：左上角，返回上一页面 -->
               <button
                 class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"

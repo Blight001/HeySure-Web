@@ -497,7 +497,7 @@ onBeforeUnmount(() => {
     <div class="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" @click.self="close">
       <div
         ref="panelRef"
-        class="flex flex-col rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden resize"
+        class="flex flex-col rounded-2xl border border-zinc-700/70 bg-zinc-900/80 backdrop-blur-xl shadow-2xl overflow-hidden resize"
         :class="{ 'rc-panel-maximized': isMaximized }"
         :style="panelConstraints"
         @click.stop

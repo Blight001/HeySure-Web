@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import ChatActivityGroup from './ChatActivityGroup.vue'
 import ChatMessage from './ChatMessage.vue'
 import TypingIndicator from './TypingIndicator.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 import type { InlineContent as InlineContentType } from '@/utils/chatParser'
 import { buildChatRenderItems } from '@/utils/chatMessageGroups'
 import { formatDurationMs } from '@/utils/datetime'
@@ -88,7 +89,7 @@ const emit = defineEmits<{
 <template>
   <div class="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar min-h-[300px]">
     <div v-if="isEmpty" class="flex flex-col items-center justify-center h-full text-zinc-400 dark:text-zinc-500 gap-2 opacity-60">
-      <span class="text-4xl">💭</span>
+      <AppIcon name="chat" class="w-10 h-10" />
       <span class="text-sm">开始一场智慧的碰撞吧...</span>
     </div>
 

@@ -2135,7 +2135,7 @@ onBeforeUnmount(() => {
           <div
             class="absolute right-0 top-full z-[80] hidden w-[min(42rem,calc(100vw-2rem))] pt-2 group-hover/front-prompt:block"
           >
-            <div class="max-h-[28rem] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+            <div class="max-h-[28rem] overflow-hidden rounded-lg acrylic-modal shadow-xl">
               <div class="flex items-center justify-between gap-3 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
                 <div class="text-xs font-semibold text-zinc-700 dark:text-zinc-200">前置 Prompt</div>
                 <button

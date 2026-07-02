@@ -187,7 +187,7 @@ watch(() => props.show, (show) => {
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="props.show" :style="{ zIndex }" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4" @click="emit('close')">
-      <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[560px] max-h-[75vh] p-4 overflow-auto" @click.stop>
+      <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[560px] max-h-[75vh] p-4 overflow-auto" @click.stop>
         <div class="mb-3 flex items-center justify-between gap-2">
           <div class="flex items-center gap-1.5 min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">{{ props.title }} 的 MCP 工具</div>
@@ -283,7 +283,7 @@ watch(() => props.show, (show) => {
                       v-if="editingToolName === tool.name"
                       v-model="draftDescription"
                       rows="3"
-                      class="w-full resize-y text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 p-2 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                      class="w-full resize-y text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-2 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
                     />
                     <div v-else class="text-[11px] text-zinc-600 dark:text-zinc-300">{{ tool.zhDescription || '暂无说明' }}</div>
                     <div class="mt-2 space-y-1">
@@ -304,7 +304,7 @@ watch(() => props.show, (show) => {
                           v-if="editingToolName === tool.name"
                           :value="draftParamDescription(param.name)"
                           rows="2"
-                          class="mt-1 w-full resize-y text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                          class="mt-1 w-full resize-y text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
                           @input="updateDraftParam(param.name, ($event.target as HTMLTextAreaElement).value)"
                         />
                         <span v-else-if="param.description" class="text-zinc-500 dark:text-zinc-400"> - {{ param.description }}</span>

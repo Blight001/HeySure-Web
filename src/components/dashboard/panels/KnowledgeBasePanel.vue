@@ -902,12 +902,12 @@ const closeDetail = () => {
         <span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">知识库</span>
       </div>
       <div class="flex items-center gap-2 relative">
-        <span class="text-xs bg-zinc-100 px-2 py-0.5 rounded-full text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">{{ totalCount }} 条目</span>
-        <button class="px-2 py-0.5 rounded border border-zinc-200 bg-white text-xs text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300" @click.stop="toggleFilter">
+        <span class="text-xs bg-zinc-100/60 px-2 py-0.5 rounded-full text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">{{ totalCount }} 条目</span>
+        <button class="px-2 py-0.5 rounded border border-zinc-200 bg-white/75 text-xs text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300" @click.stop="toggleFilter">
           筛选
         </button>
         <Transition name="fade">
-          <div v-if="filterOpen" class="absolute right-0 top-8 w-36 bg-white border border-zinc-200 rounded-lg shadow-lg text-xs text-zinc-600 z-20 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-200" @click.stop>
+          <div v-if="filterOpen" class="absolute right-0 top-8 w-36 acrylic-modal rounded-lg shadow-lg text-xs text-zinc-600 z-20 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-200" @click.stop>
             <button class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800" :class="filterValue === 'all' ? 'text-indigo-600 dark:text-indigo-300' : ''" @click="applyFilter('all')">
               全部
             </button>
@@ -937,7 +937,7 @@ const closeDetail = () => {
           v-for="item in items"
           :key="item.id"
           type="button"
-          class="w-full text-left p-3 bg-zinc-50 rounded border border-zinc-100 hover:border-indigo-200 transition-all duration-200 cursor-pointer group hover:scale-[1.01] hover:shadow-sm dark:bg-zinc-800 dark:border-zinc-700 dark:hover:border-indigo-400"
+          class="w-full text-left p-3 bg-zinc-50/60 rounded border border-zinc-100 hover:border-indigo-200 transition-all duration-200 cursor-pointer group hover:scale-[1.01] hover:shadow-sm dark:bg-zinc-800/60 dark:border-zinc-700 dark:hover:border-indigo-400"
           @click="openDetail(item)"
         >
           <h4 class="text-sm font-medium text-zinc-800 group-hover:text-indigo-600 truncate dark:text-zinc-100 dark:group-hover:text-indigo-300">{{ item.title }}</h4>
@@ -946,7 +946,7 @@ const closeDetail = () => {
             <span class="text-[10px] text-zinc-400 dark:text-zinc-500">{{ item.time }}</span>
           </div>
           <div class="mt-2 flex gap-1 flex-wrap">
-            <span v-for="tag in item.tags" :key="tag" class="text-[10px] px-1.5 py-0.5 bg-white border border-zinc-200 rounded text-zinc-500 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-400">
+            <span v-for="tag in item.tags" :key="tag" class="text-[10px] px-1.5 py-0.5 bg-white/75 border border-zinc-200 rounded text-zinc-500 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-400">
               #{{ tag }}
             </span>
           </div>
@@ -961,7 +961,7 @@ const closeDetail = () => {
       class="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
       @click.self="closeDetail"
     >
-      <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[88vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
+      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[88vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
         <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
@@ -969,7 +969,7 @@ const closeDetail = () => {
                 {{ currentDetail?.title || selectedItem?.title || '知识库详情' }}
               </div>
               <template v-if="intrinsicPersonas">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
                   {{ intrinsicPersonas.total }} 个 AI
                 </span>
                 <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
@@ -977,7 +977,7 @@ const closeDetail = () => {
                 </span>
               </template>
               <template v-else-if="systemPrompts">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
                   {{ systemPrompts.total }} 项配置
                 </span>
                 <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
@@ -985,13 +985,13 @@ const closeDetail = () => {
                 </span>
               </template>
               <template v-else-if="inheritanceSkills">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
                   服务端 {{ inheritanceSkills.server_total ?? 0 }} 个
                 </span>
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
                   端侧 {{ inheritanceSkills.endpoint_device_total ?? 0 }} 台
                 </span>
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
                   共 {{ inheritanceSkills.total }} 个 MCP
                 </span>
                 <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
@@ -999,7 +999,7 @@ const closeDetail = () => {
                 </span>
               </template>
               <template v-else-if="inheritanceThoughts">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100 text-[10px] text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
                   {{ inheritanceThoughts.installed_total }} 个本地快照
                 </span>
                 <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
@@ -1033,17 +1033,17 @@ const closeDetail = () => {
           <div v-else-if="detailError" class="text-center text-rose-500 py-10">{{ detailError }}</div>
           <template v-else-if="currentDetail">
             <div class="mb-3 flex flex-wrap gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-              <span class="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800">范围：{{ currentDetail.scope }}</span>
-              <span class="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800">置信度：{{ Math.round(currentDetail.confidence * 100) }}%</span>
-              <span class="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800">使用：{{ currentDetail.use_count }} 次</span>
-              <span class="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800">更新：{{ formatTime(currentDetail.updated_at) }}</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">范围：{{ currentDetail.scope }}</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">置信度：{{ Math.round(currentDetail.confidence * 100) }}%</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">使用：{{ currentDetail.use_count }} 次</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">更新：{{ formatTime(currentDetail.updated_at) }}</span>
             </div>
 
             <div v-if="currentDetail.triggers.length" class="mb-4 flex flex-wrap gap-1.5">
               <span
                 v-for="trigger in currentDetail.triggers"
                 :key="trigger"
-                class="text-[10px] px-1.5 py-0.5 bg-white border border-zinc-200 rounded text-zinc-500 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-400"
+                class="text-[10px] px-1.5 py-0.5 bg-white/75 border border-zinc-200 rounded text-zinc-500 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-400"
               >
                 #{{ trigger }}
               </span>
@@ -1051,7 +1051,7 @@ const closeDetail = () => {
 
             <div v-if="currentDetail.summary && !intrinsicPersonas && !systemPrompts && !inheritanceSkills && !inheritanceThoughts" class="mb-4">
               <div class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">摘要</div>
-              <div class="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
+              <div class="text-xs leading-relaxed text-zinc-600 dark:text-zinc-300 bg-zinc-50/60 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
                 {{ currentDetail.summary }}
               </div>
             </div>
@@ -1068,7 +1068,7 @@ const closeDetail = () => {
                   v-for="agent in intrinsicPersonas.agents"
                   :key="agent.id || agent.name"
                   :open="editingPersonaId === agent.id || undefined"
-                  class="group rounded-lg border border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40 overflow-hidden"
+                  class="group rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40 overflow-hidden"
                 >
                   <summary class="list-none cursor-pointer px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 select-none">
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1077,14 +1077,14 @@ const closeDetail = () => {
                         <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ agent.name }}</div>
                       </div>
                       <div class="flex flex-wrap gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">ID {{ agent.id }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ agent.role }}</span>
-                        <span v-if="agent.is_librarian" class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">图书管理员</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">可用</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">ID {{ agent.id }}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ agent.role }}</span>
+                        <span v-if="agent.is_librarian" class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">图书管理员</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">可用</span>
                         <button
                           v-if="agent.id && editingPersonaId !== agent.id"
                           type="button"
-                          class="ml-1 px-2 py-0.5 rounded border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                          class="ml-1 px-2 py-0.5 rounded border border-indigo-200 bg-white/75 text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                           @click.stop.prevent="startEditPersona(agent)"
                         >
                           编辑
@@ -1102,10 +1102,10 @@ const closeDetail = () => {
                         v-if="editingPersonaId === agent.id"
                         :value="personaDraftPrompt"
                         rows="10"
-                        class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                        class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
                         @input="personaDraftPrompt = ($event.target as HTMLTextAreaElement).value"
                       />
-                      <pre v-else class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 p-3 rounded border border-zinc-100 dark:border-zinc-700">{{ agent.prompt || '（空）' }}</pre>
+                      <pre v-else class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-100 dark:border-zinc-700">{{ agent.prompt || '（空）' }}</pre>
                     </div>
                     <div v-if="editingPersonaId === agent.id" class="flex justify-end gap-2 pt-1">
                       <button
@@ -1141,7 +1141,7 @@ const closeDetail = () => {
                   v-for="section in systemPrompts.sections"
                   :key="section.key"
                   :open="editingPromptSection === section.key || undefined"
-                  class="group rounded-lg border border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40 overflow-hidden"
+                  class="group rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40 overflow-hidden"
                 >
                   <summary class="list-none cursor-pointer px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 select-none">
                     <div class="flex items-center justify-between gap-3">
@@ -1154,7 +1154,7 @@ const closeDetail = () => {
                         <button
                           v-if="editingPromptSection !== section.key"
                           type="button"
-                          class="px-2 py-0.5 rounded border border-indigo-200 bg-white text-[10px] text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                          class="px-2 py-0.5 rounded border border-indigo-200 bg-white/75 text-[10px] text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                           @click.stop.prevent="startEditPromptSection(section)"
                         >
                           编辑
@@ -1178,17 +1178,17 @@ const closeDetail = () => {
                         type="number"
                         min="0"
                         max="3600"
-                        class="w-full text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 px-2 py-1.5 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                        class="w-full text-xs text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-2 py-1.5 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
                         @input="updatePromptDraftValue(item.key, Number(($event.target as HTMLInputElement).value || 0))"
                       />
                       <textarea
                         v-else-if="editingPromptSection === section.key"
                         :value="promptDraftValue(item.key)"
                         rows="6"
-                        class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                        class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
                         @input="updatePromptDraftValue(item.key, ($event.target as HTMLTextAreaElement).value)"
                       />
-                      <pre v-else class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 p-3 rounded border border-zinc-100 dark:border-zinc-700">{{ item.content || '（空）' }}</pre>
+                      <pre v-else class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-100 dark:border-zinc-700">{{ item.content || '（空）' }}</pre>
                     </div>
                     <div v-if="editingPromptSection === section.key" class="flex justify-end gap-2 px-3 py-3">
                       <button
@@ -1224,14 +1224,14 @@ const closeDetail = () => {
                   <div class="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      class="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                      class="shrink-0 rounded-lg border border-indigo-200 bg-white/75 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                       @click.stop.prevent="emit('view-all-mcp')"
                     >
                       查看全部 MCP
                     </button>
                     <button
                       type="button"
-                      class="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                      class="shrink-0 rounded-lg border border-indigo-200 bg-white/75 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                       @click.stop.prevent="emit('manage-device-tools')"
                     >
                       管理设备动态 MCP
@@ -1246,14 +1246,14 @@ const closeDetail = () => {
                 </div>
                 <div
                   v-if="!inheritanceDevices.length"
-                  class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-xs text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-500"
+                  class="rounded-lg border border-dashed border-zinc-200 bg-zinc-50/60 px-4 py-10 text-center text-xs text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-500"
                 >
                   暂无 MCP 工具。
                 </div>
                 <details
                   v-for="device in inheritanceDevices"
                   :key="`${device.device_type}-${device.device_id}`"
-                  class="group overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40"
+                  class="group overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40"
                 >
                   <summary class="list-none cursor-pointer px-3 py-3 select-none">
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1271,13 +1271,13 @@ const closeDetail = () => {
                         </div>
                       </div>
                       <div class="flex shrink-0 items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
-                        <span class="rounded bg-white px-2 py-1 dark:bg-zinc-900">{{ device.tool_count }} 个 MCP</span>
+                        <span class="rounded bg-white/75 px-2 py-1 dark:bg-zinc-900/60">{{ device.tool_count }} 个 MCP</span>
                         <span class="text-zinc-400 group-open:hidden">展开详情</span>
                         <span class="hidden text-indigo-500 group-open:inline dark:text-indigo-300">收起</span>
                       </div>
                     </div>
                   </summary>
-                  <div class="border-t border-zinc-100 bg-white dark:border-zinc-800 dark:bg-zinc-900/40">
+                  <div class="border-t border-zinc-100 bg-white/75 dark:border-zinc-800 dark:bg-zinc-900/40">
                     <div v-if="!device.tools.length" class="px-3 py-6 text-center text-xs text-zinc-400">
                       该设备暂未上报 MCP 工具
                     </div>
@@ -1315,7 +1315,7 @@ const closeDetail = () => {
                                 @mouseleave="scheduleCloseInheritanceHoverPopover"
                               >
                                 <div class="flex min-h-[2rem] items-center text-[11px]">
-                                  <span class="rounded border border-zinc-200 bg-white px-2 py-1 text-indigo-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-indigo-300">
+                                  <span class="rounded border border-zinc-200 bg-white/75 px-2 py-1 text-indigo-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-indigo-300">
                                     {{ toolParameters(tool).length ? `${toolParameters(tool).length} 个参数` : '无参数' }}
                                   </span>
                                 </div>
@@ -1338,7 +1338,7 @@ const closeDetail = () => {
                                 <button
                                   v-if="!isServerInheritanceDevice(device)"
                                   type="button"
-                                  class="whitespace-nowrap rounded border border-emerald-200 bg-white px-2 py-1 text-[11px] text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-zinc-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                                  class="whitespace-nowrap rounded border border-emerald-200 bg-white/75 px-2 py-1 text-[11px] text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-zinc-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                                   @click.stop.prevent="openMcpTestModal(device, tool)"
                                 >
                                   测试 MCP
@@ -1362,7 +1362,7 @@ const closeDetail = () => {
                           v-for="category in inheritanceServerCategories"
                           :key="category.namespace"
                           :open="editingPropertyCategory === category.namespace || undefined"
-                          class="group overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40"
+                          class="group overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40"
                         >
                           <summary class="list-none cursor-pointer border-b border-zinc-100 px-3 py-2 select-none dark:border-zinc-800">
                             <div class="flex items-center justify-between gap-3">
@@ -1375,7 +1375,7 @@ const closeDetail = () => {
                                 <button
                                   v-if="editingPropertyCategory !== category.namespace"
                                   type="button"
-                                  class="rounded border border-indigo-200 bg-white px-2 py-0.5 text-[10px] text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                                  class="rounded border border-indigo-200 bg-white/75 px-2 py-0.5 text-[10px] text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
                                   @click.stop.prevent="startEditPropertyCategory(category)"
                                 >
                                   编辑
@@ -1400,7 +1400,7 @@ const closeDetail = () => {
                                     v-if="editingPropertyCategory === category.namespace"
                                     :value="propertyDraftToolDescription(tool.name)"
                                     rows="3"
-                                    class="w-full resize-y rounded border border-zinc-200 bg-white p-2 text-xs leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200 dark:focus:ring-indigo-800"
+                                    class="w-full resize-y rounded border border-zinc-200 bg-white/75 p-2 text-xs leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200 dark:focus:ring-indigo-800"
                                     @input="updateDraftToolDescription(tool.name, ($event.target as HTMLTextAreaElement).value)"
                                   />
                                   <div v-else class="text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
@@ -1426,7 +1426,7 @@ const closeDetail = () => {
                                       v-if="editingPropertyCategory === category.namespace"
                                       :value="propertyDraftParamDescription(tool.name, param.name)"
                                       rows="2"
-                                      class="w-full resize-y rounded border border-zinc-200 bg-white px-2 py-1 text-[11px] leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200 dark:focus:ring-indigo-800"
+                                      class="w-full resize-y rounded border border-zinc-200 bg-white/75 px-2 py-1 text-[11px] leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200 dark:focus:ring-indigo-800"
                                       @input="updateDraftParamDescription(tool.name, param.name, ($event.target as HTMLTextAreaElement).value)"
                                     />
                                     <span v-else class="text-zinc-600 dark:text-zinc-300">{{ param.description || '（无描述）' }}</span>
@@ -1470,7 +1470,7 @@ const closeDetail = () => {
                   {{ clawhubError }}
                 </div>
 
-                <section class="rounded-lg border border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40 p-3">
+                <section class="rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40 p-3">
                   <div class="flex flex-wrap items-center justify-between gap-3">
                     <div class="min-w-0">
                       <div class="text-xs font-semibold text-zinc-700 dark:text-zinc-200">ClawHub</div>
@@ -1507,7 +1507,7 @@ const closeDetail = () => {
                     v-for="skill in filteredInstalledThoughts"
                     :key="skill.slug"
                     type="button"
-                    class="w-full text-left rounded-lg border border-zinc-100 bg-zinc-50 hover:border-indigo-200 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-indigo-700 px-3 py-2 transition-colors"
+                    class="w-full text-left rounded-lg border border-zinc-100 bg-zinc-50/60 hover:border-indigo-200 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-indigo-700 px-3 py-2 transition-colors"
                     @click.stop.prevent="openInheritanceThoughtItem(skill)"
                   >
                     <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1517,9 +1517,9 @@ const closeDetail = () => {
                       </div>
                       <div class="flex flex-wrap items-center gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
                         <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">{{ endpointLabel(skill.endpoint_kind) }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ skill.kind === 'knowledge' ? '知识' : (skill.version || 'latest') }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900">{{ skill.present ? '文件可用' : '文件缺失' }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-300">{{ skill.kind === 'knowledge' ? '查看' : '查看/编辑' }}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ skill.kind === 'knowledge' ? '知识' : (skill.version || 'latest') }}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ skill.present ? '文件可用' : '文件缺失' }}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60 text-indigo-600 dark:text-indigo-300">{{ skill.kind === 'knowledge' ? '查看' : '查看/编辑' }}</span>
                       </div>
                     </div>
                   </button>
@@ -1528,7 +1528,7 @@ const closeDetail = () => {
             </template>
             <template v-else>
               <div class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1">具体内容</div>
-              <pre class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">{{ detailContent }}</pre>
+              <pre class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50/60 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">{{ detailContent }}</pre>
             </template>
 
             <div v-if="currentDetail.source_job_id" class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
@@ -1544,7 +1544,7 @@ const closeDetail = () => {
       class="fixed inset-0 bg-black/55 flex items-center justify-center p-4"
       @click.self="closeClawHubModal"
     >
-      <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
+      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
         <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">ClawHub 搜索</div>
@@ -1562,7 +1562,7 @@ const closeDetail = () => {
                 <input
                   v-model="clawhubQuery"
                   type="search"
-                  class="min-w-0 flex-1 text-xs text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 px-3 py-2 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                  class="min-w-0 flex-1 text-xs text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-3 py-2 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
                   placeholder="calendar、github、browser"
                   @keydown.enter.prevent="searchClawHub"
                 />
@@ -1592,7 +1592,7 @@ const closeDetail = () => {
                 :key="result.slug"
                 type="button"
                 class="w-full text-left rounded-lg border px-3 py-2 transition-colors"
-                :class="clawhubSelected?.slug === result.slug ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-950/30' : 'border-zinc-100 bg-zinc-50 hover:border-indigo-200 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-indigo-700'"
+                :class="clawhubSelected?.slug === result.slug ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-950/30' : 'border-zinc-100 bg-zinc-50/60 hover:border-indigo-200 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:border-indigo-700'"
                 @click.stop.prevent="inspectClawHubSkill(result.slug)"
               >
                 <div class="flex items-start justify-between gap-2">
@@ -1628,7 +1628,7 @@ const closeDetail = () => {
                     端
                     <select
                       v-model="installEndpointKind"
-                      class="text-[11px] text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 px-1.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                      class="text-[11px] text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-1.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
                     >
                       <option value="auto">自动判断</option>
                       <option value="any">通用</option>
@@ -1647,7 +1647,7 @@ const closeDetail = () => {
                 </div>
               </div>
               <div class="flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar">
-                <pre class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">{{ clawhubSelected.skill_card || '（无内容）' }}</pre>
+                <pre class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50/60 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">{{ clawhubSelected.skill_card || '（无内容）' }}</pre>
               </div>
             </div>
             <div v-else class="flex-1 flex items-center justify-center text-sm text-zinc-400">
@@ -1663,7 +1663,7 @@ const closeDetail = () => {
       class="fixed inset-0 bg-black/55 flex items-center justify-center p-4"
       @click.self="closeInstalledClawHubModal"
     >
-      <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-5xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
+      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-5xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
         <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">
@@ -1680,14 +1680,14 @@ const closeDetail = () => {
         <div v-else class="flex-1 min-h-0 flex flex-col">
           <div class="px-5 py-3 border-b border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-              <span class="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800">{{ installedClawhubSelected?.skill?.version || 'latest' }}</span>
-              <span class="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800">{{ installedClawhubSelected?.present ? '文件可用' : '文件缺失' }}</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">{{ installedClawhubSelected?.skill?.version || 'latest' }}</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">{{ installedClawhubSelected?.present ? '文件可用' : '文件缺失' }}</span>
               <label class="flex items-center gap-1">
                 端
                 <select
                   :value="installedEndpointKind"
                   :disabled="installedEndpointSaving || !installedClawhubSelected"
-                  class="text-[11px] text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-900/70 px-1.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800 disabled:opacity-60"
+                  class="text-[11px] text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-1.5 py-1 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800 disabled:opacity-60"
                   @change="applyInstalledEndpoint(($event.target as HTMLSelectElement).value as 'any' | 'desktop' | 'browser')"
                 >
                   <option value="any">通用</option>
@@ -1695,7 +1695,7 @@ const closeDetail = () => {
                   <option value="browser">浏览器端</option>
                 </select>
               </label>
-              <span class="px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 truncate max-w-[20rem]">{{ installedClawhubSelected?.path || '' }}</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60 truncate max-w-[20rem]">{{ installedClawhubSelected?.path || '' }}</span>
             </div>
             <div class="flex gap-2">
               <button
@@ -1703,7 +1703,7 @@ const closeDetail = () => {
                 class="px-3 py-1.5 rounded border text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 :class="installedClawhubEditMode
                   ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300'
-                  : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800'"
+                  : 'border-zinc-200 bg-white/75 text-zinc-600 hover:bg-zinc-50 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800'"
                 :disabled="!installedClawhubSelected"
                 @click.stop.prevent="installedClawhubEditMode = !installedClawhubEditMode"
               >
@@ -1711,7 +1711,7 @@ const closeDetail = () => {
               </button>
               <button
                 type="button"
-                class="px-3 py-1.5 rounded border border-rose-200 bg-white text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
+                class="px-3 py-1.5 rounded border border-rose-200 bg-white/75 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900/60 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
                 :disabled="installedClawhubDeleting || !installedClawhubSelected"
                 @click.stop.prevent="removeInstalledClawHubSkill"
               >
@@ -1737,7 +1737,7 @@ const closeDetail = () => {
           <div class="flex-1 min-h-0 p-5 overflow-y-auto">
             <div
               v-if="!installedClawhubEditMode"
-              class="h-full text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-lg border border-zinc-100 dark:border-zinc-800"
+              class="h-full text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50/60 dark:bg-zinc-800/40 p-4 rounded-lg border border-zinc-100 dark:border-zinc-800"
             >
               <MarkdownText
                 v-if="installedClawhubPreview.trim()"
@@ -1748,7 +1748,7 @@ const closeDetail = () => {
             <textarea
               v-else
               v-model="installedClawhubDraft"
-              class="w-full h-full resize-none whitespace-pre font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+              class="w-full h-full resize-none whitespace-pre font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-zinc-50/60 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
               spellcheck="false"
             />
           </div>
@@ -1761,7 +1761,7 @@ const closeDetail = () => {
       class="fixed inset-0 flex items-center justify-center bg-black/50 p-4"
       @click.self="closeMcpTestModal"
     >
-      <div class="flex max-h-[88vh] w-full max-w-xl flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+      <div class="flex max-h-[88vh] w-full max-w-xl flex-col rounded-2xl acrylic-modal shadow-2xl">
         <div class="flex items-center justify-between border-b border-zinc-100 px-5 py-3 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">测试当前 MCP</div>
@@ -1772,7 +1772,7 @@ const closeDetail = () => {
           <button type="button" class="text-xl leading-none text-zinc-400 hover:text-zinc-600" @click="closeMcpTestModal">×</button>
         </div>
         <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-          <div class="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-800/40 dark:text-zinc-300">
+          <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-800/40 dark:text-zinc-300">
             设备：{{ deviceTypeLabel(mcpTestTarget.device.device_type) }}（{{ mcpTestTarget.device.device_id || '未提供' }}）
           </div>
           <div v-if="mcpTestError" class="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
@@ -1808,7 +1808,7 @@ const closeDetail = () => {
               v-model="mcpTestUserHint"
               rows="3"
               spellcheck="false"
-              class="w-full resize-y rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-200 dark:focus:ring-indigo-800"
+              class="w-full resize-y rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-200 dark:focus:ring-indigo-800"
               placeholder="例如：请用当前桌面路径做一次轻量测试"
             />
           </label>
@@ -1816,18 +1816,18 @@ const closeDetail = () => {
             将把工具描述、参数说明与底层实现填入提示词，由所选模型主动构造参数并调用
             <code>{{ mcpTestTarget.tool.name }}</code>，随后在下方展示调用结果。
           </div>
-          <div v-if="mcpTestResult" class="space-y-3 rounded-lg border border-zinc-100 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+          <div v-if="mcpTestResult" class="space-y-3 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
             <div v-if="mcpTestResult.model_reply" class="space-y-1">
               <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">模型说明</div>
               <pre class="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">{{ mcpTestResult.model_reply }}</pre>
             </div>
             <div v-if="mcpTestResult.tool_call" class="space-y-1">
               <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">模型生成的参数</div>
-              <pre class="overflow-x-auto rounded border border-zinc-200 bg-white p-2 font-mono text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">{{ formatMcpTestJson(mcpTestResult.tool_call.arguments) }}</pre>
+              <pre class="overflow-x-auto rounded border border-zinc-200 bg-white/75 p-2 font-mono text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200">{{ formatMcpTestJson(mcpTestResult.tool_call.arguments) }}</pre>
             </div>
             <div v-if="mcpTestResult.tool_result" class="space-y-1">
               <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">工具返回</div>
-              <pre class="max-h-48 overflow-auto rounded border border-zinc-200 bg-white p-2 font-mono text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">{{ formatMcpTestJson(mcpTestResult.tool_result) }}</pre>
+              <pre class="max-h-48 overflow-auto rounded border border-zinc-200 bg-white/75 p-2 font-mono text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200">{{ formatMcpTestJson(mcpTestResult.tool_result) }}</pre>
             </div>
           </div>
         </div>
@@ -1853,7 +1853,7 @@ const closeDetail = () => {
     </div>
     <div
       v-if="inheritanceHoverPopover && hoveredInheritanceTool"
-      class="fixed overflow-y-auto rounded-lg border bg-white p-3 text-left shadow-xl dark:bg-zinc-900"
+      class="fixed overflow-y-auto rounded-lg acrylic-modal p-3 text-left shadow-xl"
       :class="inheritanceHoverPopover.kind === 'impl'
         ? 'border-indigo-100 dark:border-indigo-900/60'
         : 'border-zinc-200 dark:border-zinc-700'"
@@ -1896,7 +1896,7 @@ const closeDetail = () => {
             <code
               v-for="sourceFile in hoveredInheritanceTool.tool.implementation.source_files"
               :key="`${hoveredInheritanceTool.device.device_id}-${hoveredInheritanceTool.tool.name}-${sourceFile}`"
-              class="break-all rounded bg-zinc-50 px-1.5 py-1 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+              class="break-all rounded bg-zinc-50/60 px-1.5 py-1 text-[10px] text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300"
             >{{ sourceFile }}</code>
           </div>
         </div>
@@ -1905,11 +1905,11 @@ const closeDetail = () => {
         </div>
         <div v-if="hoveredInheritanceTool.tool.implementation?.handler_source" class="mt-2">
           <div class="mb-1 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">处理函数入口</div>
-          <pre class="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-50 p-2 font-mono text-[10px] leading-relaxed text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ hoveredInheritanceTool.tool.implementation.handler_source }}</pre>
+          <pre class="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-50/60 p-2 font-mono text-[10px] leading-relaxed text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">{{ hoveredInheritanceTool.tool.implementation.handler_source }}</pre>
         </div>
         <div v-if="hoveredInheritanceTool.tool.implementation?.code?.length" class="mt-2">
           <div class="mb-1 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">动态程序代码</div>
-          <pre class="max-h-52 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-50 p-2 font-mono text-[10px] leading-relaxed text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">{{ formatImplementationCode(hoveredInheritanceTool.tool.implementation.code) }}</pre>
+          <pre class="max-h-52 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-50/60 p-2 font-mono text-[10px] leading-relaxed text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">{{ formatImplementationCode(hoveredInheritanceTool.tool.implementation.code) }}</pre>
         </div>
       </template>
     </div>

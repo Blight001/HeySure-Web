@@ -60,7 +60,7 @@ const handleSubmit = async () => {
 
 <template>
   <div v-if="show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-    <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-zinc-200 dark:border-zinc-800 p-6">
+    <div class="acrylic-modal rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-zinc-200 dark:border-zinc-800 p-6">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-xl font-bold text-zinc-800 dark:text-zinc-100">个人资料设置</h2>
         <button @click="$emit('close')" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
@@ -73,19 +73,19 @@ const handleSubmit = async () => {
       <form @submit.prevent="handleSubmit" class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">账号</label>
-          <div class="w-full px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-transparent">
+          <div class="w-full px-3 py-2 rounded-lg bg-zinc-100/60 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 border border-transparent">
             {{ user.account }}
           </div>
         </div>
 
         <div>
           <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">昵称</label>
-          <input v-model="name" type="text" required class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
+          <input v-model="name" type="text" required class="w-full px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" />
         </div>
 
         <div>
           <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">新密码 (留空则不修改)</label>
-          <input v-model="password" type="password" class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入新密码" />
+          <input v-model="password" type="password" class="w-full px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入新密码" />
         </div>
 
         <div>

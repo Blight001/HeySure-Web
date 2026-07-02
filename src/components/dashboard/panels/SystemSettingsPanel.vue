@@ -178,7 +178,7 @@ const openExtensionTestPage = () => {
 <template>
   <Transition name="fade">
     <div v-if="show" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm p-4" @click="emit('update:show', false)">
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-y-auto p-5 sm:p-6 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800" @click.stop>
+      <div class="acrylic-modal rounded-2xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-y-auto p-5 sm:p-6 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800" @click.stop>
         <div class="flex items-center justify-between mb-6">
           <h3 class="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <AppIcon name="gear" class="w-5 h-5" /> 系统全能设置
@@ -191,7 +191,7 @@ const openExtensionTestPage = () => {
         </div>
 
         <div class="space-y-6">
-          <div class="p-4 bg-zinc-50 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
+          <div class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
             <h4 class="text-sm font-semibold text-zinc-800 mb-3 dark:text-zinc-100 flex items-center gap-2"><AppIcon name="palette" class="w-4 h-4" /> 界面偏好</h4>
             <div class="grid grid-cols-2 gap-6">
               <div>
@@ -235,7 +235,7 @@ const openExtensionTestPage = () => {
             </div>
           </div>
 
-          <div class="p-4 bg-zinc-50 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
+          <div class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
             <h4 class="text-sm font-semibold text-zinc-800 mb-3 dark:text-zinc-100 flex items-center gap-2">工作区与 MCP</h4>
             <div class="space-y-3">
               <div>
@@ -244,7 +244,7 @@ const openExtensionTestPage = () => {
                   v-model="tavilyApiKeyValue"
                   type="password"
                   autocomplete="off"
-                  class="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 transition-all text-xs"
+                  class="w-full px-3 py-2 rounded-xl acrylic-input focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:text-zinc-100 transition-all text-xs"
                   placeholder="tvly-..."
                 />
                 <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">供 <code>workspace.search</code> 调用 Tavily 搜索；仍需在 MCP 权限中为对应 AI 勾选该工具。</p>
@@ -256,14 +256,14 @@ const openExtensionTestPage = () => {
                 type="number"
                 min="1"
                 max="999"
-                class="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 transition-all text-xs"
+                class="w-full px-3 py-2 rounded-xl acrylic-input focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:text-zinc-100 transition-all text-xs"
               />
               <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 1-999。连续调用 MCP 工具时，每次模型生成和工具返回后的继续执行都会消耗一步。</p>
               </div>
             </div>
           </div>
 
-          <div class="p-4 bg-zinc-50 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
+          <div class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
             <h4 class="text-sm font-semibold text-zinc-800 mb-3 dark:text-zinc-100 flex items-center gap-2">
               <AppIcon name="globe" class="w-4 h-4" /> 浏览器插件
             </h4>
@@ -307,7 +307,7 @@ const openExtensionTestPage = () => {
           @click.stop="closeSettingsDialog"
         >
           <div
-            class="bg-white rounded-2xl shadow-2xl w-[860px] max-w-[94vw] max-h-[88vh] flex flex-col dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800"
+            class="acrylic-modal rounded-2xl shadow-2xl w-[860px] max-w-[94vw] max-h-[88vh] flex flex-col dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800"
             @click.stop
           >
             <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
@@ -326,7 +326,7 @@ const openExtensionTestPage = () => {
                     服务器模型会作为 AI 配置中的可选模型来源。修改后点击“完成并保存”写入系统设置。
                   </p>
                   <button
-                    class="shrink-0 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 bg-white text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300"
+                    class="shrink-0 px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 bg-white/75 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-300"
                     @click="addModelPreset"
                   >
                     新增模型
@@ -336,7 +336,7 @@ const openExtensionTestPage = () => {
                   <div
                     v-for="(preset, index) in modelPresetsValue"
                     :key="preset.id || index"
-                    class="rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-950/60 overflow-hidden"
+                    class="rounded-xl border border-zinc-200 bg-white/75 dark:border-zinc-700 dark:bg-zinc-950/60 overflow-hidden"
                   >
                     <button
                       type="button"
@@ -360,25 +360,25 @@ const openExtensionTestPage = () => {
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
                         <div>
                           <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">显示名称</div>
-                          <input :value="preset.name" @input="updateModelPreset(index, { name: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
+                          <input :value="preset.name" @input="updateModelPreset(index, { name: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" />
                         </div>
                         <div>
                           <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">模型名</div>
-                          <input :value="preset.model" @input="updateModelPreset(index, { model: ($event.target as HTMLInputElement).value, id: preset.id || ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
+                          <input :value="preset.model" @input="updateModelPreset(index, { model: ($event.target as HTMLInputElement).value, id: preset.id || ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" />
                         </div>
                         <div>
                           <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">API Key</div>
-                          <input :value="preset.api_key" type="password" autocomplete="off" @input="updateModelPreset(index, { api_key: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
+                          <input :value="preset.api_key" type="password" autocomplete="off" @input="updateModelPreset(index, { api_key: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" />
                         </div>
                         <div>
                           <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">Base URL</div>
-                          <input :value="preset.base_url" @input="updateModelPreset(index, { base_url: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl border border-zinc-200 bg-white dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="https://.../chat/completions" />
+                          <input :value="preset.base_url" @input="updateModelPreset(index, { base_url: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" placeholder="https://.../chat/completions" />
                         </div>
                       </div>
                       <div class="mt-2 flex justify-end gap-2">
                         <button class="text-[11px] px-2 py-1 rounded border border-red-200 text-red-600 bg-red-50 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300" @click="removeModelPreset(index)">删除</button>
                         <button
-                          class="text-[11px] px-2 py-1 rounded border border-zinc-200 text-zinc-600 bg-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                          class="text-[11px] px-2 py-1 rounded border border-zinc-200 text-zinc-600 bg-white/75 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300"
                           @click="setModelPresetExpanded(preset, index, false); emit('save')"
                         >
                           完成并保存

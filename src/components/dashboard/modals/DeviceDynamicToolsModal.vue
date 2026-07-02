@@ -458,7 +458,7 @@ const onDesktopKindChange = () => {
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="props.show" :style="{ zIndex }" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4" @click="emit('close')">
-      <div class="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[680px] max-h-[82vh] p-4 overflow-auto" @click.stop>
+      <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[680px] max-h-[82vh] p-4 overflow-auto" @click.stop>
         <div class="mb-3 flex items-center justify-between gap-2">
           <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">设备动态 MCP 工具（网页管理 · 自动下发）</div>
           <button type="button" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" @click="emit('close')">✕</button>
@@ -636,7 +636,7 @@ const onDesktopKindChange = () => {
               <details class="mt-1">
                 <summary class="text-[10px] text-indigo-600 dark:text-indigo-300 cursor-pointer">可用能力（{{ availableTools.length }}）</summary>
                 <div class="mt-1 flex flex-wrap gap-1">
-                  <code v-for="t in availableTools" :key="t.name" class="rounded bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 text-[10px] text-zinc-600 dark:text-zinc-300">{{ t.name }}</code>
+                  <code v-for="t in availableTools" :key="t.name" class="rounded bg-zinc-100/60 dark:bg-zinc-800/60 px-1 py-0.5 text-[10px] text-zinc-600 dark:text-zinc-300">{{ t.name }}</code>
                 </div>
               </details>
             </div>
@@ -745,7 +745,7 @@ const onDesktopKindChange = () => {
                   :key="v.version_id"
                   class="flex items-center gap-2 rounded border border-zinc-100 dark:border-zinc-800 px-2 py-1"
                 >
-                  <span class="text-[10px] px-1 rounded" :class="v.action === 'delete' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'">{{ actionLabel(v.action) }}</span>
+                  <span class="text-[10px] px-1 rounded" :class="v.action === 'delete' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' : 'bg-zinc-100/60 text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300'">{{ actionLabel(v.action) }}</span>
                   <span class="text-[10px] text-zinc-500">{{ v.actor === 'ai' ? 'AI' : '网页' }}</span>
                   <span class="text-[10px] text-zinc-400 flex-1 truncate">{{ fmtTime(v.created_at) }} · {{ v.revision.slice(0, 8) }}</span>
                   <button type="button" class="text-[10px] text-indigo-600 dark:text-indigo-300 hover:underline shrink-0" @click="restore(v.version_id)">还原</button>

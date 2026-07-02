@@ -9,6 +9,7 @@ import type {
 import { listMcpTools, callMcpTool } from '@/api/mcp'
 import type { User, UserRole } from '@/types'
 import { resolveAvatarUrl } from '@/utils/avatar'
+import AppIcon from '@/components/common/AppIcon.vue'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { AdminModalTab as Tab, AdminMcpParamRow } from '@/types/admin'
 import {
@@ -1268,13 +1269,13 @@ const avatarFor = (u: AdminUser) =>
         @click="emit('close')"
       >
         <div
-          class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col overflow-hidden dark:bg-zinc-900 dark:border dark:border-zinc-800"
+          class="acrylic-modal rounded-2xl shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col overflow-hidden"
           @click.stop
         >
           <!-- Header -->
           <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
             <div class="flex items-center gap-2">
-              <span class="text-lg">🛡️</span>
+              <AppIcon name="shield" class="w-5 h-5 text-zinc-700 dark:text-zinc-200" />
               <h2 class="text-sm md:text-base font-bold text-zinc-800 dark:text-zinc-100">管理员控制台</h2>
             </div>
             <div class="flex items-center gap-3">
@@ -1354,7 +1355,7 @@ const avatarFor = (u: AdminUser) =>
                 <div class="flex items-center gap-2">
                   <select
                     v-model="logLevel"
-                    class="text-xs border border-zinc-200 rounded-lg px-2 py-1 bg-white text-zinc-600 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
+                    class="text-xs acrylic-input rounded-lg px-2 py-1 text-zinc-600 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300"
                     title="按级别过滤"
                   >
                     <option v-for="lv in LOG_LEVELS" :key="lv" :value="lv">{{ lv || '全部级别' }}</option>
@@ -1363,7 +1364,7 @@ const avatarFor = (u: AdminUser) =>
                     v-model="logSearch"
                     type="text"
                     placeholder="搜索关键字…"
-                    class="text-xs border border-zinc-200 rounded-lg px-2 py-1 bg-white text-zinc-600 w-28 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
+                    class="text-xs acrylic-input rounded-lg px-2 py-1 text-zinc-600 w-28 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300"
                   />
                   <label class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400 cursor-pointer select-none">
                     <input type="checkbox" v-model="logAutoScroll" class="accent-indigo-500" /> 滚动到底
@@ -1407,7 +1408,7 @@ const avatarFor = (u: AdminUser) =>
               </div>
               <div class="border border-zinc-200 rounded-xl overflow-hidden dark:border-zinc-800">
                 <table class="w-full text-xs">
-                  <thead class="bg-zinc-50 text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
+                  <thead class="bg-zinc-50/60 text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
                     <tr>
                       <th class="text-left px-3 py-2 font-medium">运行 ID</th>
                       <th class="text-left px-3 py-2 font-medium">用户</th>
@@ -1469,13 +1470,13 @@ const avatarFor = (u: AdminUser) =>
               <div v-if="newUserOpen" class="mb-4 p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 dark:border-indigo-800/60 dark:bg-indigo-900/10">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input v-model="newUser.name" type="text" placeholder="昵称"
-                    class="text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100" />
+                    class="text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
                   <input v-model="newUser.account" type="text" placeholder="账号（登录名）" autocomplete="off"
-                    class="text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100" />
+                    class="text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
                   <input v-model="newUser.password" type="password" placeholder="初始密码（至少 6 位）" autocomplete="new-password"
-                    class="text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100" />
+                    class="text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
                   <select v-model="newUser.role"
-                    class="text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white text-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200">
+                    class="text-sm acrylic-input rounded-lg px-3 py-2 text-zinc-700 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200">
                     <option v-for="opt in ROLE_OPTIONS" :key="opt.value" :value="opt.value"
                       :disabled="opt.value === 'owner' && !isOwner">{{ opt.label }}</option>
                   </select>
@@ -1494,16 +1495,16 @@ const avatarFor = (u: AdminUser) =>
                 :key="u.id"
                 class="flex items-center gap-3 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800"
               >
-                <img :src="avatarFor(u)" class="w-10 h-10 rounded-full border border-zinc-200 bg-zinc-50 object-cover shrink-0" />
+                <img :src="avatarFor(u)" class="w-10 h-10 rounded-full border border-zinc-200 bg-zinc-50/60 object-cover shrink-0" />
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
                     <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">{{ u.name }}</span>
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{{ u.role_label }}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">{{ u.role_label }}</span>
                   </div>
                   <div class="text-xs text-zinc-400 truncate">账号：{{ u.account }}<template v-if="u.email"> · 邮箱：{{ u.email }}</template> · 注册于 {{ fmtTime(u.created_at) }}</div>
                 </div>
                 <select
-                  class="text-xs border border-zinc-200 rounded-lg px-2 py-1.5 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 disabled:opacity-50"
+                  class="text-xs acrylic-input rounded-lg px-2 py-1.5 text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200 disabled:opacity-50"
                   :value="u.role"
                   :disabled="!isOwner"
                   :title="isOwner ? '设置权限' : '仅房主可调整权限'"
@@ -1534,7 +1535,7 @@ const avatarFor = (u: AdminUser) =>
                   class="text-[10px] px-2 py-0.5 rounded-full"
                   :class="authEmailEnabled
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                    : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'"
+                    : 'bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400'"
                 >{{ authEmailEnabled ? '邮件服务可用' : '邮件服务未配置' }}</span>
                 <button
                   class="text-xs px-2 py-1 rounded-lg border border-zinc-200 text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-400"
@@ -1578,7 +1579,7 @@ const avatarFor = (u: AdminUser) =>
                 </label>
               </div>
               <p v-if="authForm.registration_mode === 'email' && !authEmailEnabled" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                ⚠ 当前邮件服务未配置：保存后新用户将无法收到验证码，请先完成下方 SMTP 配置。
+                <AppIcon name="warning" class="w-3.5 h-3.5" /> 当前邮件服务未配置：保存后新用户将无法收到验证码，请先完成下方 SMTP 配置。
               </p>
             </div>
 
@@ -1590,33 +1591,33 @@ const avatarFor = (u: AdminUser) =>
                 <div>
                   <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">SMTP 服务器</label>
                   <input v-model="authForm.smtp_host" :disabled="!isOwner" type="text" placeholder="如 smtp.qq.com"
-                    class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
                 </div>
                 <div>
                   <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">端口</label>
                   <input v-model.number="authForm.smtp_port" :disabled="!isOwner" type="number" min="1" max="65535" placeholder="465"
-                    class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
                 </div>
                 <div>
                   <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">用户名</label>
                   <input v-model="authForm.smtp_username" :disabled="!isOwner" type="text" autocomplete="off" placeholder="通常为完整邮箱地址"
-                    class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
                 </div>
                 <div>
                   <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">密码 / 授权码</label>
                   <input v-model="authForm.smtp_password" :disabled="!isOwner" type="password" autocomplete="new-password"
                     :placeholder="authPasswordSet ? '已配置（留空保持不变）' : '请输入 SMTP 密码或授权码'"
-                    class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
                 </div>
                 <div>
                   <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">发件地址</label>
                   <input v-model="authForm.smtp_from" :disabled="!isOwner" type="text" placeholder="留空使用用户名"
-                    class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
                 </div>
                 <div>
                   <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">加密方式</label>
                   <select v-model="authForm.smtp_encryption" :disabled="!isOwner"
-                    class="w-full text-sm border border-zinc-200 rounded-lg px-3 py-2 bg-white text-zinc-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 disabled:opacity-60">
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 text-zinc-700 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200 disabled:opacity-60">
                     <option value="ssl">SSL（端口 465）</option>
                     <option value="starttls">STARTTLS（端口 587）</option>
                     <option value="none">不加密</option>
@@ -1626,7 +1627,7 @@ const avatarFor = (u: AdminUser) =>
               <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
                   <input v-model="testEmailTo" :disabled="!isOwner" type="email" placeholder="测试收件邮箱"
-                    class="text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60 w-52" />
+                    class="text-sm acrylic-input rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60 w-52" />
                   <button
                     class="text-xs px-3 py-1.5 rounded-lg border border-zinc-200 text-zinc-600 hover:text-indigo-600 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-300 disabled:opacity-50"
                     :disabled="!isOwner || testEmailSending"
@@ -1672,7 +1673,7 @@ const avatarFor = (u: AdminUser) =>
               </div>
               <div v-if="fileLoading" class="text-center text-zinc-400 py-12 text-sm">加载中…</div>
               <!-- Image preview -->
-              <div v-else-if="fileKind === 'image'" class="flex-1 min-h-[360px] flex items-center justify-center bg-zinc-100 dark:bg-zinc-950 rounded-xl p-4 overflow-auto">
+              <div v-else-if="fileKind === 'image'" class="flex-1 min-h-[360px] flex items-center justify-center bg-zinc-100/60 dark:bg-zinc-950/60 rounded-xl p-4 overflow-auto">
                 <img v-if="fileImageUrl" :src="fileImageUrl" :alt="editingFile" class="max-w-full max-h-full object-contain" />
                 <span v-else class="text-zinc-400 text-sm">无法预览此图片</span>
               </div>
@@ -1779,7 +1780,7 @@ const avatarFor = (u: AdminUser) =>
                       </td>
                       <td class="px-3 py-2">
                         <div class="flex items-center gap-2 text-left min-w-0">
-                          <span class="shrink-0">{{ entry.is_dir ? '📁' : entry.kind === 'image' ? '🖼️' : '📄' }}</span>
+                          <AppIcon :name="entry.is_dir ? 'folder' : entry.kind === 'image' ? 'image' : 'file'" class="w-4 h-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
                           <span class="text-zinc-700 dark:text-zinc-200 truncate" :title="entry.name">{{ entry.name }}</span>
                         </div>
                       </td>
@@ -1844,7 +1845,7 @@ const avatarFor = (u: AdminUser) =>
                   class="w-full text-xs px-2 py-2 rounded-lg border border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 dark:border-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-900/20 flex items-center justify-center gap-1 disabled:opacity-50"
                   :disabled="dbExportBusy"
                   @click="runDbExport"
-                >{{ dbExportBusy ? '导出中…' : '⬇ 导出备份' }}</button>
+                ><template v-if="dbExportBusy">导出中…</template><template v-else><AppIcon name="download" class="w-3.5 h-3.5" /> 导出备份</template></button>
                 <label class="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 cursor-pointer select-none">
                   <input v-model="dbExportIncludeMedia" type="checkbox" class="accent-indigo-600" />
                   含媒体文件
@@ -1852,11 +1853,11 @@ const avatarFor = (u: AdminUser) =>
                 <button
                   class="w-full text-xs px-2 py-2 rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 hover:border-amber-300 dark:border-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/20 flex items-center justify-center gap-1"
                   @click="openDbImport"
-                >⬆ 导入备份</button>
+                ><AppIcon name="upload" class="w-3.5 h-3.5" /> 导入备份</button>
                 <button
                   class="w-full text-xs px-2 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20 flex items-center justify-center gap-1"
                   @click="openDbCleanup"
-                >🧹 清理数据库</button>
+                ><AppIcon name="broom" class="w-3.5 h-3.5" /> 清理数据库</button>
               </div>
             </div>
 
@@ -1877,7 +1878,7 @@ const avatarFor = (u: AdminUser) =>
                       v-model="dbSearch"
                       type="text"
                       placeholder="搜索文本列…"
-                      class="text-xs border border-zinc-200 rounded-lg px-2 py-1 bg-white text-zinc-600 w-32 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
+                      class="text-xs acrylic-input rounded-lg px-2 py-1 text-zinc-600 w-32 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300"
                       @keyup.enter="dbSearchSubmit"
                     />
                     <button class="text-xs px-2 py-1 rounded-lg border border-zinc-200 text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-400" @click="dbSearchSubmit">搜索</button>
@@ -1903,7 +1904,7 @@ const avatarFor = (u: AdminUser) =>
                           :title="c.type"
                         >
                           {{ c.name }}
-                          <span v-if="c.primary_key" class="text-amber-500" title="主键">🔑</span>
+                          <AppIcon v-if="c.primary_key" name="key" class="w-3 h-3 text-amber-500" title="主键" />
                         </th>
                       </tr>
                     </thead>
@@ -1956,7 +1957,7 @@ const avatarFor = (u: AdminUser) =>
             </div>
             <div class="border border-zinc-200 rounded-xl overflow-hidden dark:border-zinc-800">
               <table class="w-full text-xs">
-                <thead class="bg-zinc-50 text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
+                <thead class="bg-zinc-50/60 text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
                   <tr>
                     <th class="text-left px-3 py-2 font-medium">时间</th>
                     <th class="text-left px-3 py-2 font-medium">操作者</th>
@@ -2014,7 +2015,7 @@ const avatarFor = (u: AdminUser) =>
                     <li
                       v-for="c in g.checks"
                       :key="c.id"
-                      class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50"
+                      class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-zinc-50/60 dark:bg-zinc-800/50"
                     >
                       <span class="flex items-center gap-2 min-w-0">
                         <span
@@ -2040,7 +2041,7 @@ const avatarFor = (u: AdminUser) =>
               <div class="flex gap-2">
                 <input
                   v-model="llmPrompt"
-                  class="flex-1 border border-zinc-200 rounded-lg px-3 py-2 text-sm dark:bg-zinc-800 dark:border-zinc-700"
+                  class="flex-1 border border-zinc-200 rounded-lg px-3 py-2 text-sm dark:bg-zinc-800/60 dark:border-zinc-700"
                   placeholder="测试提示词"
                 />
                 <button
@@ -2082,7 +2083,7 @@ const avatarFor = (u: AdminUser) =>
               <div class="flex flex-col gap-2 sm:flex-row">
                 <select
                   v-model="selectedMcpTool"
-                  class="sm:w-64 border border-zinc-200 rounded-lg px-3 py-2 text-sm dark:bg-zinc-800 dark:border-zinc-700"
+                  class="sm:w-64 border border-zinc-200 rounded-lg px-3 py-2 text-sm dark:bg-zinc-800/60 dark:border-zinc-700"
                 >
                   <option value="">选择工具…</option>
                   <option v-for="t in mcpTools" :key="t.name" :value="t.name">{{ t.name }}</option>
@@ -2095,7 +2096,7 @@ const avatarFor = (u: AdminUser) =>
               </div>
 
               <!-- 选中工具的说明与参数表 -->
-              <div v-if="selectedToolInfo" class="mt-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 p-3">
+              <div v-if="selectedToolInfo" class="mt-3 rounded-lg bg-zinc-50/60 dark:bg-zinc-800/50 p-3">
                 <div v-if="selectedToolInfo.description" class="text-xs text-zinc-600 dark:text-zinc-300 mb-2">{{ selectedToolInfo.description }}</div>
                 <div v-if="selectedToolParams.length" class="space-y-1">
                   <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">参数</div>
@@ -2121,13 +2122,13 @@ const avatarFor = (u: AdminUser) =>
               <textarea
                 v-model="mcpArgsText"
                 rows="4"
-                class="mt-2 w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm font-mono dark:bg-zinc-800 dark:border-zinc-700"
+                class="mt-2 w-full border border-zinc-200 rounded-lg px-3 py-2 text-sm font-mono dark:bg-zinc-800/60 dark:border-zinc-700"
                 placeholder='{"query": "示例参数"}'
               ></textarea>
               <pre
                 v-if="mcpResult"
                 class="mt-2 text-xs rounded-lg p-3 overflow-x-auto max-h-72 whitespace-pre-wrap"
-                :class="mcpResult.ok ? 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'"
+                :class="mcpResult.ok ? 'bg-zinc-100/60 text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'"
               >{{ mcpResult.text }}</pre>
             </section>
           </div>
@@ -2147,7 +2148,7 @@ const avatarFor = (u: AdminUser) =>
               v-if="repoStatus && repoStatus.update_mode === 'unavailable'"
               class="rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-700/40 dark:bg-amber-900/10 px-4 py-3 text-xs text-amber-700 dark:text-amber-300"
             >
-              当前部署不是 Git 工作区，无法自动更新。请将服务器以 <code>git clone</code> 的方式部署（目录含 <code>.git</code>），即可在本页一键检测并直接拉取最新代码。
+              未连接宿主版本更新服务，暂时无法自动更新。请通过 <code>docker-run.sh</code> 启动服务，或配置 <code>HEYSURE_REPO_UPDATER_URL</code> 指向可用的更新服务。
             </div>
 
             <template v-if="repoStatus">
@@ -2195,7 +2196,7 @@ const avatarFor = (u: AdminUser) =>
                     :min="Math.max(1, Math.round(repoStatus.limits.min_interval / 60))"
                     :max="Math.round(repoStatus.limits.max_interval / 60)"
                     :disabled="!repoStatus.updater_available"
-                    class="w-24 text-sm border border-zinc-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60"
+                    class="w-24 text-sm acrylic-input rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60"
                   />
                   <span class="text-zinc-500 dark:text-zinc-400">分钟</span>
                   <span class="text-[11px] text-zinc-400">（{{ Math.max(1, Math.round(repoStatus.limits.min_interval / 60)) }}–{{ Math.round(repoStatus.limits.max_interval / 60) }} 分钟）</span>
@@ -2236,7 +2237,7 @@ const avatarFor = (u: AdminUser) =>
                     <span
                       class="w-5 h-5 inline-flex items-center justify-center rounded-full text-[11px] font-bold shrink-0"
                       :class="{
-                        'bg-zinc-100 text-zinc-400 dark:bg-zinc-800': step.status === 'pending' || step.status === 'skipped',
+                        'bg-zinc-100/60 text-zinc-400 dark:bg-zinc-800/60': step.status === 'pending' || step.status === 'skipped',
                         'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 animate-pulse': step.status === 'active',
                         'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300': step.status === 'done',
                         'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300': step.status === 'error',
@@ -2282,7 +2283,7 @@ const avatarFor = (u: AdminUser) =>
         @click="repoCommitDetail = null"
       >
         <div
-          class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden dark:bg-zinc-900 dark:border dark:border-zinc-800"
+          class="acrylic-modal rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden"
           @click.stop
         >
           <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
@@ -2295,7 +2296,7 @@ const avatarFor = (u: AdminUser) =>
               <div class="mt-1 text-xs text-zinc-400">{{ repoCommitDetail.author }} · {{ fmtCommitTime(repoCommitDetail.committed_at) }}</div>
               <code class="mt-2 block text-xs text-indigo-600 dark:text-indigo-400 break-all">{{ repoCommitDetail.sha }}</code>
             </div>
-            <pre v-if="repoCommitDetail.body && repoCommitDetail.body !== repoCommitDetail.subject" class="rounded-lg bg-zinc-50 dark:bg-zinc-800 p-3 text-xs text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap">{{ repoCommitDetail.body }}</pre>
+            <pre v-if="repoCommitDetail.body && repoCommitDetail.body !== repoCommitDetail.subject" class="rounded-lg bg-zinc-50/60 dark:bg-zinc-800/60 p-3 text-xs text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap">{{ repoCommitDetail.body }}</pre>
             <div>
               <div class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-2">变更文件（{{ repoCommitDetail.files?.length || 0 }}）</div>
               <div v-if="repoCommitDetail.files?.length" class="rounded-lg border border-zinc-200 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -2325,7 +2326,7 @@ const avatarFor = (u: AdminUser) =>
         @click="closeDbEditor"
       >
         <div
-          class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden dark:bg-zinc-900 dark:border dark:border-zinc-800"
+          class="acrylic-modal rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden"
           @click.stop
         >
           <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
@@ -2338,7 +2339,7 @@ const avatarFor = (u: AdminUser) =>
             <div v-for="c in dbColumns" :key="c.name">
               <label class="flex items-center gap-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 mb-1">
                 <span class="font-mono">{{ c.name }}</span>
-                <span v-if="c.primary_key" class="text-amber-500" title="主键">🔑</span>
+                <AppIcon v-if="c.primary_key" name="key" class="w-3 h-3 text-amber-500" title="主键" />
                 <span class="text-[10px] text-zinc-400 font-normal">{{ c.py_type }}{{ c.nullable ? ' · 可空' : '' }}</span>
               </label>
               <textarea
@@ -2347,13 +2348,13 @@ const avatarFor = (u: AdminUser) =>
                 rows="1"
                 spellcheck="false"
                 :disabled="!isOwner || (dbEditor.mode === 'update' && c.primary_key)"
-                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-1.5 bg-white text-zinc-700 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-zinc-50 disabled:text-zinc-400 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 dark:disabled:bg-zinc-800/50"
+                class="w-full text-xs acrylic-input rounded-lg px-2.5 py-1.5 text-zinc-700 font-mono resize-y focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-zinc-50 disabled:text-zinc-400 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200 dark:disabled:bg-zinc-800/50"
               ></textarea>
               <select
                 v-else-if="c.py_type === 'bool'"
                 v-model="dbEditor.values[c.name]"
                 :disabled="!isOwner || (dbEditor.mode === 'update' && c.primary_key)"
-                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-1.5 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-zinc-50 disabled:text-zinc-400 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                class="w-full text-xs acrylic-input rounded-lg px-2.5 py-1.5 text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-zinc-50 disabled:text-zinc-400 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200"
               >
                 <option value="">（空）</option>
                 <option value="true">true</option>
@@ -2365,7 +2366,7 @@ const avatarFor = (u: AdminUser) =>
                 type="text"
                 :placeholder="dbEditor.mode === 'insert' && c.primary_key ? '留空自动生成' : ''"
                 :disabled="!isOwner || (dbEditor.mode === 'update' && c.primary_key)"
-                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-1.5 bg-white text-zinc-700 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-zinc-50 disabled:text-zinc-400 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 dark:disabled:bg-zinc-800/50"
+                class="w-full text-xs acrylic-input rounded-lg px-2.5 py-1.5 text-zinc-700 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-zinc-50 disabled:text-zinc-400 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200 dark:disabled:bg-zinc-800/50"
               />
             </div>
           </div>
@@ -2393,16 +2394,16 @@ const avatarFor = (u: AdminUser) =>
         @click="closeDbCleanup"
       >
         <div
-          class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden dark:bg-zinc-900 dark:border dark:border-zinc-800"
+          class="acrylic-modal rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden"
           @click.stop
         >
           <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
-            <h3 class="text-sm font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5">🧹 清理数据库</h3>
+            <h3 class="text-sm font-bold text-red-600 dark:text-red-400 flex items-center gap-1.5"><AppIcon name="broom" class="w-4 h-4" /> 清理数据库</h3>
             <button class="w-7 h-7 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center" @click="closeDbCleanup">✕</button>
           </div>
           <div class="flex-1 overflow-y-auto p-5 space-y-4">
             <div class="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5 text-xs text-red-700 leading-relaxed dark:bg-red-900/15 dark:border-red-900/40 dark:text-red-300">
-              ⚠️ 高风险操作：将永久清空所选记录并删除数据库中已无任何模型引用的无用数据表，<b>不可恢复</b>。请先确认已做好备份。
+              <AppIcon name="warning" class="w-3.5 h-3.5" /> 高风险操作：将永久清空所选记录并删除数据库中已无任何模型引用的无用数据表，<b>不可恢复</b>。请先确认已做好备份。
             </div>
 
             <!-- Cleanup scope -->
@@ -2435,14 +2436,14 @@ const avatarFor = (u: AdminUser) =>
                 type="text"
                 autocomplete="off"
                 placeholder="房主账号"
-                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-2 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-red-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                class="w-full text-xs acrylic-input rounded-lg px-2.5 py-2 text-zinc-700 focus:outline-none focus:ring-2 focus:ring-red-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200"
               />
               <input
                 v-model="dbCleanupForm.password"
                 type="password"
                 autocomplete="new-password"
                 placeholder="房主密码"
-                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-2 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-red-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                class="w-full text-xs acrylic-input rounded-lg px-2.5 py-2 text-zinc-700 focus:outline-none focus:ring-2 focus:ring-red-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200"
                 @keyup.enter="runDbCleanup"
               />
             </div>
@@ -2452,7 +2453,7 @@ const avatarFor = (u: AdminUser) =>
               v-if="dbCleanupResult"
               class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-xs text-emerald-700 leading-relaxed dark:bg-emerald-900/15 dark:border-emerald-900/40 dark:text-emerald-300"
             >
-              ✅ 清理完成：共删除 {{ dbCleanupResult.total_deleted }} 条记录。
+              <AppIcon name="check" class="w-3.5 h-3.5" /> 清理完成：共删除 {{ dbCleanupResult.total_deleted }} 条记录。
               <div v-if="Object.keys(dbCleanupResult.cleared).length" class="mt-1 font-mono text-[11px]">
                 <div v-for="(n, name) in dbCleanupResult.cleared" :key="name">{{ name }}：{{ n }} 行</div>
               </div>
@@ -2485,16 +2486,16 @@ const avatarFor = (u: AdminUser) =>
         @click="closeDbImport"
       >
         <div
-          class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden dark:bg-zinc-900 dark:border dark:border-zinc-800"
+          class="acrylic-modal rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col overflow-hidden"
           @click.stop
         >
           <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
-            <h3 class="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">⬆ 导入数据库备份</h3>
+            <h3 class="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5"><AppIcon name="upload" class="w-4 h-4" /> 导入数据库备份</h3>
             <button class="w-7 h-7 rounded-full text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center" @click="closeDbImport">✕</button>
           </div>
           <div class="flex-1 overflow-y-auto p-5 space-y-4">
             <div class="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700 leading-relaxed dark:bg-amber-900/15 dark:border-amber-900/40 dark:text-amber-300">
-              ⚠️ 高风险操作：导入会<b>清空并覆盖</b>备份中包含的所有数据表（账号、对话、AI 配置、任务、知识等），<b>不可恢复</b>。请先用「导出备份」保存当前数据。
+              <AppIcon name="warning" class="w-3.5 h-3.5" /> 高风险操作：导入会<b>清空并覆盖</b>备份中包含的所有数据表（账号、对话、AI 配置、任务、知识等），<b>不可恢复</b>。请先用「导出备份」保存当前数据。
             </div>
 
             <!-- Backup file -->
@@ -2517,14 +2518,14 @@ const avatarFor = (u: AdminUser) =>
                 type="text"
                 autocomplete="off"
                 placeholder="房主账号"
-                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-2 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                class="w-full text-xs acrylic-input rounded-lg px-2.5 py-2 text-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200"
               />
               <input
                 v-model="dbImportForm.password"
                 type="password"
                 autocomplete="new-password"
                 placeholder="房主密码"
-                class="w-full text-xs border border-zinc-200 rounded-lg px-2.5 py-2 bg-white text-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200"
+                class="w-full text-xs acrylic-input rounded-lg px-2.5 py-2 text-zinc-700 focus:outline-none focus:ring-2 focus:ring-amber-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-200"
                 @keyup.enter="runDbImport"
               />
             </div>
@@ -2534,7 +2535,7 @@ const avatarFor = (u: AdminUser) =>
               v-if="dbImportResult"
               class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-xs text-emerald-700 leading-relaxed dark:bg-emerald-900/15 dark:border-emerald-900/40 dark:text-emerald-300"
             >
-              ✅ 导入完成：共写入 {{ dbImportResult.total }} 行，覆盖 {{ Object.keys(dbImportResult.imported).length }} 张表。
+              <AppIcon name="check" class="w-3.5 h-3.5" /> 导入完成：共写入 {{ dbImportResult.total }} 行，覆盖 {{ Object.keys(dbImportResult.imported).length }} 张表。
               <div v-if="dbImportResult.skipped_tables.length" class="mt-1 text-amber-600">
                 跳过未知表：<span class="font-mono">{{ dbImportResult.skipped_tables.join('、') }}</span>
               </div>

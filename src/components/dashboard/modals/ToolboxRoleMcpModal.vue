@@ -82,7 +82,7 @@ const onSave = () => {
       @click="emit('close')"
     >
       <div
-        class="bg-white rounded-2xl shadow-2xl w-[760px] max-w-[94vw] max-h-[84vh] flex flex-col dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800"
+        class="acrylic-modal rounded-2xl shadow-2xl w-[760px] max-w-[94vw] max-h-[84vh] flex flex-col dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800"
         @click.stop
       >
         <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">

@@ -154,9 +154,9 @@ const statusDisplay = computed(() => {
       if (isUserChatActive) return { text: `与用户沟通中${runtimeSuffix}`, class: 'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-300 dark:bg-cyan-500/10 dark:border-cyan-500/30' }
       if (isTaskRunning) return { text: `工作中${runtimeSuffix}`, class: 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/30' }
       if (isTaskWaiting) return { text: `等待中${runtimeSuffix}`, class: 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-500/10 dark:border-amber-500/30' }
-      return { text: `空闲中${runtimeSuffix}`, class: 'text-zinc-600 bg-zinc-100 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-800/80 dark:border-zinc-700' }
+      return { text: `空闲中${runtimeSuffix}`, class: 'text-zinc-600 bg-zinc-100/60 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-800/80 dark:border-zinc-700' }
     case 'reproducing': return { text: '传宗接代 (总结任务)', class: 'text-purple-600 bg-purple-50 border-purple-200 animate-pulse dark:text-purple-300 dark:bg-purple-500/10 dark:border-purple-500/30' }
-    case 'dead': return { text: '已枯竭', class: 'text-zinc-500 bg-zinc-100 border-zinc-200 dark:text-zinc-400 dark:bg-zinc-800 dark:border-zinc-700' }
+    case 'dead': return { text: '已枯竭', class: 'text-zinc-500 bg-zinc-100/60 border-zinc-200 dark:text-zinc-400 dark:bg-zinc-800/60 dark:border-zinc-700' }
     default: return { text: '未知', class: 'text-gray-500' }
   }
 })
@@ -469,7 +469,7 @@ const taskStatusClass = (raw?: string) => {
   if (status === 'scheduled' || status === 'next') return 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/50 dark:bg-sky-500/10 dark:text-sky-300'
   if (status === 'completed' || status === 'done' || status === 'finished') return 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/50 dark:bg-blue-500/10 dark:text-blue-300'
   if (status === 'error' || status === 'stopped' || status === 'cancelled') return 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/50 dark:bg-rose-500/10 dark:text-rose-300'
-  return 'border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+  return 'border-zinc-300 bg-zinc-100/60 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300'
 }
 
 const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' | 'browser' } | null>(null)
@@ -520,7 +520,7 @@ const onCardPointerUp = (event: PointerEvent) => {
 
 <template>
   <div 
-    class="agent-card-shell relative bg-white rounded-xl p-4 transition-all duration-300 border shadow-sm hover:shadow-lg hover:-translate-y-1 w-full min-w-0 dark:bg-zinc-900/90 dark:border-zinc-700/50 backdrop-blur-sm group cursor-pointer touch-manipulation"
+    class="agent-card-shell relative acrylic-panel rounded-xl p-4 transition-all duration-300 border shadow-sm hover:shadow-lg hover:-translate-y-1 w-full min-w-0 dark:bg-zinc-900/90 dark:border-zinc-700/50 backdrop-blur-sm group cursor-pointer touch-manipulation"
     :class="[cardBorderClass, cardGlowClass]"
     @dblclick="onCardDblClick"
     @pointerup="onCardPointerUp"
@@ -539,11 +539,11 @@ const onCardPointerUp = (event: PointerEvent) => {
       <div class="min-w-0 flex-1 pr-2">
         <h3 class="font-bold text-zinc-900 flex items-center gap-2 text-base dark:text-zinc-100 group-hover:text-indigo-600 transition-colors min-w-0">
           <span class="truncate">{{ agent.name }}</span>
-          <span class="text-xs font-normal text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400">
+          <span class="text-xs font-normal text-zinc-400 bg-zinc-100/60 px-1.5 py-0.5 rounded border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-400">
             第 {{ syncedGeneration }} 代
           </span>
           <span
-            class="min-w-0 inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-normal text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+            class="min-w-0 inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50/60 px-1.5 py-0.5 text-xs font-normal text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400"
             :title="agent.platform"
           >
             <span class="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title="在线"></span>
@@ -632,7 +632,7 @@ const onCardPointerUp = (event: PointerEvent) => {
         <span class="font-medium">{{ isUnlimitedLife ? '对话模式 (Token 不设上限)' : '生命周期 (Token)' }}</span>
         <span class="font-mono">{{ isUnlimitedLife ? `${Math.floor(agent.tokensUsed)} / 无上限` : `${Math.floor(agent.tokensUsed)} / ${agent.tokenLimit}` }}</span>
       </div>
-      <div class="w-full bg-zinc-100 rounded-full h-2 overflow-hidden border border-zinc-100 dark:bg-zinc-800 dark:border-zinc-700">
+      <div class="w-full bg-zinc-100/60 rounded-full h-2 overflow-hidden border border-zinc-100 dark:bg-zinc-800/60 dark:border-zinc-700">
         <div 
           class="h-full rounded-full transition-all duration-700 ease-out" 
           :class="lifeColorClass" 

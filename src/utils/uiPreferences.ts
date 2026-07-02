@@ -5,9 +5,9 @@ const THEME_STORAGE_KEY = 'heysure-ui-theme-mode'
 const FONT_SIZE_STORAGE_KEY = 'heysure-ui-font-size'
 
 const FONT_SIZE_MAP: Record<FontSize, string> = {
-  sm: '13px',
-  md: '14px',
-  lg: '16px',
+  sm: '14px',
+  md: '17px',
+  lg: '20px',
 }
 
 const readStoredThemeMode = (): ThemeMode | null => {

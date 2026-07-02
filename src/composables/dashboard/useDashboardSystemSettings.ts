@@ -284,7 +284,7 @@ Rules:
   }
 
   const applyFontSize = (size: FontSize) => {
-    const map: Record<FontSize, string> = { sm: '13px', md: '14px', lg: '16px' }
+    const map: Record<FontSize, string> = { sm: '14px', md: '17px', lg: '20px' }
     document.documentElement.style.setProperty('--app-font-size', map[size])
   }
 

@@ -136,7 +136,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-    <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl w-full max-w-md border border-zinc-200 dark:border-zinc-800 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
+    <div class="acrylic-modal rounded-2xl shadow-xl w-full max-w-md border border-zinc-200 dark:border-zinc-800 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-xl font-bold text-zinc-800 dark:text-zinc-100">{{ title }}</h2>
         <button @click="$emit('close')" class="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
@@ -161,12 +161,12 @@ onBeforeUnmount(() => {
 
       <form v-else @submit.prevent="handleSubmit" class="space-y-4">
         <!-- 登录方式切换：仅服务器启用邮箱时显示 -->
-        <div v-if="isLoginMode && authConfig.email_enabled" class="grid grid-cols-2 gap-1 p-1 rounded-lg bg-zinc-100 dark:bg-zinc-800">
+        <div v-if="isLoginMode && authConfig.email_enabled" class="grid grid-cols-2 gap-1 p-1 rounded-lg bg-zinc-100/60 dark:bg-zinc-800/60">
           <button
             type="button"
             class="py-1.5 text-sm font-medium rounded-md transition-colors"
             :class="loginMethod === 'password'
-              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+              ? 'bg-white/75 dark:bg-zinc-700/70 text-zinc-900 dark:text-zinc-100 shadow-sm'
               : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'"
             @click="loginMethod = 'password'"
           >密码登录</button>
@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
             type="button"
             class="py-1.5 text-sm font-medium rounded-md transition-colors"
             :class="loginMethod === 'email'
-              ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-sm'
+              ? 'bg-white/75 dark:bg-zinc-700/70 text-zinc-900 dark:text-zinc-100 shadow-sm'
               : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'"
             @click="loginMethod = 'email'"
           >邮箱验证码</button>
@@ -182,19 +182,19 @@ onBeforeUnmount(() => {
 
         <div v-if="!isLoginMode">
           <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">昵称</label>
-          <input v-model="name" type="text" required class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入昵称" />
+          <input v-model="name" type="text" required class="w-full px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入昵称" />
         </div>
 
         <!-- 账号 + 密码（注册始终需要；登录在密码方式下需要） -->
         <template v-if="!isLoginMode || loginMethod === 'password'">
           <div>
             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">账号</label>
-            <input v-model="account" type="text" required class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入账号" />
+            <input v-model="account" type="text" required class="w-full px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入账号" />
           </div>
 
           <div>
             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">密码</label>
-            <input v-model="password" type="password" required class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入密码" />
+            <input v-model="password" type="password" required class="w-full px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入密码" />
           </div>
         </template>
 
@@ -202,13 +202,13 @@ onBeforeUnmount(() => {
         <template v-if="(isLoginMode && loginMethod === 'email') || (!isLoginMode && needEmailVerify)">
           <div>
             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">邮箱</label>
-            <input v-model="email" type="email" required class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入邮箱地址" />
+            <input v-model="email" type="email" required class="w-full px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="请输入邮箱地址" />
           </div>
 
           <div>
             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">验证码</label>
             <div class="flex gap-2">
-              <input v-model="emailCode" type="text" required maxlength="6" inputmode="numeric" class="flex-1 px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all tracking-widest" placeholder="6 位验证码" />
+              <input v-model="emailCode" type="text" required maxlength="6" inputmode="numeric" class="flex-1 px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all tracking-widest" placeholder="6 位验证码" />
               <button
                 type="button"
                 :disabled="sendingCode || codeCooldown > 0"

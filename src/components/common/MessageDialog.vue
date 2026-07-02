@@ -77,7 +77,7 @@ const getIcon = () => {
       <div class="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm transition-opacity" @click="handleCancel"></div>
 
       <!-- Modal Content -->
-      <div class="relative bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+      <div class="relative acrylic-modal rounded-2xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
         <div class="p-6">
           <div class="flex items-start space-x-4">
             <!-- Icon -->
@@ -103,7 +103,7 @@ const getIcon = () => {
                   v-model="promptValue"
                   type="text"
                   :placeholder="state.placeholder"
-                  class="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  class="w-full px-3 py-2 rounded-lg acrylic-input text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                   @keyup.enter="handleConfirm"
                   @keyup.esc="handleCancel"
                 />
@@ -113,7 +113,7 @@ const getIcon = () => {
         </div>
 
         <!-- Actions -->
-        <div class="bg-zinc-50 dark:bg-zinc-900/50 px-6 py-4 flex flex-row-reverse gap-3 border-t border-zinc-100 dark:border-zinc-800/50">
+        <div class="bg-zinc-50/60 dark:bg-zinc-900/50 px-6 py-4 flex flex-row-reverse gap-3 border-t border-zinc-100 dark:border-zinc-800/50">
           <button
             @click="handleConfirm"
             class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm shadow-indigo-200 dark:shadow-none min-w-[5rem]"
@@ -123,7 +123,7 @@ const getIcon = () => {
           <button
             v-if="state.dialogType !== 'alert'"
             @click="handleCancel"
-            class="px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-sm font-semibold rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors min-w-[5rem]"
+            class="px-4 py-2 bg-white/75 dark:bg-zinc-800/60 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-sm font-semibold rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors min-w-[5rem]"
           >
             {{ state.cancelText }}
           </button>

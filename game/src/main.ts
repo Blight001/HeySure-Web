@@ -31,6 +31,11 @@ const boot = async () => {
     parent: 'app',
     backgroundColor: '#3c5a40',
     pixelArt: true,
+    // 必须关闭：Phaser 默认把 mousedown/mouseup（触屏同理）额外挂到
+    // window.top 上。本页面是同源 iframe，window.top 就是主控制台——
+    // 父页面任意位置（含弹窗）的点击都会被按"整个父窗口 → 画布"的错位
+    // 坐标转发进世界，误触成员/建筑。关闭后只处理画布自身的指针事件。
+    input: { windowEvents: false },
     scale: {
       mode: Phaser.Scale.RESIZE,
       width: window.innerWidth,

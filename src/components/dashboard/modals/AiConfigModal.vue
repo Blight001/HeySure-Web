@@ -152,7 +152,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
   <Teleport to="body">
     <Transition name="fade">
       <div v-if="show && form" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-4" @click="onClose">
-      <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5" @click.stop>
+      <div class="acrylic-modal rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-5" @click.stop>
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
             {{ mode === 'create' ? '新建 AI 配置' : `AI 配置 - ${form.name}` }}
@@ -163,7 +163,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <div>
             <label class="block text-xs text-zinc-500 mb-1">名称</label>
-            <input v-model="form.name" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100" />
+            <input v-model="form.name" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
           </div>
           <div>
             <label class="block text-xs text-zinc-500 mb-1">AI 类型</label>
@@ -171,34 +171,34 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                  新建或切换；除它之外所有 AI 都按数字生命成员对待。 -->
             <div
               v-if="form.ai_role_group === 'assistant_admin'"
-              class="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-500 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400"
+              class="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50/60 text-zinc-500 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-400"
             >
               辅助管理员（系统默认，不可新增）
             </div>
             <select
               v-else
               v-model="form.ai_role_group"
-              class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
+              class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100"
             >
               <option value="digital_member">数字生命成员</option>
             </select>
           </div>
           <div v-if="form.ai_role_group === 'digital_member'">
             <label class="block text-xs text-zinc-500 mb-1">成员身份</label>
-            <select v-model="form.digital_member_role" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100">
+            <select v-model="form.digital_member_role" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100">
               <option value="manager">管理员</option>
               <option value="member">普通成员</option>
             </select>
           </div>
           <div>
             <label class="block text-xs text-zinc-500 mb-1">平台</label>
-            <input v-model="form.platform" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100" />
+            <input v-model="form.platform" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
           </div>
           <div>
             <label class="block text-xs text-zinc-500 mb-1">模型</label>
             <select
               v-model="form.model_preset_id"
-              class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
+              class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100"
               @change="onModelPresetChange"
             >
               <option value="">请选择服务器模型</option>
@@ -220,11 +220,11 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
               v-model.number="form.token_limit"
               type="number"
               min="1"
-              class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"
+              class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100"
             />
             <div
               v-else
-              class="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs text-zinc-500 bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300"
+              class="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs text-zinc-500 bg-zinc-50/60 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300"
             >
               辅助管理员无 Token 上限（仅用于与用户对话）
             </div>
@@ -240,7 +240,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                 详情
               </button>
             </div>
-            <textarea v-model="form.prompt" rows="3" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-100"></textarea>
+            <textarea v-model="form.prompt" rows="3" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100"></textarea>
           </div>
         </div>
 
@@ -302,7 +302,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
           class="fixed inset-0 bg-black/35 flex items-center justify-center p-4"
           @click.stop="closeSettingsSection"
         >
-          <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-2xl max-h-[82vh] flex flex-col" @click.stop>
+          <div class="acrylic-modal rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-2xl max-h-[82vh] flex flex-col" @click.stop>
             <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
               <h4 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ settingsSectionTitle[settingsSection] }}</h4>
               <button class="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300" @click="closeSettingsSection">关闭</button>
@@ -310,7 +310,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
 
             <div class="p-4 overflow-y-auto">
               <div v-if="settingsSection === 'mcp'">
-                <label class="mb-3 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60">
+                <label class="mb-3 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
                   <span>MCP 调用无需确认</span>
                   <input type="checkbox" v-model="form.mcp_auto_approve" />
                 </label>
@@ -379,37 +379,37 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
               <div v-else-if="settingsSection === 'bot'" class="space-y-3">
                 <div>
                   <label class="block text-[11px] text-zinc-500 mb-1">机器人类型</label>
-                  <select v-model="form.bot_channel" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs">
+                  <select v-model="form.bot_channel" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs">
                     <option value="feishu">飞书机器人</option>
                     <option value="qq">QQ机器人</option>
                   </select>
                 </div>
 
                 <template v-if="form.bot_channel === 'feishu'">
-                <label class="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60">
+                <label class="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
                   <span>启用飞书机器人</span>
                   <input type="checkbox" v-model="form.bot_configs.feishu.enabled" />
                 </label>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div class="md:col-span-2">
                     <label class="block text-[11px] text-zinc-500 mb-1">自定义群机器人 仅通知 URL</label>
-                    <input v-model="form.bot_configs.feishu.webhook_url" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." />
+                    <input v-model="form.bot_configs.feishu.webhook_url" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..." />
                   </div>
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">App ID</label>
-                    <input v-model="form.bot_configs.feishu.app_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="cli_xxx" />
+                    <input v-model="form.bot_configs.feishu.app_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="cli_xxx" />
                   </div>
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">App Secret</label>
-                    <input v-model="form.bot_configs.feishu.app_secret" type="password" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
+                    <input v-model="form.bot_configs.feishu.app_secret" type="password" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
                   </div>
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">Verification Token</label>
-                    <input v-model="form.bot_configs.feishu.verification_token" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
+                    <input v-model="form.bot_configs.feishu.verification_token" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
                   </div>
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">默认接收 ID 类型</label>
-                    <select v-model="form.bot_configs.feishu.default_receive_id_type" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs">
+                    <select v-model="form.bot_configs.feishu.default_receive_id_type" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs">
                       <option value="chat_id">chat_id</option>
                       <option value="open_id">open_id</option>
                       <option value="user_id">user_id</option>
@@ -419,7 +419,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                   </div>
                   <div class="md:col-span-2">
                     <label class="block text-[11px] text-zinc-500 mb-1">默认接收 ID（AI 主动通知时使用）</label>
-                    <input v-model="form.bot_configs.feishu.default_receive_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="群聊 chat_id 或用户 open_id" />
+                    <input v-model="form.bot_configs.feishu.default_receive_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="群聊 chat_id 或用户 open_id" />
                   </div>
                 </div>
                 <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -428,30 +428,30 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                 </template>
 
                 <template v-else>
-                <label class="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60">
+                <label class="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
                   <span>启用 QQ机器人</span>
                   <input type="checkbox" v-model="form.bot_configs.qq.enabled" />
                 </label>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">App ID</label>
-                    <input v-model="form.bot_configs.qq.app_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="开放平台机器人 AppID" />
+                    <input v-model="form.bot_configs.qq.app_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="开放平台机器人 AppID" />
                   </div>
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">App Secret</label>
-                    <input v-model="form.bot_configs.qq.app_secret" type="password" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
+                    <input v-model="form.bot_configs.qq.app_secret" type="password" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" />
                   </div>
-                  <label class="md:col-span-2 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60">
+                  <label class="md:col-span-2 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
                     <span>使用沙箱环境</span>
                     <input type="checkbox" v-model="form.bot_configs.qq.sandbox" />
                   </label>
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">主动发送目标 ID（可选）</label>
-                    <input v-model="form.bot_configs.qq.default_target_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="openid / group_openid / channel_id" />
+                    <input v-model="form.bot_configs.qq.default_target_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="openid / group_openid / channel_id" />
                   </div>
                   <div>
                     <label class="block text-[11px] text-zinc-500 mb-1">Markdown 模式</label>
-                    <select v-model="form.bot_configs.qq.markdown_mode" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs">
+                    <select v-model="form.bot_configs.qq.markdown_mode" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs">
                       <option value="native">原生 Markdown</option>
                       <option value="template">审核模板</option>
                       <option value="off">关闭（纯文本）</option>
@@ -459,9 +459,9 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                   </div>
                   <div v-if="form.bot_configs.qq.markdown_mode === 'template'" class="md:col-span-2">
                     <label class="block text-[11px] text-zinc-500 mb-1">Markdown 模板 ID</label>
-                    <input v-model="form.bot_configs.qq.markdown_template_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="QQ 开放平台审核通过的模板 ID" />
+                    <input v-model="form.bot_configs.qq.markdown_template_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs" placeholder="QQ 开放平台审核通过的模板 ID" />
                   </div>
-                  <label class="md:col-span-2 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60">
+                  <label class="md:col-span-2 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
                     <span>私聊启用流式输出</span>
                     <input type="checkbox" v-model="form.bot_configs.qq.stream_enabled" :disabled="form.bot_configs.qq.markdown_mode === 'off'" />
                   </label>
@@ -484,7 +484,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
           class="fixed inset-0 bg-black/40 flex items-center justify-center p-4"
           @click.stop="closePromptDetail"
         >
-          <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-5xl h-[82vh] flex flex-col" @click.stop>
+          <div class="acrylic-modal rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-5xl h-[82vh] flex flex-col" @click.stop>
             <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
               <div class="min-w-0">
                 <h4 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">Prompt 详情</h4>
@@ -495,7 +495,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
             <div class="flex-1 min-h-0 p-4">
               <textarea
                 v-model="form.prompt"
-                class="w-full h-full resize-none px-3 py-2 rounded-lg border border-zinc-200 font-mono text-xs leading-5 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-950 dark:border-zinc-700 dark:text-zinc-100"
+                class="w-full h-full resize-none px-3 py-2 rounded-lg border border-zinc-200 font-mono text-xs leading-5 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-950/60 dark:border-zinc-700 dark:text-zinc-100"
               ></textarea>
             </div>
           </div>

@@ -41,7 +41,7 @@ onUnmounted(() => window.removeEventListener('message', onMessage))
 
 <template>
   <section class="flex-1 rounded-2xl border-2 border-zinc-200 flex flex-col overflow-hidden relative dark:border-zinc-700 transition-colors duration-500 bg-[#23262e]">
-    <div class="absolute top-0 left-0 bg-zinc-100 text-zinc-500 text-xs px-3 py-1 rounded-br-lg font-medium z-10 border-b border-r border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 shadow-sm">
+    <div class="absolute top-0 left-0 bg-zinc-100/60 text-zinc-500 text-xs px-3 py-1 rounded-br-lg font-medium z-10 border-b border-r border-zinc-200 dark:bg-zinc-900/60 dark:text-zinc-400 dark:border-zinc-700 shadow-sm">
       <span class="flex items-center gap-1.5"><AppIcon name="globe" class="w-3.5 h-3.5" /> 社会显示</span>
     </div>
     <iframe

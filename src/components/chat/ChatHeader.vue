@@ -142,7 +142,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
       <span class="shrink-0 text-zinc-400">▾</span>
     </button>
 
-    <div v-if="open" class="absolute left-0 top-[calc(100%+6px)] z-20 w-[320px] max-w-[88vw] sm:w-[420px] rounded-xl border border-zinc-200 bg-white dark:bg-zinc-900 dark:border-zinc-700 shadow-lg p-2 overflow-hidden">
+    <div v-if="open" class="absolute left-0 top-[calc(100%+6px)] z-20 w-[320px] max-w-[88vw] sm:w-[420px] rounded-xl acrylic-modal shadow-lg p-2 overflow-hidden">
       <div class="max-h-72 overflow-y-auto overflow-x-hidden space-y-2">
         <!-- 普通对话：在此栏目下创建对话 -->
         <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-800/40">
@@ -266,7 +266,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
     </div>
     <div
       v-if="contextMenu.visible"
-      class="fixed z-[310] min-w-[150px] rounded-lg border border-zinc-200 bg-white py-1 text-xs text-zinc-700 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+      class="fixed z-[310] min-w-[150px] rounded-lg acrylic-modal py-1 text-xs text-zinc-700 shadow-lg dark:text-zinc-200"
       :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
       @click.stop
     >

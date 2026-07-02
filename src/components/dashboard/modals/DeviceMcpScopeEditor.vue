@@ -170,7 +170,7 @@ const closeDetail = () => {
         <button
           v-if="capabilities.length"
           type="button"
-          class="text-[10px] px-2 py-0.5 rounded border border-indigo-200 bg-white text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+          class="text-[10px] px-2 py-0.5 rounded border border-indigo-200 bg-white/75 text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
           @click="openDetail"
         >
           查看详情
@@ -196,7 +196,7 @@ const closeDetail = () => {
           @click="closeDetail"
         >
           <div
-            class="flex w-full max-w-5xl max-h-[86vh] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+            class="flex w-full max-w-5xl max-h-[86vh] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white/75 shadow-xl dark:border-zinc-700 dark:bg-zinc-900/60"
             @click.stop
           >
             <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
@@ -223,7 +223,7 @@ const closeDetail = () => {
                   class="flex h-full items-start gap-2 rounded-lg border px-2.5 py-2 cursor-pointer select-none transition-colors"
                   :class="selected.has(tool)
                     ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-200'
-                    : 'border-zinc-200 bg-white text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300'"
+                    : 'border-zinc-200 bg-white/75 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300'"
                 >
                   <input
                     type="checkbox"

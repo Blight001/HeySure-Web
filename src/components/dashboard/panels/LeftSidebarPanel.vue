@@ -78,7 +78,7 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           @click="activeTab = 'brain'"
           class="flex-1 px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2"
           :class="activeTab === 'brain' 
-            ? 'bg-white text-indigo-600 shadow-sm dark:bg-zinc-700 dark:text-indigo-400' 
+            ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400' 
             : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
         >
           <AppIcon name="brain" class="w-4 h-4" /> 数字生命
@@ -87,7 +87,7 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           @click="activeTab = 'knowledge'"
           class="flex-1 px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2"
           :class="activeTab === 'knowledge' 
-            ? 'bg-white text-indigo-600 shadow-sm dark:bg-zinc-700 dark:text-indigo-400' 
+            ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400' 
             : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
         >
           <AppIcon name="book" class="w-4 h-4" /> 知识库
@@ -96,7 +96,7 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           @click="activeTab = 'workshop'"
           class="flex-1 px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2"
           :class="activeTab === 'workshop'
-            ? 'bg-white text-indigo-600 shadow-sm dark:bg-zinc-700 dark:text-indigo-400'
+            ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400'
             : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
         >
           <AppIcon name="workshop" class="w-4 h-4" /> 作坊

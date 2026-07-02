@@ -182,7 +182,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
       : 'border-blue-300 text-blue-700 dark:border-blue-500/60 dark:text-blue-300'
   }
   return active
-    ? 'border-zinc-500 bg-zinc-200 text-zinc-700 dark:border-zinc-400 dark:bg-zinc-700 dark:text-zinc-100'
+    ? 'border-zinc-500 bg-zinc-200 text-zinc-700 dark:border-zinc-400 dark:bg-zinc-700/70 dark:text-zinc-100'
     : 'border-zinc-300 text-zinc-700 dark:border-zinc-500/70 dark:text-zinc-300'
 }
 </script>
@@ -190,7 +190,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
 <template>
   <Transition name="fade">
     <div v-if="show && target" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-4" @click="onClose">
-      <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-2xl min-h-[72vh] max-h-[90vh] overflow-y-auto p-5" @click.stop>
+      <div class="acrylic-modal rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-2xl min-h-[72vh] max-h-[90vh] overflow-y-auto p-5" @click.stop>
         <div class="flex items-start justify-between gap-3 mb-4">
           <div>
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ target.name }} 的任务列表</div>
@@ -301,7 +301,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                         <span
                           v-for="tag in getTaskPayloadTags(job.task_payload)"
                           :key="`${job.job_id}-${tag}`"
-                          class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                          class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300"
                         >
                           {{ tag }}
                         </span>
@@ -368,10 +368,10 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                 </div>
                 <div class="text-xs text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{{ task.instruction || '暂无任务说明' }}</div>
                 <div class="mt-2 flex flex-wrap gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  <span class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">启用: {{ task.enabled ? '是' : '否' }}</span>
-                  <span class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">定时: {{ task.schedule_enabled ? `是 (${task.interval_minutes} 分钟)` : '否' }}</span>
-                  <span class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">排队: {{ task.queued_count }}</span>
-                  <span class="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">运行: {{ task.running_count }}</span>
+                  <span class="px-2 py-0.5 rounded bg-zinc-100/60 dark:bg-zinc-800/60">启用: {{ task.enabled ? '是' : '否' }}</span>
+                  <span class="px-2 py-0.5 rounded bg-zinc-100/60 dark:bg-zinc-800/60">定时: {{ task.schedule_enabled ? `是 (${task.interval_minutes} 分钟)` : '否' }}</span>
+                  <span class="px-2 py-0.5 rounded bg-zinc-100/60 dark:bg-zinc-800/60">排队: {{ task.queued_count }}</span>
+                  <span class="px-2 py-0.5 rounded bg-zinc-100/60 dark:bg-zinc-800/60">运行: {{ task.running_count }}</span>
                 </div>
               </div>
             </div>
@@ -383,7 +383,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
 
   <Transition name="fade">
     <div v-if="show && taskCreatePanelOpen && target" :style="{ zIndex: taskCreateZIndex }" class="fixed inset-0 bg-black/45 flex items-center justify-center p-4" @click="onCloseTaskCreatePanel">
-      <div class="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-3xl max-h-[86vh] overflow-y-auto p-5" @click.stop>
+      <div class="acrylic-modal rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-3xl max-h-[86vh] overflow-y-auto p-5" @click.stop>
         <div class="flex items-start justify-between gap-3 mb-4">
           <div>
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">新建任务</div>
@@ -397,7 +397,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
             <label class="block text-[11px] text-zinc-500 mb-1">任务名称</label>
             <input
               v-model="taskCreateForm.title"
-              class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
               placeholder="例如：整理今日迭代计划"
             />
             <div class="text-[10px] text-zinc-400 mt-1">入库时会自动追加时间后缀，避免名称重复。</div>
@@ -409,7 +409,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
               type="number"
               min="1"
               max="10"
-              class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
             />
           </div>
           <div class="md:col-span-2">
@@ -417,7 +417,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
             <textarea
               v-model="taskCreateForm.instruction"
               rows="4"
-              class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
               placeholder="描述目标、验收标准、约束条件"
             />
           </div>
@@ -496,7 +496,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                   v-model.number="taskCreateForm.schedule_duration_minutes"
                   type="number"
                   min="1"
-                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
                 />
               </div>
 
@@ -505,7 +505,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                 <input
                   v-model="taskCreateForm.schedule_daily_time"
                   type="time"
-                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
                 />
               </div>
 
@@ -534,7 +534,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                     v-model.number="taskCreateForm.schedule_max_runs"
                     type="number"
                     min="0"
-                    class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                    class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
                   />
                 </div>
                 <div>
@@ -542,7 +542,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                   <input
                     v-model="taskCreateForm.schedule_end_at"
                     type="date"
-                    class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                    class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
                   />
                 </div>
               </div>
@@ -584,7 +584,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                   v-model.number="taskCreateForm.schedule_duration_minutes"
                   type="number"
                   min="1"
-                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
                   :disabled="!taskCreateForm.schedule_enabled"
                 />
               </div>
@@ -594,7 +594,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                 <input
                   v-model="taskCreateForm.schedule_at"
                   type="date"
-                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
                   :disabled="!taskCreateForm.schedule_enabled"
                   @keydown.prevent
                   @paste.prevent
@@ -617,7 +617,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
               v-model.number="taskCreateForm.token_limit_override"
               type="number"
               min="1"
-              class="w-full md:w-56 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              class="w-full md:w-56 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
             />
           </div>
 

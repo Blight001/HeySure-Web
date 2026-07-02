@@ -76,12 +76,12 @@ const toggleViewMode = () => {
       </div>
     </div>
 
-    <div v-if="!isAllView" class="grid grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800/80">
+    <div v-if="!isAllView" class="grid grid-cols-2 gap-1 rounded-lg bg-zinc-100/60 p-1 dark:bg-zinc-800/80">
       <button
         type="button"
         class="h-8 rounded-md px-2 text-xs font-semibold transition-colors"
         :class="activeSection === 'admins'
-          ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100'
+          ? 'bg-white/75 text-zinc-900 shadow-sm dark:bg-zinc-700/70 dark:text-zinc-100'
           : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'"
         @click="activeSection = 'admins'"
       >
@@ -91,7 +91,7 @@ const toggleViewMode = () => {
         type="button"
         class="h-8 rounded-md px-2 text-xs font-semibold transition-colors"
         :class="activeSection === 'members'
-          ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100'
+          ? 'bg-white/75 text-zinc-900 shadow-sm dark:bg-zinc-700/70 dark:text-zinc-100'
           : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'"
         @click="activeSection = 'members'"
       >
@@ -124,7 +124,7 @@ const toggleViewMode = () => {
         <div class="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">数字社会核心管理员</div>
 
         <div v-if="adminAgents.length === 0" class="p-4 bg-red-50 text-red-600 text-sm rounded border border-red-100 animate-pulse dark:bg-red-500/10 dark:border-red-500/20">
-          ⚠️ 警告：管理员离线或正在重生中...
+          <AppIcon name="warning" class="w-4 h-4" /> 警告：管理员离线或正在重生中...
         </div>
 
         <TransitionGroup v-else name="list" tag="div" class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-visible pr-2 pt-2 pb-1">

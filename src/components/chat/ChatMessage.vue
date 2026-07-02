@@ -257,8 +257,8 @@ const attachedMcpToolCount = computed(() =>
             : isMcpToolMessage
               ? 'text-sky-700 dark:text-sky-300'
             : props.message.role === 'system'
-                ? 'bg-zinc-100 border-zinc-200 text-zinc-700 font-mono text-xs dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
-                : 'bg-white border-zinc-200 text-zinc-800 rounded-tl-sm shadow-sm dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-200',
+                ? 'bg-zinc-100/60 border-zinc-200 text-zinc-700 font-mono text-xs dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300'
+                : 'bg-white/75 border-zinc-200 text-zinc-800 rounded-tl-sm shadow-sm dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-200',
           (isPlainAssistantMessage || isMcpToolMessage) ? '' : 'px-4 py-3 rounded-2xl border hover:shadow-md',
           isFrontPromptMessage ? 'front-prompt-bubble' : '',
           isUserMessageBubble ? 'user-message-bubble' : ''

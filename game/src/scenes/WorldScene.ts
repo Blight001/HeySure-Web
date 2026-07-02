@@ -967,6 +967,13 @@ export class WorldScene extends Phaser.Scene {
       // 释放点不在任何对象上 → 清除按下记录，避免残留命中影响下一次判定
       this.pressedObj = null
     })
+    // windowEvents 已关闭（见 game/src/main.ts）：指针移出画布后在 iframe 外
+    // 松开的 mouseup 收不到，这里在移出时主动结束拖拽并清除按下记录，
+    // 避免回到画布后出现"未按住也在拖动相机 / 残留命中误判点击"。
+    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
+      this.camDragging = false
+      this.pressedObj = null
+    })
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       // 辅助管理员操控模式下相机跟随该角色，拖拽平移让位
       if (!this.camDragging || !p.isDown || this.draggingActor || this.governorMode) return

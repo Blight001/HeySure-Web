@@ -8,6 +8,7 @@ import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
 import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
 import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
 import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
+import AppIcon from '@/components/common/AppIcon.vue'
 
 interface Agent {
   id: string
@@ -357,7 +358,7 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
             {{ deviceTypeLabel(device) }} · {{ device.platform || 'unknown' }}
           </div>
         </div>
-        <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+        <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
           {{ lifecycleLabel(device.lifecycle) }}
         </span>
       </div>
@@ -369,7 +370,7 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
         class="mt-2 w-full rounded-lg border border-sky-200 bg-sky-50 px-2 py-1.5 text-[11px] font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
         @click="openRemoteControl(device)"
       >
-        🖥️ {{ isAndroidDevice(device) ? '远程控制 · 查看并操作手机画面' : isBrowserDevice(device) ? '浏览器控制 · 查看并操作浏览器画面' : '桌面控制 · 查看并操作桌面画面' }}
+        <AppIcon name="monitor" class="w-3.5 h-3.5" /> {{ isAndroidDevice(device) ? '远程控制 · 查看并操作手机画面' : isBrowserDevice(device) ? '浏览器控制 · 查看并操作浏览器画面' : '桌面控制 · 查看并操作桌面画面' }}
       </button>
 
       <div class="mt-2 rounded-lg border p-2" :class="memberPanelClass(device)">
@@ -386,7 +387,7 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
         <!-- Multi-bind display for toolbox: list all bound AIs with individual unbind -->
         <div v-if="isToolboxDevice(device) && linkedConfigIds(device).length > 0" class="mb-2">
           <div class="text-[9px] mb-0.5 text-zinc-500">已绑定 AI（这些 AI 的对话 prompt 中会出现 工具箱 MCP）：</div>
-          <div v-for="mid in linkedConfigIds(device)" :key="mid" class="flex justify-between items-center gap-1 text-[10px] bg-zinc-50 dark:bg-zinc-800 px-1 py-0.5 rounded mb-0.5">
+          <div v-for="mid in linkedConfigIds(device)" :key="mid" class="flex justify-between items-center gap-1 text-[10px] bg-zinc-50/60 dark:bg-zinc-800/60 px-1 py-0.5 rounded mb-0.5">
             <span class="min-w-0 truncate">{{ assignableMembers.find((m: any) => Number(m.aiConfigId) === mid)?.name || 'AI-' + mid }} (ID: {{ mid }})</span>
             <span class="shrink-0 flex items-center gap-1">
               <button
@@ -432,7 +433,7 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
           <select
             :value="selectionFor(device)"
             :disabled="busy[device.id]"
-            class="min-w-0 flex-1 rounded border border-zinc-200 bg-white px-1.5 py-1 text-[10px] text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+            class="min-w-0 flex-1 rounded border border-zinc-200 bg-white/75 px-1.5 py-1 text-[10px] text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-200"
             @change="onSelect(device, $event)"
           >
             <option value="">未分配</option>
@@ -485,7 +486,7 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
         <span
           v-for="cap in device.capabilities"
           :key="cap"
-          class="text-[9px] px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+          class="text-[9px] px-1 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400"
         >
           {{ cap }}
         </span>

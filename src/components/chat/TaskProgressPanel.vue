@@ -101,7 +101,7 @@ const phaseBadgeClass = (phase: TaskPlanPhase) => {
     case 'active':
       return 'text-sky-700 bg-sky-50 dark:text-sky-300 dark:bg-sky-900/30'
     default:
-      return 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-800'
+      return 'text-zinc-500 bg-zinc-100/60 dark:text-zinc-400 dark:bg-zinc-800/60'
   }
 }
 
@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
     <!-- 共享悬停详情卡片（鼠标移到阶段上显示） -->
     <div
       v-if="hovered"
-      class="absolute left-0 top-full mt-1 z-[90] rounded-lg border border-zinc-200 bg-white/95 shadow-xl p-2 text-[11px] leading-snug text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-200 min-w-[210px] max-w-[280px] max-h-[60vh] overflow-y-auto overscroll-contain max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh]"
+      class="absolute left-0 top-full mt-1 z-[90] rounded-lg acrylic-modal shadow-xl p-2 text-[11px] leading-snug text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-200 min-w-[210px] max-w-[280px] max-h-[60vh] overflow-y-auto overscroll-contain max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh]"
       @mouseenter="keepTooltipOpen"
       @mouseleave="clearHover"
       @pointerdown.stop

@@ -238,7 +238,7 @@ const groupKindLabel = (group: McpCatalogToolGroup) =>
 <template>
   <div
     v-if="isOpen"
-    class="absolute bottom-full left-0 z-[100] mb-2 flex max-h-[460px] flex-col overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/95 shadow-2xl shadow-zinc-900/10 backdrop-blur-sm dark:border-zinc-700/80 dark:bg-zinc-900/95 dark:shadow-black/40"
+    class="absolute bottom-full left-0 z-[100] mb-2 flex max-h-[460px] flex-col overflow-hidden rounded-2xl acrylic-modal shadow-2xl shadow-zinc-900/10 dark:shadow-black/40"
     :class="previewPath ? 'w-[min(42rem,calc(100vw-2rem))]' : 'w-80'"
   >
     <!-- 头部：路径导航 -->
@@ -295,7 +295,7 @@ const groupKindLabel = (group: McpCatalogToolGroup) =>
       <div class="custom-scrollbar min-h-0 flex-1 overflow-auto p-2">
         <div v-if="previewLoading" class="p-8 text-center text-[12px] text-zinc-400">加载中…</div>
         <div v-else-if="previewError" class="p-8 text-center text-[12px] text-rose-500">{{ previewError }}</div>
-        <div v-else-if="previewKind === 'image'" class="flex min-h-[320px] items-center justify-center rounded-xl bg-zinc-100 p-3 dark:bg-zinc-950">
+        <div v-else-if="previewKind === 'image'" class="flex min-h-[320px] items-center justify-center rounded-xl bg-zinc-100/60 p-3 dark:bg-zinc-950/60">
           <img v-if="previewMediaUrl" :src="previewMediaUrl" :alt="previewPath" class="max-h-[360px] max-w-full object-contain" />
           <span v-else class="text-[12px] text-zinc-400">无法预览此图片</span>
         </div>
@@ -351,7 +351,7 @@ const groupKindLabel = (group: McpCatalogToolGroup) =>
           :disabled="!isItemSelectable(folder, true)"
           @click.stop
           @change="isItemSelectable(folder, true) && emit('toggle', itemPath(folder, true))"
-          class="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800"
+          class="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800/60"
           :class="isItemSelectable(folder, true) ? 'cursor-pointer' : 'cursor-not-allowed'"
         >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
@@ -386,7 +386,7 @@ const groupKindLabel = (group: McpCatalogToolGroup) =>
           @click.stop
           @dblclick.stop
           @change="isItemSelectable(file) && toggleFile(itemPath(file))"
-          class="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800"
+          class="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800/60"
           :class="isItemSelectable(file) ? 'cursor-pointer' : 'cursor-not-allowed'"
         >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
@@ -415,7 +415,7 @@ const groupKindLabel = (group: McpCatalogToolGroup) =>
             type="checkbox"
             :checked="isGroupChecked(group.groupKey)"
             @change="emit('toggleToolGroup', group.groupKey)"
-            class="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800"
+            class="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800/60"
           >
           <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-200">{{ group.groupLabel }}</span>
           <span
