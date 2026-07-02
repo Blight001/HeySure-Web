@@ -1117,11 +1117,24 @@ const dbImportZIndex = usePopupZIndex(dbImportOpen)
 
 const REPO_PHASE_META = ADMIN_REPO_PHASE_META
 const REPO_STEP_ICON = ADMIN_REPO_STEP_ICON
+const REPO_ACTIVE_PHASES = new Set(['checking', 'pulling', 'queued_restart', 'rebuilding', 'restarting'])
+const REPO_RESTART_STEP_LABELS: Record<string, string> = {
+  queued_restart: '等待宿主开始重建',
+  rebuilding: '构建 Docker 镜像',
+  restarting: '重建并启动容器',
+  done: '重启服务完成',
+}
 
 const repoActive = computed(() => {
   const p = repoStatus.value?.state.phase
-  return p === 'checking' || p === 'pulling' || p === 'restarting'
+  return !!p && REPO_ACTIVE_PHASES.has(p)
 })
+
+const repoStepLabel = (step: { key: string; label: string }) => {
+  if (step.key !== 'restart') return step.label
+  const phase = repoStatus.value?.state.phase || ''
+  return REPO_RESTART_STEP_LABELS[phase] || step.label
+}
 
 const fmtCommitTime = formatCommitDateTime
 
@@ -1140,7 +1153,7 @@ const loadRepoStatus = async (silent = false) => {
     }
   } catch (err) {
     // 重启阶段网关不可达属预期：标记为「重启中」而非报错。
-    if (repoStatus.value?.state.phase === 'restarting' || repoActive.value) {
+    if (repoActive.value) {
       repoUnreachable.value = true
     } else if (!silent) {
       await alert({ message: (err as Error).message, type: 'error' })
@@ -2247,14 +2260,14 @@ const avatarFor = (u: AdminUser) =>
                       :class="step.status === 'pending' || step.status === 'skipped'
                         ? 'text-zinc-400'
                         : 'text-zinc-700 dark:text-zinc-200'"
-                    >{{ step.label }}</span>
+                    >{{ repoStepLabel(step) }}</span>
                     <span v-if="step.status === 'skipped'" class="text-[11px] text-zinc-400">（跳过）</span>
                   </div>
                 </div>
 
                 <!-- 信息提示 -->
                 <p v-if="repoUnreachable" class="text-xs text-purple-600 dark:text-purple-400">
-                  服务正在重启，控制台暂时不可用，请稍候…恢复后将显示最新版本。
+                  服务正在重建或重启，控制台暂时不可用，请稍候…恢复后将显示最新版本。
                 </p>
                 <p v-else-if="repoStatus.state.behind > 0 && repoStatus.state.phase === 'update_available'" class="text-xs text-amber-600 dark:text-amber-400">
                   发现 {{ repoStatus.state.behind }} 个新提交待应用。

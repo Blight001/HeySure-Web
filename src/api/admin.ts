@@ -478,7 +478,10 @@ export type RepoUpdatePhase =
   | 'up_to_date'
   | 'update_available'
   | 'pulling'
+  | 'queued_restart'
+  | 'rebuilding'
   | 'restarting'
+  | 'done'
   | 'error'
 
 export type RepoStepStatus = 'pending' | 'active' | 'done' | 'error' | 'skipped'
