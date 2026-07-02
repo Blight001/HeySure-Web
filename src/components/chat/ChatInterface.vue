@@ -2067,7 +2067,7 @@ onBeforeUnmount(() => {
           :liveThinking="liveThinkingText"
           :livePhase="currentRunPhase"
           :nowTimestamp="isRunActive ? timeTick : undefined"
-          :liveSegmentStartedAt="currentRunPhase !== 'idle' ? phaseEnterTs ?? undefined : undefined"
+          :liveSegmentStartedAt="currentRunPhase === 'generating' ? phaseEnterTs ?? undefined : undefined"
           :appliedEdits="appliedEditsArray"
           :appliedSignatures="appliedSignaturesArray"
           :actionResults="actionResults"
