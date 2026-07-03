@@ -603,7 +603,6 @@ onBeforeUnmount(() => {
               playsinline
               muted
               class="w-full h-full object-contain rounded-lg bg-zinc-950 touch-none select-none"
-              :class="isDesktopLike ? 'cursor-crosshair' : ''"
               @loadedmetadata="onVideoResize"
               @resize="onVideoResize"
               @pointerdown="onPointerDown"
