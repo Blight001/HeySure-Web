@@ -9,6 +9,7 @@
  */
 import { io, type Socket } from 'socket.io-client'
 import { getAuthToken } from '@/api/http'
+import { fetchIceServers, DEFAULT_ICE_SERVERS, type IceServer } from '@/api/rtc'
 
 export type ScreenStatus = 'connecting' | 'streaming' | 'error' | 'ended'
 
@@ -19,12 +20,12 @@ export interface RemoteScreenHandlers {
   onStream?: (stream: MediaStream) => void
 }
 
-const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
-
 export class RemoteScreenViewer {
   private socket: Socket | null = null
   private pc: RTCPeerConnection | null = null
   private sessionId = ''
+  // Resolved from the server (STUN + optional TURN) before the peer is built.
+  private iceServers: IceServer[] = DEFAULT_ICE_SERVERS
   // setRemoteDescription 之前到达的 ICE 必须先缓冲。
   private pendingIce: RTCIceCandidateInit[] = []
   private stopped = false
@@ -50,7 +51,7 @@ export class RemoteScreenViewer {
 
   private ensurePeer(): RTCPeerConnection {
     if (this.pc) return this.pc
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const pc = new RTCPeerConnection({ iceServers: this.iceServers as RTCIceServer[] })
     pc.ontrack = (event) => {
       const stream = event.streams[0] || null
       if (stream) this.handlers.onStream?.(stream)
@@ -73,6 +74,8 @@ export class RemoteScreenViewer {
   private async handleOffer(data: { sessionId: string; sdp: string }) {
     if (this.stopped) return
     this.sessionId = data.sessionId
+    // Resolve server ICE config (STUN + optional TURN) before building the peer.
+    this.iceServers = await fetchIceServers()
     const pc = this.ensurePeer()
     await pc.setRemoteDescription({ type: 'offer', sdp: data.sdp })
     for (const candidate of this.pendingIce.splice(0)) {

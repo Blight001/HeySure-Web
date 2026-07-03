@@ -389,6 +389,39 @@ export const sendTestEmail = (to: string) =>
     fallbackError: '发送测试邮件失败',
   })
 
+// ---- Remote-control ICE settings (STUN + TURN) ----
+
+export interface IceServer {
+  urls: string | string[]
+  username?: string
+  credential?: string
+}
+
+export interface RtcSettings {
+  stun_url: string
+  turn_url: string
+  turn_username: string
+  /** 密码永不回传，仅指示是否已配置 */
+  turn_password_set: boolean
+  turn_enabled: boolean
+  /** 客户端实际会收到的 iceServers（不含凭据），用于预览 */
+  ice_servers: IceServer[]
+}
+
+export interface RtcSettingsPayload {
+  stun_url: string
+  turn_url: string
+  turn_username: string
+  /** null = 保留已存密码 */
+  turn_password: string | null
+}
+
+export const getRtcSettings = () =>
+  get<RtcSettings>('/api/admin/rtc-settings', { fallbackError: '获取远程控制设置失败' })
+
+export const updateRtcSettings = (payload: RtcSettingsPayload) =>
+  put<RtcSettings>('/api/admin/rtc-settings', payload, { fallbackError: '保存远程控制设置失败' })
+
 export const setUserRole = (userId: number, role: UserRole) =>
   patch<{ ok: boolean; user: AdminUser }>(`/api/admin/users/${userId}/role`, { role }, {
     fallbackError: '设置权限失败',

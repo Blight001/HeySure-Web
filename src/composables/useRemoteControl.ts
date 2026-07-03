@@ -1,6 +1,7 @@
 import { ref, shallowRef } from 'vue'
 import { io, type Socket } from 'socket.io-client'
 import { getAuthToken } from '@/api/http'
+import { fetchIceServers, DEFAULT_ICE_SERVERS, type IceServer } from '@/api/rtc'
 
 /**
  * Drives one human-operated remote-control session against an Android device.
@@ -69,8 +70,6 @@ export type RcBrowserCommand =
   | { action: 'navigate' | 'new-tab'; url?: string }
   | { action: 'switch-tab' | 'close-tab'; tabId: number }
 
-const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
-
 export const useRemoteControl = () => {
   const status = ref<RcStatus>('idle')
   const errorMessage = ref('')
@@ -85,6 +84,9 @@ export const useRemoteControl = () => {
 
   let socket: Socket | null = null
   let pc: RTCPeerConnection | null = null
+  // Resolved from the server (STUN + optional TURN) right before the peer is
+  // created; defaults keep things working if that fetch is slow/unavailable.
+  let iceServers: IceServer[] = DEFAULT_ICE_SERVERS
   let controlChannel: RTCDataChannel | null = null
   let sessionId = ''
   // ICE that arrives before setRemoteDescription must be buffered.
@@ -97,7 +99,7 @@ export const useRemoteControl = () => {
 
   const ensurePeer = () => {
     if (pc) return pc
-    const connection = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const connection = new RTCPeerConnection({ iceServers: iceServers as RTCIceServer[] })
     connection.ontrack = (event) => {
       // Fires during negotiation, before ICE connects — only stash the stream;
       // we flip to "streaming" on the real 'connected' state below.
@@ -139,6 +141,9 @@ export const useRemoteControl = () => {
 
   const handleOffer = async (data: { sessionId: string; sdp: string }) => {
     sessionId = data.sessionId
+    // The device offers first; resolve the server ICE config before we build
+    // the peer so TURN (if configured) is in place for this session.
+    iceServers = await fetchIceServers()
     const connection = ensurePeer()
     await connection.setRemoteDescription({ type: 'offer', sdp: data.sdp })
     for (const candidate of pendingIce.splice(0)) {

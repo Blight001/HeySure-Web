@@ -121,6 +121,23 @@ const authForm = ref<{
 const testEmailTo = ref('')
 const testEmailSending = ref(false)
 
+// ---- Remote-control ICE settings (STUN + TURN) ----
+const rtcSettingsSaving = ref(false)
+const rtcTurnPasswordSet = ref(false)
+const rtcTurnEnabled = ref(false)
+const rtcIcePreview = ref<adminApi.IceServer[]>([])
+const rtcForm = ref<{
+  stun_url: string
+  turn_url: string
+  turn_username: string
+  turn_password: string
+}>({
+  stun_url: '',
+  turn_url: '',
+  turn_username: '',
+  turn_password: '',
+})
+
 const REGISTRATION_MODE_OPTIONS = ADMIN_REGISTRATION_MODE_OPTIONS
 
 // ---- Files (server data folder) ----
@@ -939,6 +956,56 @@ const submitTestEmail = async () => {
   }
 }
 
+// ---- Remote-control ICE settings ----
+const applyRtcSettings = (res: adminApi.RtcSettings) => {
+  rtcForm.value = {
+    stun_url: res.stun_url,
+    turn_url: res.turn_url,
+    turn_username: res.turn_username,
+    turn_password: '',
+  }
+  rtcTurnPasswordSet.value = res.turn_password_set
+  rtcTurnEnabled.value = res.turn_enabled
+  rtcIcePreview.value = res.ice_servers
+}
+
+const loadRtcSettings = async () => {
+  try {
+    applyRtcSettings(await adminApi.getRtcSettings())
+  } catch (e: any) {
+    void alert(e?.message || '获取远程控制设置失败')
+  }
+}
+
+const saveRtcSettings = async () => {
+  const f = rtcForm.value
+  if (f.turn_url.trim() && !/^turns?:/i.test(f.turn_url.trim())) {
+    void alert('TURN 地址应以 turn: 或 turns: 开头，例如 turn:relay.example.com:3478')
+    return
+  }
+  rtcSettingsSaving.value = true
+  try {
+    const res = await adminApi.updateRtcSettings({
+      stun_url: f.stun_url.trim(),
+      turn_url: f.turn_url.trim(),
+      turn_username: f.turn_username.trim(),
+      // 留空 = 保留服务器上已存的 TURN 密码
+      turn_password: f.turn_password ? f.turn_password : null,
+    })
+    applyRtcSettings(res)
+    void alert('远程控制设置已保存，客户端下次建立会话时生效')
+  } catch (e: any) {
+    void alert(e?.message || '保存远程控制设置失败')
+  } finally {
+    rtcSettingsSaving.value = false
+  }
+}
+
+const rtcIcePreviewText = (server: adminApi.IceServer): string => {
+  const urls = Array.isArray(server.urls) ? server.urls.join(', ') : server.urls
+  return server.username ? `${urls}（含凭据）` : urls
+}
+
 // ---- Auto refresh: poll the live data on whichever tab is open ----
 const tick = () => {
   if (!props.show) return
@@ -1280,7 +1347,7 @@ const triggerRepoCheck = async (apply: boolean) => {
 const switchTab = (next: Tab) => {
   tab.value = next
   if (next === 'users' && !users.value.length) void loadUsers()
-  if (next === 'auth' && !authLoaded.value) void loadAuthSettings()
+  if (next === 'auth' && !authLoaded.value) { void loadAuthSettings(); void loadRtcSettings() }
   if (next === 'files' && !fileEntries.value.length && editingFile.value === null) void loadFiles(filePath.value || DEFAULT_FILE_PATH)
   if (next === 'database' && !dbTables.value.length) void loadDbTables()
   if (next === 'audit') void loadAudit()
@@ -1713,6 +1780,58 @@ const avatarFor = (u: AdminUser) =>
                   :disabled="!isOwner || authSettingsSaving"
                   @click="saveAuthSettings"
                 >{{ authSettingsSaving ? '保存中…' : '保存设置' }}</button>
+              </div>
+            </div>
+
+            <!-- 远程控制 ICE（STUN / TURN）配置 -->
+            <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4">
+              <div class="flex items-center justify-between mb-1">
+                <h4 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">远程控制（STUN / TURN）</h4>
+                <span
+                  class="text-[10px] px-2 py-0.5 rounded-full"
+                  :class="rtcTurnEnabled
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'"
+                >{{ rtcTurnEnabled ? 'TURN 已启用' : '仅 STUN（受限网络会失败）' }}</span>
+              </div>
+              <p class="text-xs text-zinc-400 mb-3">
+                下发给全部远程控制端（网页控制台、游戏画面、桌面 / 浏览器 / 手机 agent）的 ICE 服务器。
+                无 TURN 中继时，双方处于对称 NAT / 受限网络会连接失败。配置保存在服务器数据库，亦可通过
+                HEYSURE_TURN_URL / HEYSURE_TURN_USERNAME / HEYSURE_TURN_PASSWORD 环境变量提供默认值。
+              </p>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div class="md:col-span-2">
+                  <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">STUN 地址</label>
+                  <input v-model="rtcForm.stun_url" :disabled="!isOwner" type="text" placeholder="如 stun:stun.l.google.com:19302"
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">TURN 地址</label>
+                  <input v-model="rtcForm.turn_url" :disabled="!isOwner" type="text" placeholder="如 turn:relay.example.com:3478（留空则不使用 TURN）"
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                </div>
+                <div>
+                  <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">TURN 用户名</label>
+                  <input v-model="rtcForm.turn_username" :disabled="!isOwner" type="text" autocomplete="off" placeholder="TURN 长期凭据用户名"
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                </div>
+                <div>
+                  <label class="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">TURN 密码</label>
+                  <input v-model="rtcForm.turn_password" :disabled="!isOwner" type="password" autocomplete="new-password"
+                    :placeholder="rtcTurnPasswordSet ? '已配置（留空保持不变）' : '请输入 TURN 凭据密码'"
+                    class="w-full text-sm acrylic-input rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100 disabled:opacity-60" />
+                </div>
+              </div>
+              <div v-if="rtcIcePreview.length" class="mt-3 text-[11px] text-zinc-400">
+                <span class="text-zinc-500 dark:text-zinc-400">客户端将收到：</span>
+                <span v-for="(srv, i) in rtcIcePreview" :key="i" class="inline-block mr-2 font-mono">{{ rtcIcePreviewText(srv) }}</span>
+              </div>
+              <div class="mt-4 flex items-center justify-end">
+                <button
+                  class="text-xs px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                  :disabled="!isOwner || rtcSettingsSaving"
+                  @click="saveRtcSettings"
+                >{{ rtcSettingsSaving ? '保存中…' : '保存设置' }}</button>
               </div>
             </div>
           </div>
