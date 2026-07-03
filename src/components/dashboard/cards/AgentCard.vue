@@ -590,11 +590,11 @@ const onCardPointerUp = (event: PointerEvent) => {
       </div>
       <button
         v-if="canControl"
-        class="w-7 h-7 rounded-full border border-zinc-200 text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300"
+        class="w-8 h-8 sm:w-7 sm:h-7 rounded-full border border-zinc-200 text-zinc-500 active:text-indigo-600 hover:text-indigo-600 active:border-indigo-300 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300 flex items-center justify-center"
         title="AI 设置"
         @click.stop="emit('settings', agent)"
       >
-        <AppIcon name="gear" class="w-3.5 h-3.5 mx-auto" />
+        <AppIcon name="gear" class="w-4 h-4 sm:w-3.5 sm:h-3.5" />
       </button>
     </div>
 

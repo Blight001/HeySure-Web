@@ -410,7 +410,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative isolate h-screen flex flex-col bg-zinc-50/60 text-zinc-900 overflow-hidden font-sans dark:bg-zinc-950/60 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
+  <div class="relative isolate h-screen flex flex-col bg-zinc-50/60 text-zinc-900 overflow-hidden overflow-x-hidden font-sans dark:bg-zinc-950/60 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
     <div class="app-background-glow pointer-events-none absolute inset-0"></div>
     <div class="pointer-events-none absolute inset-0 opacity-60">
       <div class="app-background-orb app-background-orb-left"></div>
@@ -421,15 +421,15 @@ onUnmounted(() => {
 
     <div class="relative z-[1] flex h-full flex-col">
     <!-- 顶部导航栏 -->
-    <header class="glass border-b border-zinc-200/50 px-4 md:px-6 py-3 flex justify-between items-center shadow-sm z-10 h-16 shrink-0 dark:border-zinc-800/50 backdrop-blur-md">
+    <header class="glass border-b border-zinc-200/50 px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 flex justify-between items-center shadow-sm z-10 h-14 sm:h-16 shrink-0 dark:border-zinc-800/50 backdrop-blur-md">
       <div class="flex items-center gap-2 md:gap-4 overflow-hidden">
-        <img :src="logoUrl" alt="HeySure Logo" class="w-8 h-8 md:w-10 md:h-10 object-contain hover:scale-110 transition-transform duration-300 shrink-0" />
+        <img :src="logoUrl" alt="HeySure Logo" class="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 object-contain hover:scale-110 active:scale-95 transition-transform duration-300 shrink-0" />
         <div class="overflow-hidden">
-          <h1 class="text-sm md:text-lg font-bold text-zinc-900 tracking-tight dark:text-zinc-100 truncate">HeySure<span class="hidden sm:inline">-数字社会控制台</span> <span class="text-zinc-400 font-normal ml-2 dark:text-zinc-500 hidden lg:inline">HeySure-Digital Society Console</span></h1>
+          <h1 class="text-sm sm:text-base md:text-lg font-bold text-zinc-900 tracking-tight dark:text-zinc-100 truncate">HeySure<span class="hidden sm:inline">-数字社会控制台</span> <span class="text-zinc-400 font-normal ml-2 dark:text-zinc-500 hidden lg:inline">HeySure-Digital Society Console</span></h1>
           <p class="text-[10px] md:text-xs text-zinc-500 dark:text-zinc-400 truncate">进化引擎已启动</p>
         </div>
       </div>
-      <div class="flex gap-2 md:gap-4 text-sm items-center relative shrink-0">
+      <div class="flex gap-1.5 sm:gap-2 md:gap-4 text-sm items-center relative shrink-0">
         <div class="hidden sm:flex flex-col items-end">
            <span class="text-xs text-zinc-400 uppercase font-semibold">AI成员</span>
            <span class="text-lg font-bold text-indigo-600 leading-none">{{ agents.length }}</span>
@@ -441,14 +441,14 @@ onUnmounted(() => {
         </div>
         <button
           v-if="isAdminUser"
-          class="ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-amber-200/70 bg-white/60 backdrop-blur-sm text-amber-600 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50/70 transition-colors dark:bg-zinc-800/60 dark:border-amber-700/60 dark:text-amber-300 dark:hover:text-amber-200 shadow-sm hover:shadow-md flex items-center justify-center"
+          class="ml-1 sm:ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-amber-200/70 bg-white/60 backdrop-blur-sm text-amber-600 active:bg-amber-100 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50/70 transition-colors dark:bg-zinc-800/60 dark:border-amber-700/60 dark:text-amber-300 dark:hover:text-amber-200 shadow-sm hover:shadow-md flex items-center justify-center"
           title="管理员控制台"
           @click.stop="adminModalOpen = true"
         >
           <AppIcon name="shield" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
         </button>
         <button
-          class="ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
+          class="ml-1 sm:ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
           title="系统设置"
           @click.stop="settingsOpen = true"
         >
@@ -456,9 +456,9 @@ onUnmounted(() => {
         </button>
 
         <!-- User Profile -->
-        <div class="ml-2 md:ml-4 flex items-center gap-3 pl-2 md:pl-4 border-l border-zinc-200 dark:border-zinc-700 relative">
+        <div class="ml-1.5 sm:ml-2 md:ml-4 flex items-center gap-2 sm:gap-3 pl-2 md:pl-4 border-l border-zinc-200 dark:border-zinc-700 relative">
           <template v-if="currentUser">
-            <button class="flex items-center gap-2 hover:bg-zinc-50 p-1 rounded-lg transition-colors dark:hover:bg-zinc-800" @click.stop="userMenuOpen = !userMenuOpen">
+            <button class="flex items-center gap-2 hover:bg-zinc-50 active:bg-zinc-100 p-1 rounded-lg transition-colors dark:hover:bg-zinc-800" @click.stop="userMenuOpen = !userMenuOpen">
               <img :src="resolveAvatarUrl(currentUser.avatar) || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + currentUser.name"
                    class="w-7 h-7 md:w-8 md:h-8 rounded-full border border-zinc-200 bg-zinc-50/60 object-cover" />
               <div class="hidden md:flex flex-col items-start text-left">
@@ -492,13 +492,13 @@ onUnmounted(() => {
 
     <!-- 主体内容区域 -->
     <main
-      class="flex-1 overflow-hidden flex flex-col lg:flex-row p-3 sm:p-6"
+      class="flex-1 overflow-hidden flex flex-col lg:flex-row p-2 sm:p-4 lg:p-6"
       :class="leftCollapsed ? 'lg:gap-4' : 'lg:gap-6'"
     >
 
       <!-- 左侧：数字生命、知识库与作坊（移动端为「控制台」Tab） -->
       <section
-        class="flex flex-col gap-6 transition-all duration-300 relative w-full min-h-0 flex-1 lg:flex-none lg:h-full"
+        class="flex flex-col gap-4 sm:gap-6 transition-all duration-300 relative w-full min-h-0 flex-1 lg:flex-none lg:h-full"
         :class="[
           leftCollapsed ? 'lg:w-10 lg:min-w-[40px]' : 'lg:w-[20%] lg:min-w-[280px]',
           mobileTab !== 'console' ? 'max-lg:hidden' : '',
@@ -554,7 +554,7 @@ onUnmounted(() => {
     <!-- 移动端底部 Tab 栏 -->
     <nav class="lg:hidden shrink-0 z-20 flex items-stretch border-t border-zinc-200/50 acrylic-modal !border-x-0 !border-b-0 rounded-none dark:border-zinc-800/50 pb-[env(safe-area-inset-bottom)]">
       <button
-        class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors"
+        class="flex-1 flex flex-col items-center justify-center gap-0.5 py-3 active:bg-zinc-100 dark:active:bg-zinc-800 text-[11px] font-medium transition-colors touch-manipulation"
         :class="mobileTab === 'console' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-400'"
         @click="mobileTab = 'console'"
       >
@@ -562,7 +562,7 @@ onUnmounted(() => {
         控制台
       </button>
       <button
-        class="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors"
+        class="flex-1 flex flex-col items-center justify-center gap-0.5 py-3 active:bg-zinc-100 dark:active:bg-zinc-800 text-[11px] font-medium transition-colors touch-manipulation"
         :class="mobileTab === 'arena' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-400'"
         @click="activateArenaTab"
       >

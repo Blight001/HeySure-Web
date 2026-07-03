@@ -178,7 +178,7 @@ const openExtensionTestPage = () => {
 <template>
   <Transition name="fade">
     <div v-if="show" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm p-4" @click="emit('update:show', false)">
-      <div class="acrylic-modal rounded-2xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-y-auto p-5 sm:p-6 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800" @click.stop>
+      <div class="acrylic-modal rounded-2xl shadow-xl w-full max-w-[560px] sm:max-w-[560px] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-5 md:p-6 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800" @click.stop>
         <div class="flex items-center justify-between mb-6">
           <h3 class="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <AppIcon name="gear" class="w-5 h-5" /> 系统全能设置
@@ -307,7 +307,7 @@ const openExtensionTestPage = () => {
           @click.stop="closeSettingsDialog"
         >
           <div
-            class="acrylic-modal rounded-2xl shadow-2xl w-[860px] max-w-[94vw] max-h-[88vh] flex flex-col dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800"
+            class="acrylic-modal rounded-2xl shadow-2xl w-full max-w-[94vw] md:w-[860px] md:max-w-[860px] max-h-[88vh] flex flex-col dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800"
             @click.stop
           >
             <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">

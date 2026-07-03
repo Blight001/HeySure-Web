@@ -76,7 +76,7 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
       <div class="flex p-1 bg-zinc-100/50 rounded-lg dark:bg-zinc-800/50">
         <button 
           @click="activeTab = 'brain'"
-          class="flex-1 px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2"
+          class="flex-1 min-w-0 lg:min-w-[60px] px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-1 sm:gap-1.5 active:scale-[0.985] touch-manipulation whitespace-nowrap lg:whitespace-normal"
           :class="activeTab === 'brain' 
             ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400' 
             : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
@@ -85,7 +85,7 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
         </button>
         <button 
           @click="activeTab = 'knowledge'"
-          class="flex-1 px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2"
+          class="flex-1 min-w-0 lg:min-w-[60px] px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-1 sm:gap-1.5 active:scale-[0.985] touch-manipulation whitespace-nowrap lg:whitespace-normal"
           :class="activeTab === 'knowledge' 
             ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400' 
             : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
@@ -94,7 +94,7 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
         </button>
         <button
           @click="activeTab = 'workshop'"
-          class="flex-1 px-3 py-1.5 text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-2"
+          class="flex-1 min-w-0 lg:min-w-[60px] px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-1 sm:gap-1.5 active:scale-[0.985] touch-manipulation whitespace-nowrap lg:whitespace-normal"
           :class="activeTab === 'workshop'
             ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400'
             : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"

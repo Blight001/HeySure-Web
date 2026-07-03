@@ -125,7 +125,7 @@ let chatResizeObserver: ResizeObserver | null = null
 const stickToBottom = ref(true)
 // History is paged: load the latest page on open, then prepend older pages as the
 // user scrolls up. Avoids materializing an entire long conversation at once.
-const HISTORY_PAGE_SIZE = 15
+const HISTORY_PAGE_SIZE = 30
 const hasMoreHistory = ref(false)
 const loadingOlder = ref(false)
 // Bumped on every history (re)load so a slow in-flight request for a session
@@ -844,7 +844,7 @@ const updateStickFromScroll = () => {
   }
 }
 
-const LOAD_OLDER_THRESHOLD_PX = 120
+const LOAD_OLDER_THRESHOLD_PX = 800
 
 const handleScroll = () => {
   updateStickFromScroll()

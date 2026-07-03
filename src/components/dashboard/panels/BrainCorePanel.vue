@@ -69,17 +69,17 @@ const toggleViewMode = () => {
         <span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">数字生命</span>
       </div>
       <div class="flex items-center gap-2">
-        <button class="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700" @click="toggleViewMode">
+        <button class="text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded border border-zinc-200 dark:border-zinc-700 active:scale-[0.985] transition" @click="toggleViewMode">
           {{ isAllView ? '切换栏目查看' : '一栏查看全部' }}
         </button>
-        <button class="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700" @click="emit('create-ai')">+ 新建 AI</button>
+        <button class="text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded border border-zinc-200 dark:border-zinc-700 active:scale-[0.985] transition" @click="emit('create-ai')">+ 新建 AI</button>
       </div>
     </div>
 
     <div v-if="!isAllView" class="grid grid-cols-2 gap-1 rounded-lg bg-zinc-100/60 p-1 dark:bg-zinc-800/80">
       <button
         type="button"
-        class="h-8 rounded-md px-2 text-xs font-semibold transition-colors"
+        class="h-9 sm:h-8 rounded-md px-2 text-xs sm:text-[11px] font-semibold transition-colors active:scale-[0.985]"
         :class="activeSection === 'admins'
           ? 'bg-white/75 text-zinc-900 shadow-sm dark:bg-zinc-700/70 dark:text-zinc-100'
           : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'"
@@ -89,7 +89,7 @@ const toggleViewMode = () => {
       </button>
       <button
         type="button"
-        class="h-8 rounded-md px-2 text-xs font-semibold transition-colors"
+        class="h-9 sm:h-8 rounded-md px-2 text-xs sm:text-[11px] font-semibold transition-colors active:scale-[0.985]"
         :class="activeSection === 'members'
           ? 'bg-white/75 text-zinc-900 shadow-sm dark:bg-zinc-700/70 dark:text-zinc-100'
           : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100'"

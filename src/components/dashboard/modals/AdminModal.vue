@@ -11,6 +11,7 @@ import type { User, UserRole } from '@/types'
 import { resolveAvatarUrl } from '@/utils/avatar'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import { useBreakpoint } from '@/composables/useBreakpoint'
 import type { AdminModalTab as Tab, AdminMcpParamRow } from '@/types/admin'
 import {
   ADMIN_ACTION_LABELS,
@@ -178,6 +179,8 @@ const dbCleanupForm = ref<{
 })
 
 const isOwner = computed(() => props.currentUser?.role === 'owner')
+
+const { isMobile } = useBreakpoint()
 
 const filteredLogLines = computed(() => {
   const q = logSearch.value.trim().toLowerCase()
@@ -1333,15 +1336,15 @@ const avatarFor = (u: AdminUser) =>
       <div
         v-if="show"
         :style="{ zIndex: mainZIndex }"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        class="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center backdrop-blur-sm p-0 sm:p-4"
         @click="emit('close')"
       >
         <div
-          class="acrylic-modal rounded-2xl shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col overflow-hidden"
+          class="acrylic-modal rounded-none sm:rounded-2xl shadow-2xl w-full h-full sm:w-full sm:max-w-5xl sm:h-auto sm:max-h-[88vh] flex flex-col overflow-hidden"
           @click.stop
         >
           <!-- Header -->
-          <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-200 dark:border-zinc-800">
+          <div class="flex items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 border-b border-zinc-200 dark:border-zinc-800">
             <div class="flex items-center gap-2">
               <AppIcon name="shield" class="w-5 h-5 text-zinc-700 dark:text-zinc-200" />
               <h2 class="text-sm md:text-base font-bold text-zinc-800 dark:text-zinc-100">管理员控制台</h2>
@@ -1358,21 +1361,23 @@ const avatarFor = (u: AdminUser) =>
             </div>
           </div>
 
-          <!-- Tabs -->
-          <div class="flex gap-1 px-5 pt-3 border-b border-zinc-200 dark:border-zinc-800">
-            <button
-              v-for="t in TAB_ORDER"
-              :key="t"
-              class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors"
-              :class="tab === t
-                ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-500 dark:bg-indigo-900/20 dark:text-indigo-300'
-                : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
-              @click="switchTab(t)"
-            >{{ TAB_LABELS[t] }}</button>
+          <!-- Tabs: 手机端支持左右滑动查看全部栏目；桌面端均分宽度避免溢出隐藏 -->
+          <div class="overflow-x-auto lg:overflow-x-visible border-b border-zinc-200 dark:border-zinc-800 admin-tab-scroll">
+            <div class="flex gap-1 px-2 sm:px-5 pt-3 pb-0 min-w-max lg:min-w-0">
+              <button
+                v-for="t in TAB_ORDER"
+                :key="t"
+                class="px-2.5 sm:px-3 lg:px-2.5 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap flex-shrink-0 lg:flex-1 lg:min-w-0 lg:overflow-hidden lg:truncate touch-manipulation active:scale-[0.985]"
+                :class="tab === t
+                  ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-500 dark:bg-indigo-900/20 dark:text-indigo-300'
+                  : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
+                @click="switchTab(t)"
+              >{{ TAB_LABELS[t] }}</button>
+            </div>
           </div>
 
           <!-- ============ Services tab ============ -->
-          <div v-show="tab === 'services'" class="flex-1 overflow-y-auto p-5 space-y-5">
+          <div v-show="tab === 'services'" class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-5">
             <!-- Service cards -->
             <section>
               <div class="flex items-center justify-between mb-2">
@@ -1474,7 +1479,7 @@ const avatarFor = (u: AdminUser) =>
                   @click="loadTasks"
                 >{{ tasksLoading ? '刷新中…' : '↻ 刷新' }}</button>
               </div>
-              <div class="border border-zinc-200 rounded-xl overflow-hidden dark:border-zinc-800">
+              <div class="border border-zinc-200 rounded-xl overflow-x-auto dark:border-zinc-800">
                 <table class="w-full text-xs">
                   <thead class="bg-zinc-50/60 text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
                     <tr>
@@ -1517,7 +1522,7 @@ const avatarFor = (u: AdminUser) =>
           </div>
 
           <!-- ============ Users tab ============ -->
-          <div v-show="tab === 'users'" class="flex-1 overflow-y-auto p-5">
+          <div v-show="tab === 'users'" class="flex-1 overflow-y-auto p-3 sm:p-5">
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">后台用户</h3>
               <div class="flex items-center gap-2">
@@ -1595,7 +1600,7 @@ const avatarFor = (u: AdminUser) =>
           </div>
 
           <!-- ============ Auth settings tab ============ -->
-          <div v-show="tab === 'auth'" class="flex-1 overflow-y-auto p-5 space-y-6">
+          <div v-show="tab === 'auth'" class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-6">
             <div class="flex items-center justify-between">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">注册与邮箱设置</h3>
               <div class="flex items-center gap-2">
@@ -1713,7 +1718,7 @@ const avatarFor = (u: AdminUser) =>
           </div>
 
           <!-- ============ Files tab ============ -->
-          <div v-show="tab === 'files'" class="flex-1 overflow-hidden p-5 min-h-0">
+          <div v-show="tab === 'files'" class="flex-1 overflow-hidden p-3 sm:p-5 min-h-0">
             <!-- File editor / viewer (shown when a file is open) -->
             <div v-if="editingFile !== null" class="h-full flex flex-col min-h-0">
               <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -1832,21 +1837,22 @@ const avatarFor = (u: AdminUser) =>
                     <tr
                       v-for="entry in fileEntries"
                       :key="entry.path"
-                      class="border-t border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-default select-none"
+                      class="border-t border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 active:bg-zinc-100 dark:active:bg-zinc-700 cursor-default select-none"
                       :class="fileSelected.has(entry.path) ? 'bg-indigo-50/40 dark:bg-indigo-900/10' : ''"
-                      :title="`双击打开 ${entry.name}`"
+                      @click="openEntry(entry)"
                       @dblclick="openEntry(entry)"
                     >
-                      <td class="px-3 py-2">
+                      <td class="px-3 py-2.5 sm:py-2" @click.stop>
                         <input
                           type="checkbox"
                           class="accent-indigo-500 align-middle"
                           :checked="fileSelected.has(entry.path)"
+                          @click.stop
                           @dblclick.stop
                           @change.stop="toggleSelect(entry.path)"
                         />
                       </td>
-                      <td class="px-3 py-2">
+                      <td class="px-3 py-2.5 sm:py-2 cursor-pointer active:bg-zinc-100 dark:active:bg-zinc-700">
                         <div class="flex items-center gap-2 text-left min-w-0">
                           <AppIcon :name="entry.is_dir ? 'folder' : entry.kind === 'image' ? 'image' : 'file'" class="w-4 h-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
                           <span class="text-zinc-700 dark:text-zinc-200 truncate" :title="entry.name">{{ entry.name }}</span>
@@ -1854,7 +1860,7 @@ const avatarFor = (u: AdminUser) =>
                       </td>
                       <td class="px-3 py-2 text-zinc-400 hidden sm:table-cell">{{ entry.is_dir ? '—' : fmtSize(entry.size) }}</td>
                       <td class="px-3 py-2 text-zinc-400 hidden md:table-cell whitespace-nowrap">{{ fmtTime(entry.modified) }}</td>
-                      <td class="px-3 py-2 text-right whitespace-nowrap">
+                      <td class="px-3 py-2.5 sm:py-2 text-right whitespace-nowrap" @click.stop>
                         <button
                           v-if="!entry.is_dir"
                           class="text-[11px] px-2 py-1 rounded-lg text-zinc-500 hover:text-indigo-600 dark:text-zinc-400"
@@ -1876,19 +1882,23 @@ const avatarFor = (u: AdminUser) =>
                   </tbody>
                 </table>
               </div>
-              <p class="mt-3 text-[11px] text-zinc-400">浏览的是服务器 <code class="font-mono">server/data</code> 目录。文本文件可在线查看与编辑（上限 1&nbsp;MB），图片可直接预览，其它文件可下载；勾选多项可批量删除。</p>
+              <p class="mt-3 text-[11px] text-zinc-400">浏览的是服务器 <code class="font-mono">server/data</code> 目录。点击文件名或图标即可打开文件夹/查看文件（文本可在线编辑上限 1MB，图片可预览，其它可下载）；勾选多项可批量删除。</p>
             </div>
           </div>
 
           <!-- ============ Database tab ============ -->
-          <div v-show="tab === 'database'" class="flex-1 overflow-hidden flex min-h-0">
+          <!-- 移动端改为上下分区（避免左右挤压别扭），桌面 lg+ 保持左右 -->
+          <div v-show="tab === 'database'" class="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
             <!-- Table list -->
-            <div class="w-44 shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col min-h-0">
+            <div 
+              class="border-b lg:border-b-0 lg:border-r border-zinc-200 dark:border-zinc-800 flex flex-col min-h-0 lg:w-44 lg:shrink-0 max-h-60 lg:max-h-none"
+              :class="{ 'max-h-36': isMobile && !!dbActiveTable }"
+            >
               <div class="flex-1 overflow-y-auto p-2">
                 <div class="flex items-center justify-between px-1 py-1.5">
                   <span class="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">数据表</span>
                   <button
-                    class="text-[11px] text-zinc-400 hover:text-indigo-600"
+                    class="text-[11px] px-1 text-zinc-400 hover:text-indigo-600 active:text-indigo-700"
                     :disabled="dbTablesLoading"
                     @click="loadDbTables"
                   >↻</button>
@@ -1896,7 +1906,7 @@ const avatarFor = (u: AdminUser) =>
                 <button
                   v-for="t in dbTables"
                   :key="t.name"
-                  class="w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between gap-1 transition-colors"
+                  class="w-full text-left px-3 py-2 lg:py-1.5 rounded-lg text-xs lg:text-[11px] flex items-center justify-between gap-1 transition-colors touch-manipulation active:bg-zinc-100 dark:active:bg-zinc-700"
                   :class="dbActiveTable === t.name
                     ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300'
                     : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'"
@@ -1932,11 +1942,11 @@ const avatarFor = (u: AdminUser) =>
             <!-- Rows -->
             <div class="flex-1 min-w-0 flex flex-col">
               <div v-if="!dbActiveTable" class="flex-1 flex items-center justify-center text-sm text-zinc-400">
-                请选择左侧的数据表
+                请选择数据表
               </div>
               <template v-else>
                 <!-- Toolbar -->
-                <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800">
+                <div class="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-zinc-200 dark:border-zinc-800">
                   <div class="flex items-center gap-2 min-w-0">
                     <span class="text-sm font-semibold font-mono text-zinc-700 dark:text-zinc-200 truncate">{{ dbActiveTable }}</span>
                     <span class="text-[11px] text-zinc-400">共 {{ dbTotal }} 行</span>
@@ -1945,8 +1955,8 @@ const avatarFor = (u: AdminUser) =>
                     <input
                       v-model="dbSearch"
                       type="text"
-                      placeholder="搜索文本列…"
-                      class="text-xs acrylic-input rounded-lg px-2 py-1 text-zinc-600 w-32 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300"
+                      placeholder="搜索…"
+                      class="text-xs acrylic-input rounded-lg px-2 py-1 text-zinc-600 w-20 sm:w-28 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300"
                       @keyup.enter="dbSearchSubmit"
                     />
                     <button class="text-xs px-2 py-1 rounded-lg border border-zinc-200 text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-400" @click="dbSearchSubmit">搜索</button>
@@ -1961,7 +1971,7 @@ const avatarFor = (u: AdminUser) =>
 
                 <!-- Row table -->
                 <div class="flex-1 overflow-auto">
-                  <table class="text-xs border-collapse">
+                  <table class="text-[10px] sm:text-xs border-collapse">
                     <thead class="bg-zinc-50 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400 sticky top-0 z-10">
                       <tr>
                         <th class="text-left px-3 py-2 font-medium whitespace-nowrap sticky left-0 bg-zinc-50 dark:bg-zinc-800/60">操作</th>
@@ -1992,7 +2002,7 @@ const avatarFor = (u: AdminUser) =>
                         <td
                           v-for="c in dbColumns"
                           :key="c.name"
-                          class="px-3 py-1.5 whitespace-nowrap max-w-[260px] truncate"
+                          class="px-3 py-1.5 whitespace-nowrap max-w-[140px] sm:max-w-[200px] lg:max-w-[260px] truncate"
                           :class="row[c.name] === null ? 'text-zinc-300 italic dark:text-zinc-600' : 'text-zinc-700 dark:text-zinc-300'"
                           :title="dbValueToStr(row[c.name])"
                         >{{ row[c.name] === null ? 'NULL' : dbCellPreview(row[c.name]) }}</td>
@@ -2002,7 +2012,7 @@ const avatarFor = (u: AdminUser) =>
                 </div>
 
                 <!-- Pagination -->
-                <div class="flex items-center justify-between px-4 py-2 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
+                <div class="flex items-center justify-between px-3 sm:px-4 py-2 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
                   <span>{{ dbPageStart }}–{{ dbPageEnd }} / {{ dbTotal }}</span>
                   <div class="flex items-center gap-2">
                     <button class="px-2 py-1 rounded-lg border border-zinc-200 disabled:opacity-40 hover:border-indigo-200 dark:border-zinc-700" :disabled="dbOffset <= 0" @click="dbPrevPage">上一页</button>
@@ -2014,7 +2024,7 @@ const avatarFor = (u: AdminUser) =>
           </div>
 
           <!-- ============ Audit tab ============ -->
-          <div v-show="tab === 'audit'" class="flex-1 overflow-y-auto p-5">
+          <div v-show="tab === 'audit'" class="flex-1 overflow-y-auto p-3 sm:p-5">
             <div class="flex items-center justify-between mb-3">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">操作审计日志</h3>
               <button
@@ -2023,7 +2033,7 @@ const avatarFor = (u: AdminUser) =>
                 @click="loadAudit"
               >{{ auditLoading ? '刷新中…' : '↻ 刷新' }}</button>
             </div>
-            <div class="border border-zinc-200 rounded-xl overflow-hidden dark:border-zinc-800">
+            <div class="border border-zinc-200 rounded-xl overflow-x-auto dark:border-zinc-800">
               <table class="w-full text-xs">
                 <thead class="bg-zinc-50/60 text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
                   <tr>
@@ -2056,7 +2066,7 @@ const avatarFor = (u: AdminUser) =>
           </div>
 
           <!-- ============ Diagnostics tab ============ -->
-          <div v-show="tab === 'diagnostics'" class="flex-1 overflow-y-auto p-5 space-y-5">
+          <div v-show="tab === 'diagnostics'" class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-5">
             <!-- 一键自检 -->
             <section class="border border-zinc-200 rounded-xl p-4 dark:border-zinc-800">
               <div class="flex items-center justify-between mb-3">
@@ -2202,7 +2212,7 @@ const avatarFor = (u: AdminUser) =>
           </div>
 
           <!-- ============ Repo auto-update / 版本更新 tab ============ -->
-          <div v-show="tab === 'update'" class="flex-1 overflow-y-auto p-5 space-y-5">
+          <div v-show="tab === 'update'" class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-5">
             <div class="flex items-center justify-between">
               <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">版本与自动更新</h3>
               <button
@@ -2623,3 +2633,27 @@ const avatarFor = (u: AdminUser) =>
     </Transition>
   </Teleport>
 </template>
+
+<style scoped>
+/* 管理员控制台 Tab 栏：手机端左右滑动 */
+.admin-tab-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+/* 桌面端不需要强制滚动条样式 */
+@media (min-width: 1024px) {
+  .admin-tab-scroll {
+    scrollbar-width: auto;
+  }
+}
+.admin-tab-scroll::-webkit-scrollbar {
+  height: 3px;
+}
+.admin-tab-scroll::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.35);
+  border-radius: 3px;
+}
+.admin-tab-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.55);
+}
+</style>

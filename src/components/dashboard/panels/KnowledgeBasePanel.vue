@@ -1281,16 +1281,16 @@ const closeDetail = () => {
                     <div v-if="!device.tools.length" class="px-3 py-6 text-center text-xs text-zinc-400">
                       该设备暂未上报 MCP 工具
                     </div>
-                    <div v-else class="overflow-x-auto">
-                      <table class="w-full min-w-[48rem] border-collapse text-xs">
+                    <div v-else class="overflow-x-auto -mx-1 px-1">
+                      <table class="w-full min-w-[32rem] md:min-w-[48rem] border-collapse text-xs">
                         <thead>
                           <tr class="border-b border-zinc-100 bg-zinc-50/80 text-left text-[11px] font-semibold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
-                            <th class="px-3 py-2 w-[9rem]">中文名称</th>
-                            <th class="px-3 py-2 w-[11rem]">调用工具</th>
-                            <th class="px-3 py-2">工具描述</th>
-                            <th class="px-3 py-2 w-[6.5rem]">参数详情</th>
-                            <th class="px-3 py-2 w-[7rem]">底层实现</th>
-                            <th class="px-3 py-2 w-[6.5rem]">测试</th>
+                            <th class="px-2 md:px-3 py-2 md:w-[9rem]">中文名称</th>
+                            <th class="px-2 md:px-3 py-2 md:w-[11rem]">调用工具</th>
+                            <th class="hidden md:table-cell px-3 py-2">工具描述</th>
+                            <th class="hidden sm:table-cell px-2 md:px-3 py-2 md:w-[6.5rem]">参数详情</th>
+                            <th class="hidden md:table-cell px-3 py-2 w-[7rem]">底层实现</th>
+                            <th class="px-2 md:px-3 py-2 md:w-[6.5rem]">测试</th>
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -1299,18 +1299,18 @@ const closeDetail = () => {
                             :key="`${device.device_id}-${tool.name}`"
                           >
                             <tr class="align-top">
-                              <td class="px-3 py-2.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-100">
+                              <td class="px-2 md:px-3 py-2.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-100">
                                 {{ getMcpToolZhLabel(tool.name) }}
                               </td>
-                              <td class="px-3 py-2.5">
+                              <td class="px-2 md:px-3 py-2.5">
                                 <code class="break-all text-[11px] text-indigo-600 dark:text-indigo-300">{{ tool.name }}</code>
                               </td>
-                              <td class="px-3 py-2.5 leading-relaxed text-zinc-700 dark:text-zinc-200">
+                              <td class="hidden md:table-cell px-3 py-2.5 leading-relaxed text-zinc-700 dark:text-zinc-200">
                                 {{ tool.description || '（无描述）' }}
                                 <span v-if="tool.destructive" class="ml-1 text-amber-600 dark:text-amber-300">可能产生写入/变更</span>
                               </td>
                               <td
-                                class="relative px-3 py-2.5 align-top cursor-default transition-colors hover:bg-indigo-50/60 dark:hover:bg-indigo-950/25"
+                                class="hidden sm:table-cell relative px-2 md:px-3 py-2.5 align-top cursor-default transition-colors hover:bg-indigo-50/60 dark:hover:bg-indigo-950/25"
                                 @mouseenter="openInheritanceHoverPopover($event, 'params', device.device_id, tool.name)"
                                 @mouseleave="scheduleCloseInheritanceHoverPopover"
                               >
@@ -1321,7 +1321,7 @@ const closeDetail = () => {
                                 </div>
                               </td>
                               <td
-                                class="relative px-3 py-2.5 align-top transition-colors"
+                                class="hidden md:table-cell relative px-3 py-2.5 align-top transition-colors"
                                 :class="hasImplementation(tool) ? 'cursor-default hover:bg-indigo-50/60 dark:hover:bg-indigo-950/25' : ''"
                                 @mouseenter="hasImplementation(tool) ? openInheritanceHoverPopover($event, 'impl', device.device_id, tool.name) : undefined"
                                 @mouseleave="scheduleCloseInheritanceHoverPopover"
@@ -1334,11 +1334,11 @@ const closeDetail = () => {
                                 </span>
                                 <span v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">—</span>
                               </td>
-                              <td class="px-3 py-2.5 align-top">
+                              <td class="px-2 md:px-3 py-2.5 align-top">
                                 <button
                                   v-if="!isServerInheritanceDevice(device)"
                                   type="button"
-                                  class="whitespace-nowrap rounded border border-emerald-200 bg-white/75 px-2 py-1 text-[11px] text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-900/60 dark:bg-zinc-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                                  class="whitespace-nowrap rounded border border-emerald-200 bg-white/75 px-2 py-1 text-[11px] text-emerald-700 transition-colors hover:bg-emerald-50 active:bg-emerald-100 dark:border-emerald-900/60 dark:bg-zinc-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
                                   @click.stop.prevent="openMcpTestModal(device, tool)"
                                 >
                                   测试 MCP
