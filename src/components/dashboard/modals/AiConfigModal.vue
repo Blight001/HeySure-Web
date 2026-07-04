@@ -6,6 +6,7 @@ import type { ModelPreset } from '@/types'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import DeviceMcpScopeEditor from './DeviceMcpScopeEditor.vue'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import { useMessage } from '@/composables/useMessage'
 
 type SettingsSection = 'mcp' | 'bot'
 
@@ -38,6 +39,8 @@ const settingsSectionTitle: Record<SettingsSection, string> = {
   mcp: 'MCP 工具权限',
   bot: '机器人配置',
 }
+
+const { confirm } = useMessage()
 
 const openSettingsSection = (section: SettingsSection) => {
   props.onToggleSettingsSection(section)
@@ -130,9 +133,10 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
   if (!cfgId) return
   // 1:1 绑定（图书馆）：勾选会替换工坊当前绑定的成员，先确认。工具箱多绑无需确认。
   if (!agent.is_toolbox && next && agent.bound_ai_config_id && agent.bound_ai_config_id !== cfgId) {
-    const ok = window.confirm(
-      `「${agent.name}」当前绑定的是「${agent.bound_ai_name}」。图书馆只能绑定一个 AI 数字成员，继续将替换为本 AI？`,
-    )
+    const ok = await confirm({
+      message: `「${agent.name}」当前绑定的是「${agent.bound_ai_name}」。图书馆只能绑定一个 AI 数字成员，继续将替换为本 AI？`,
+      type: 'warning',
+    })
     if (!ok) {
       if (target) target.checked = agent.bound
       return

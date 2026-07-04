@@ -24,11 +24,14 @@ import {
   type ToolRuntime,
 } from '@/api/deviceTools'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import { useMessage } from '@/composables/useMessage'
 
 const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 const zIndex = usePopupZIndex(() => props.show)
+
+const { confirm } = useMessage()
 
 const TABS: { key: DeviceToolType; label: string }[] = [
   { key: 'desktop', label: '桌面端' },
@@ -381,7 +384,7 @@ const approve = async (tool: DeviceDynamicTool) => {
 }
 
 const remove = async (tool: DeviceDynamicTool) => {
-  if (!window.confirm(`删除动态工具 ${tool.name}？设备将恢复内置实现。`)) return
+  if (!(await confirm({ message: `删除动态工具 ${tool.name}？设备将恢复内置实现。`, type: 'warning' }))) return
   try {
     await deleteDeviceTool(deviceType.value, tool.name)
     if (draft.value?.original === tool.name) draft.value = null
@@ -413,7 +416,7 @@ const toggleVersions = () => {
 }
 
 const restore = async (versionId: number) => {
-  if (!window.confirm('回滚到该版本？当前内容会被覆盖（并记录为一次新版本，可再回滚）。')) return
+  if (!(await confirm({ message: '回滚到该版本？当前内容会被覆盖（并记录为一次新版本，可再回滚）。', type: 'warning' }))) return
   error.value = ''
   notice.value = ''
   try {
