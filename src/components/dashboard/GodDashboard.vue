@@ -160,6 +160,7 @@ const {
 
 // Web-managed device dynamic MCP tools modal (opened from McpToolsModal).
 const deviceToolsModalOpen = ref(false)
+const deviceToolsInitialType = ref<'desktop' | 'browser' | 'android' | undefined>(undefined)
 
 const defaultMcpTools = [...DEFAULT_MCP_TOOLS]
 
@@ -264,6 +265,20 @@ const openAllMcpToolsFromSystemSettings = async () => {
     await loadMcpTools()
   }
   showAllServerMcpTools('当前服务器所有的mcp接口')
+}
+
+const onManageDeviceTools = (payload?: { deviceType?: string }) => {
+  if (payload?.deviceType && ['desktop', 'browser', 'android'].includes(payload.deviceType)) {
+    deviceToolsInitialType.value = payload.deviceType as 'desktop' | 'browser' | 'android'
+  } else {
+    deviceToolsInitialType.value = undefined
+  }
+  deviceToolsModalOpen.value = true
+}
+
+const closeDeviceToolsModal = () => {
+  deviceToolsModalOpen.value = false
+  deviceToolsInitialType.value = undefined
 }
 
 const openAgentChat = (agent: Agent) => {
@@ -535,7 +550,7 @@ onUnmounted(() => {
             @update:knowledge-filter="knowledgeFilter = $event"
             @refresh-user="emit('refreshUser', $event)"
             @view-all-mcp="openAllMcpToolsFromSystemSettings"
-            @manage-device-tools="deviceToolsModalOpen = true"
+            @manage-device-tools="onManageDeviceTools"
           />
         </div>
       </section>
@@ -580,7 +595,8 @@ onUnmounted(() => {
 
     <DeviceDynamicToolsModal
       :show="deviceToolsModalOpen"
-      @close="deviceToolsModalOpen = false"
+      :initial-device-type="deviceToolsInitialType"
+      @close="closeDeviceToolsModal"
     />
 
     <TaskManagementModal

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { getAuthToken } from '@/api/http'
 import { saveIntrinsicProperties } from '@/api/librarian'
 import { getMcpToolParamRows } from '@/utils/mcpTools'
+import { callMcpTool } from '@/api/mcp'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { McpToolDefinition } from '@/types'
 
@@ -71,6 +72,13 @@ const editError = ref('')
 const editNotice = ref('')
 const draftDescription = ref('')
 const draftParams = ref<Array<{ name: string; description: string }>>([])
+
+// Test in MCP details
+const testingToolName = ref('')
+const testArgsJsonM = ref('{}')
+const testResM = ref<any>(null)
+const testErrM = ref('')
+const testLoadingM = ref(false)
 
 const introItems = [
   {
@@ -171,6 +179,37 @@ const saveTool = async (tool: McpToolDefinition) => {
   }
 }
 
+const startTestInDetail = (tool: McpToolDefinition) => {
+  testingToolName.value = tool.name
+  testArgsJsonM.value = '{}'
+  testResM.value = null
+  testErrM.value = ''
+}
+
+const runTestInMcpModal = async () => {
+  if (!testingToolName.value) return
+  testLoadingM.value = true
+  testErrM.value = ''
+  testResM.value = null
+  try {
+    let args: Record<string, unknown> = {}
+    try { args = JSON.parse(testArgsJsonM.value || '{}') } catch (e: any) { testErrM.value = 'JSON 错误: ' + (e.message || ''); return }
+    const res = await callMcpTool({ tool: testingToolName.value, arguments: args })
+    testResM.value = res
+  } catch (err: any) {
+    testErrM.value = err?.message || '调用失败'
+  } finally {
+    testLoadingM.value = false
+  }
+}
+
+const closeTestInMcp = () => {
+  testingToolName.value = ''
+  testArgsJsonM.value = '{}'
+  testResM.value = null
+  testErrM.value = ''
+}
+
 watch(() => props.show, (show) => {
   if (!show) {
     editingToolName.value = ''
@@ -179,6 +218,7 @@ watch(() => props.show, (show) => {
     editNotice.value = ''
     draftDescription.value = ''
     draftParams.value = []
+    closeTestInMcp()
   }
 })
 </script>
@@ -311,6 +351,29 @@ watch(() => props.show, (show) => {
                       </div>
                       <div v-if="getMcpToolParamRows(tool).length === 0" class="text-[11px] text-zinc-400">无参数</div>
                     </div>
+
+                    <!-- Test in details -->
+                    <div class="mt-2">
+                      <button
+                        v-if="testingToolName !== tool.name"
+                        type="button"
+                        class="text-[9px] px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-700/60 dark:text-emerald-300"
+                        @click.stop="startTestInDetail(tool)"
+                      >测试调用</button>
+                      <div v-else class="rounded border border-emerald-200 bg-emerald-50/50 p-2 dark:border-emerald-700/60 dark:bg-emerald-950/30">
+                        <div class="text-[9px] font-medium mb-1">测试 {{ testingToolName }} （输入 JSON 参数）</div>
+                        <textarea v-model="testArgsJsonM" rows="2" class="w-full text-[10px] font-mono border rounded px-1 py-0.5 dark:bg-zinc-900/60" />
+                        <div class="flex gap-1 mt-1">
+                          <button type="button" class="text-[9px] px-1.5 py-0.5 bg-emerald-600 text-white rounded" :disabled="testLoadingM" @click.stop="runTestInMcpModal">{{ testLoadingM ? '...' : '调用' }}</button>
+                          <button type="button" class="text-[9px] px-1.5 py-0.5 border rounded" @click.stop="closeTestInMcp">取消</button>
+                        </div>
+                        <div v-if="testErrM" class="text-[9px] text-rose-600 mt-0.5">{{ testErrM }}</div>
+                        <div v-if="testResM != null" class="mt-1 text-[9px]">
+                          <pre class="bg-white/70 dark:bg-zinc-950 p-1 rounded overflow-auto max-h-20">{{ JSON.stringify(testResM, null, 2) }}</pre>
+                        </div>
+                      </div>
+                    </div>
+
                     <div v-if="editingToolName === tool.name" class="mt-2 flex justify-end gap-2">
                       <button
                         type="button"

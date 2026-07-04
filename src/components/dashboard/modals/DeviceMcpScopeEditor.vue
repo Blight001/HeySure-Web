@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { getDeviceMcpScope, setDeviceMcpScope, type DeviceMcpScope } from '@/api/devices'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import McpAiTestModal from './McpAiTestModal.vue'
 
 const props = defineProps<{
   deviceId: string
@@ -18,6 +19,12 @@ const error = ref('')
 const notice = ref('')
 const detailOpen = ref(false)
 const detailZIndex = usePopupZIndex(detailOpen)
+
+// AI test modal trigger for details
+const aiTestModalOpen = ref(false)
+const aiTestModalToolName = ref('')
+const aiTestModalDescription = ref('')
+const aiTestModalInputSchema = ref<any>(null)
 
 const load = async () => {
   if (!props.deviceId) return
@@ -39,13 +46,7 @@ const load = async () => {
 watch(() => [props.deviceId, props.refreshKey], load, { immediate: true })
 
 const capabilities = computed(() => scope.value?.capabilities || [])
-const scopeTitle = computed(() => {
-  if (scope.value?.deviceType === 'toolbox') return '工具箱 MCP 权限'
-  if (scope.value?.deviceType === 'workshop') return '图书馆 MCP 权限'
-  if (scope.value?.deviceType === 'browser') return '浏览器端 MCP 权限'
-  if (scope.value?.deviceType === 'android') return '安卓端 MCP 权限'
-  return '软件端 MCP 权限'
-})
+
 // Scope is keyed per individual agent, so it can be configured even before the
 // device is assigned an AI. Saving only needs a connected agent that reports
 // tools.
@@ -151,41 +152,37 @@ const openDetail = () => {
 
 const closeDetail = () => {
   detailOpen.value = false
+  aiTestModalOpen.value = false
 }
+
+const startTestTool = (tool: string) => {
+  aiTestModalToolName.value = tool
+  const def = toolDefinition(tool)
+  aiTestModalDescription.value = String(def.description || '').trim() || basicToolIntro(tool)
+  aiTestModalInputSchema.value = def.input_schema || {}
+  aiTestModalOpen.value = true
+}
+
+
 </script>
 
 <template>
-  <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/40 p-2.5">
-    <div class="flex items-center justify-between gap-2">
-      <div class="min-w-0">
-        <div class="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
-          {{ scopeTitle }}
-        </div>
-        <div class="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
-          {{ scope?.agentName || deviceId }}
-          <span v-if="capabilities.length"> · {{ selected.size }} / {{ capabilities.length }}</span>
-        </div>
-      </div>
-      <div class="shrink-0 flex items-center gap-1.5">
-        <button
-          v-if="capabilities.length"
-          type="button"
-          class="text-[10px] px-2 py-0.5 rounded border border-indigo-200 bg-white/75 text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-          @click="openDetail"
-        >
-          查看详情
-        </button>
-      </div>
+  <div class="flex">
+    <button
+      v-if="!loading && capabilities.length"
+      type="button"
+      class="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+      @click="openDetail"
+    >
+      配置MCP权限范围 {{ selected.size }} / {{ capabilities.length }}
+    </button>
+    <div v-else-if="loading" class="text-[10px] text-zinc-400 text-center py-1">加载中…</div>
+    <div v-else-if="error" class="text-[10px] text-rose-500">{{ error }}</div>
+    <div v-else-if="capabilities.length === 0" class="text-[10px] text-zinc-400 text-center py-1">
+      该设备未上报任何工具。
     </div>
 
-    <div v-if="loading" class="mt-2 text-[10px] text-zinc-400">加载中…</div>
-    <div v-else-if="error" class="mt-2 text-[10px] text-rose-500">{{ error }}</div>
-    <template v-else>
-      <div v-if="capabilities.length === 0" class="mt-2 text-[10px] text-zinc-400">
-        该设备未上报任何工具。
-      </div>
-      <div v-if="notice" class="mt-1.5 text-[10px] text-emerald-600 dark:text-emerald-300">{{ notice }}</div>
-    </template>
+    <div v-if="notice && !loading" class="mt-1.5 text-[10px] text-emerald-600 dark:text-emerald-300">{{ notice }}</div>
 
     <Teleport to="body">
       <Transition name="fade">
@@ -196,10 +193,10 @@ const closeDetail = () => {
           @click="closeDetail"
         >
           <div
-            class="flex w-full max-w-5xl max-h-[86vh] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white/75 shadow-xl dark:border-zinc-700 dark:bg-zinc-900/60"
+            class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-5xl max-h-[86vh] flex flex-col overflow-hidden"
             @click.stop
           >
-            <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
+            <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3 dark:border-zinc-700">
               <div class="min-w-0">
                 <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">MCP 权限详情</div>
                 <div class="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
@@ -215,15 +212,15 @@ const closeDetail = () => {
               </button>
             </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto p-4">
+            <div class="min-h-0 flex-1 overflow-y-auto p-5">
               <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <label
                   v-for="tool in capabilities"
                   :key="tool"
-                  class="flex h-full items-start gap-2 rounded-lg border px-2.5 py-2 cursor-pointer select-none transition-colors"
+                  class="flex items-start gap-2 rounded-lg border px-2.5 py-2 cursor-pointer select-none transition-colors"
                   :class="selected.has(tool)
                     ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-200'
-                    : 'border-zinc-200 bg-white/75 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300'"
+                    : 'border-zinc-200 bg-white/50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-300'"
                 >
                   <input
                     type="checkbox"
@@ -241,6 +238,11 @@ const closeDetail = () => {
                         写入/变更
                       </span>
                     </span>
+                    <button
+                      type="button"
+                      class="mt-1 text-[9px] px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-700/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                      @click.stop="startTestTool(tool)"
+                    >测试</button>
                     <span class="mt-1 block text-[10px] leading-relaxed text-zinc-600 dark:text-zinc-300">
                       {{ toolDescription(tool) }}
                     </span>
@@ -261,7 +263,18 @@ const closeDetail = () => {
               </div>
             </div>
 
-            <div class="border-t border-zinc-200 px-4 py-3 dark:border-zinc-700">
+            <!-- Reusable AI test modal (matches inheritance skills display) -->
+            <McpAiTestModal
+              v-model:show="aiTestModalOpen"
+              :tool-name="aiTestModalToolName"
+              :device-id="deviceId"
+              :device-type="scope?.deviceType"
+              :description="aiTestModalDescription"
+              :input-schema="aiTestModalInputSchema"
+              @close="aiTestModalOpen = false"
+            />
+
+            <div class="border-t border-zinc-200 px-5 py-3 dark:border-zinc-700">
               <div class="flex items-center justify-end gap-2">
                 <button
                   type="button"

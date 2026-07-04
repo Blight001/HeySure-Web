@@ -40,6 +40,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
   (e: 'save-role-mcp-permissions'): void
+  (e: 'manage-device-tools', payload?: { deviceType?: string }): void
 }>()
 
 // The toolbox tool set (12 tools): used to scope the role-permission editor so
@@ -85,9 +86,15 @@ const assignableMembers = computed(() =>
     .map(a => ({ aiConfigId: Number(a.aiConfigId), name: a.name })),
 )
 
-// Per-device dropdown selection (stored as strings for native <select>) plus
-// busy/error state.
-const selection = reactive<Record<string, string>>({})
+// Member assignment modal state
+const assignMemberModal = ref<ConnectedDevice | null>(null)
+const openAssignMember = (device: ConnectedDevice) => {
+  assignMemberModal.value = device
+}
+const closeAssignMember = () => {
+  assignMemberModal.value = null
+}
+
 const busy = reactive<Record<string, boolean>>({})
 const errors = reactive<Record<string, string>>({})
 const bindingOverride = reactive<Record<string, number | null>>({})
@@ -137,21 +144,9 @@ const linkedConfigIds = (device: ConnectedDevice): number[] => {
   return single ? [single] : []
 }
 
-// Current dropdown value: an explicit pick if the operator changed it, else the
-// device's existing binding.
-const selectionFor = (device: ConnectedDevice): string => {
-  if (device.id in selection) return selection[device.id]
-  const id = linkedConfigId(device)
-  return id ? String(id) : ''
-}
 
-const onSelect = (device: ConnectedDevice, event: Event) => {
-  selection[device.id] = (event.target as HTMLSelectElement).value
-}
 
-const assign = async (device: ConnectedDevice) => {
-  const chosen = selectionFor(device)
-  const cfgId = chosen === '' ? null : Number(chosen)
+const assign = async (device: ConnectedDevice, cfgId: number | null) => {
   busy[device.id] = true
   errors[device.id] = ''
   try {
@@ -174,25 +169,6 @@ const assign = async (device: ConnectedDevice) => {
   }
 }
 
-const unassign = async (device: ConnectedDevice) => {
-  selection[device.id] = ''
-  busy[device.id] = true
-  errors[device.id] = ''
-  try {
-    const currentId = linkedConfigId(device)
-    if (isWorkshopDevice(device)) {
-      if (currentId) await setWorkshopBinding(currentId, device.id, false)
-      bindingOverride[device.id] = null
-    } else {
-      await assignDeviceAi(device.id, null)
-    }
-  } catch (err: any) {
-    errors[device.id] = err?.message || '解绑失败'
-  } finally {
-    busy[device.id] = false
-  }
-}
-
 // Specific unbind for multi-bind toolbox: unbind only the given AI id from the toolbox
 const unbindSpecific = async (device: ConnectedDevice, aiConfigId: number) => {
   if (!isToolboxDevice(device)) return
@@ -210,6 +186,13 @@ const unbindSpecific = async (device: ConnectedDevice, aiConfigId: number) => {
   } finally {
     busy[device.id] = false
   }
+}
+
+const selectMemberAndAssign = async (aiConfigId: number | null) => {
+  const device = assignMemberModal.value
+  if (!device) return
+  closeAssignMember()
+  await assign(device, aiConfigId)
 }
 
 // 内置工具箱作坊：多绑，现在在作坊面板支持分配绑定 + MCP 范围勾选（像其他设备一样）。
@@ -268,6 +251,22 @@ const isEndpointDevice = (device: ConnectedDevice) => {
   return isSoftwareDevice(device) || isAndroidDevice(device) || !!device.isBrowserExtension || platform.includes('browser') || isWorkshopDevice(device)
 }
 
+const getDynamicMcpType = (device: ConnectedDevice): 'desktop' | 'browser' | 'android' | null => {
+  if (isAndroidDevice(device)) return 'android'
+  if (isBrowserDevice(device)) return 'browser'
+  if (isSoftwareDevice(device)) return 'desktop'
+  return null
+}
+
+const openDynamicMcp = (device: ConnectedDevice) => {
+  const dt = getDynamicMcpType(device)
+  if (dt) {
+    emit('manage-device-tools', { deviceType: dt })
+  } else {
+    emit('manage-device-tools')
+  }
+}
+
 const deviceDisplayName = (device: ConnectedDevice) => {
   return device.name || device.id || deviceTypeLabel(device)
 }
@@ -311,6 +310,14 @@ const hasLinkedMember = (device: ConnectedDevice) => !!linkedMember(device)
 // For toolbox treat as "linked" if has any bound
 const hasAnyLinked = (device: ConnectedDevice) => isToolboxDevice(device) ? linkedConfigIds(device).length > 0 : hasLinkedMember(device)
 
+const getBoundMemberNames = (device: ConnectedDevice): string[] => {
+  const ids = linkedConfigIds(device)
+  return ids.map(id => {
+    const m = memberByConfigId.value.get(id)
+    return m?.name || `AI-${id}`
+  })
+}
+
 const memberPanelClass = (device: ConnectedDevice) => hasAnyLinked(device)
   ? 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/30 dark:bg-emerald-500/10'
   : 'border-amber-200 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10'
@@ -324,20 +331,25 @@ const memberLabelClass = (device: ConnectedDevice) => hasAnyLinked(device)
   : 'text-amber-600 dark:text-amber-300'
 
 const memberStatusLabel = (device: ConnectedDevice) => {
-  if (isToolboxDevice(device)) {
-    const n = linkedConfigIds(device).length
-    return n > 0 ? `${n} 个 AI 已绑定` : '未绑定 AI'
+  const names = getBoundMemberNames(device)
+  if (names.length === 0) {
+    return isToolboxDevice(device) ? '未绑定 AI' : '未链接成员'
   }
-  return hasLinkedMember(device) ? '已链接成员' : '未链接成员'
+  if (names.length === 1) {
+    return names[0] + '已绑定'
+  }
+  const display = names.slice(0, 2).join('、')
+  const more = names.length > 2 ? '等' : ''
+  return display + more + '已绑定'
 }
 
-const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(device)
+const memberStatusBadgeClass = (device: ConnectedDevice) => hasAnyLinked(device)
   ? 'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200'
   : 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200'
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+  <div class="relative flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
     <div v-if="devices.length === 0" class="text-center text-zinc-400 text-xs py-10 dark:text-zinc-500">
       暂无已连接设备。
     </div>
@@ -358,31 +370,37 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
             {{ deviceTypeLabel(device) }} · {{ device.platform || 'unknown' }}
           </div>
         </div>
-        <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
-          {{ lifecycleLabel(device.lifecycle) }}
-        </span>
-      </div>
-
-      <!-- 实时远程控制：查看并操作该端的画面（桌面/安卓）。 -->
-      <button
-        v-if="canRemoteControl(device)"
-        type="button"
-        class="mt-2 w-full rounded-lg border border-sky-200 bg-sky-50 px-2 py-1.5 text-[11px] font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
-        @click="openRemoteControl(device)"
-      >
-        <AppIcon name="monitor" class="w-3.5 h-3.5" /> {{ isAndroidDevice(device) ? '远程控制 · 查看并操作手机画面' : isBrowserDevice(device) ? '浏览器控制 · 查看并操作浏览器画面' : '桌面控制 · 查看并操作桌面画面' }}
-      </button>
-
-      <div class="mt-2 rounded-lg border p-2" :class="memberPanelClass(device)">
-        <div v-if="isToolboxDevice(device)" class="mb-1 text-[10px] text-indigo-600 dark:text-indigo-300">
-          工具箱支持多绑：分配操作会为选中的 AI 增加绑定。可多次分配不同成员。绑定后该 AI 的 prompt 动态 MCP 会包含工具箱工具，MCP 权限范围生效。
-        </div>
-        <div class="mb-1 flex items-center justify-between gap-2">
-          <div class="text-[10px]" :class="memberLabelClass(device)">分配成员</div>
-          <span class="shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium" :class="memberStatusBadgeClass(device)">
+        <div class="flex items-center gap-1 shrink-0">
+          <span class="shrink-0 text-[9px] px-1 py-0.5 rounded border font-medium" :class="memberStatusBadgeClass(device)">
             {{ memberStatusLabel(device) }}
           </span>
+          <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
+            {{ lifecycleLabel(device.lifecycle) }}
+          </span>
         </div>
+      </div>
+
+      <!-- 远程控制 + 动态MCP管理 同行显示 -->
+      <div class="mt-2 flex gap-1">
+        <button
+          v-if="canRemoteControl(device)"
+          type="button"
+          class="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
+          @click="openRemoteControl(device)"
+        >
+          <AppIcon name="monitor" class="w-3.5 h-3.5" /> {{ isAndroidDevice(device) ? '远程控制' : isBrowserDevice(device) ? '浏览器控制' : '桌面控制' }}
+        </button>
+        <button
+          v-if="getDynamicMcpType(device)"
+          type="button"
+          class="flex-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
+          @click="openDynamicMcp(device)"
+        >
+          动态 MCP 管理
+        </button>
+      </div>
+
+      <div v-if="isToolboxDevice(device) || (hasLinkedMember(device) && linkedMember(device)?.status === 'learning')" class="mt-2 rounded-lg border p-2" :class="memberPanelClass(device)">
 
         <!-- Multi-bind display for toolbox: list all bound AIs with individual unbind -->
         <div v-if="isToolboxDevice(device) && linkedConfigIds(device).length > 0" class="mb-2">
@@ -404,84 +422,44 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
         </div>
         <div v-else-if="isToolboxDevice(device)" class="text-[10px] text-amber-600 mb-1">暂无 AI 绑定工具箱。</div>
 
-        <!-- Single display for other devices -->
-        <div v-if="!isToolboxDevice(device)" class="flex items-center gap-2 text-[10px] leading-tight">
-          <span
-            class="min-w-0 flex-1 truncate font-semibold"
-            :class="hasLinkedMember(device)
-              ? 'text-emerald-800 dark:text-emerald-100'
-              : 'text-amber-700 dark:text-amber-200'"
-          >
-            {{ hasLinkedMember(device) ? linkedMember(device)?.name : '未链接成员' }}
+        <!-- Single display for other devices: only 学习中 when applicable (no name, no ID, no 等待指令) -->
+        <div v-if="!isToolboxDevice(device) && hasLinkedMember(device) && linkedMember(device)?.status === 'learning'" class="mt-0.5 text-[10px] leading-tight">
+          <span class="shrink-0 rounded px-1 py-0.5 text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
+            学习中
           </span>
-          <span
-            v-if="hasLinkedMember(device)"
-            class="shrink-0 whitespace-nowrap text-emerald-700/80 dark:text-emerald-200/80"
-          >
-            ID: {{ linkedConfigId(device) }}<span v-if="linkedMember(device)?.projectName"> · {{ linkedMember(device)?.projectName }}</span>
-          </span>
-        </div>
-        <div
-          v-if="!isToolboxDevice(device) && hasLinkedMember(device)"
-          class="mt-0.5 truncate text-[10px] leading-tight text-emerald-700/80 dark:text-emerald-200/80"
-        >
-          {{ linkedMember(device)?.currentTaskTitle || linkedMember(device)?.currentTask || '等待任务' }}
         </div>
 
-        <!-- Assign / reassign control (operator picks the server-side AI) -->
-        <div class="mt-2 flex items-center gap-1.5">
-          <select
-            :value="selectionFor(device)"
-            :disabled="busy[device.id]"
-            class="min-w-0 flex-1 rounded border border-zinc-200 bg-white/75 px-1.5 py-1 text-[10px] text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-200"
-            @change="onSelect(device, $event)"
-          >
-            <option value="">未分配</option>
-            <option v-for="m in assignableMembers" :key="m.aiConfigId" :value="String(m.aiConfigId)">
-              {{ m.name }}（ID: {{ m.aiConfigId }}）
-            </option>
-          </select>
-          <button
-            type="button"
-            :disabled="busy[device.id]"
-            class="shrink-0 rounded bg-indigo-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-indigo-600 disabled:opacity-50"
-            @click="assign(device)"
-          >
-            {{ busy[device.id] ? '...' : '分配' }}
-          </button>
-          <button
-            v-if="!isToolboxDevice(device) && hasLinkedMember(device)"
-            type="button"
-            :disabled="busy[device.id]"
-            class="shrink-0 rounded border border-zinc-200 px-2 py-1 text-[10px] font-medium text-zinc-500 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            @click="unassign(device)"
-          >
-            解绑
-          </button>
-        </div>
         <div v-if="errors[device.id]" class="mt-1 text-[10px] text-rose-500">{{ errors[device.id] }}</div>
       </div>
 
-      <LibraryMcpUnifiedPanel
-        v-if="isWorkshopDevice(device) && !isToolboxDevice(device) && device.libraryMcpCatalog"
-        class="mt-2"
-        :catalog="device.libraryMcpCatalog"
-        mode="workshop"
-        :workshop-device-id="device.id"
-        :bound-ai-config-id="linkedConfigId(device)"
-        :bound-ai-name="linkedMember(device)?.name || ''"
-        :governance-mcp-tools="governanceToolsForDevice(device)"
-        @governance-saved="tools => onGovernanceSaved(device, tools)"
-      />
-
-      <!-- Endpoint agents: edit their per-(AI, type) MCP permission scope.
-           图书馆走 LibraryMcpUnifiedPanel；工具箱现在像其他 MCP 一样在作坊面板支持绑定 AI + 勾选范围。 -->
-      <DeviceMcpScopeEditor
-        v-else-if="isToolboxDevice(device) || (isEndpointDevice(device) && !isWorkshopDevice(device))"
-        class="mt-2"
-        :device-id="device.id"
-        :refresh-key="`${(isToolboxDevice(device) ? (linkedConfigIds(device).join(',') || 'multi') : (device.aiConfigId ?? ''))}-${device.lifecycle ?? ''}`"
-      />
+      <!-- 分配AI成员 左侧 of 配置MCP权限范围 -->
+      <div v-if="isWorkshopDevice(device) && !isToolboxDevice(device) && device.libraryMcpCatalog || isToolboxDevice(device) || (isEndpointDevice(device) && !isWorkshopDevice(device))" class="mt-2 flex gap-1">
+        <button
+          type="button"
+          :disabled="busy[device.id]"
+          class="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+          @click="openAssignMember(device)"
+        >
+          {{ busy[device.id] ? '...' : '分配AI成员' }}
+        </button>
+        <LibraryMcpUnifiedPanel
+          v-if="isWorkshopDevice(device) && !isToolboxDevice(device) && device.libraryMcpCatalog"
+          class="flex-1"
+          :catalog="device.libraryMcpCatalog"
+          mode="workshop"
+          :workshop-device-id="device.id"
+          :bound-ai-config-id="linkedConfigId(device)"
+          :bound-ai-name="linkedMember(device)?.name || ''"
+          :governance-mcp-tools="governanceToolsForDevice(device)"
+          @governance-saved="tools => onGovernanceSaved(device, tools)"
+        />
+        <DeviceMcpScopeEditor
+          v-else-if="isToolboxDevice(device) || (isEndpointDevice(device) && !isWorkshopDevice(device))"
+          class="flex-1"
+          :device-id="device.id"
+          :refresh-key="`${(isToolboxDevice(device) ? (linkedConfigIds(device).join(',') || 'multi') : (device.aiConfigId ?? ''))}-${device.lifecycle ?? ''}`"
+        />
+      </div>
       <div v-else-if="device.capabilities.length && !(isWorkshopDevice(device) && device.libraryMcpCatalog)" class="mt-2 flex flex-wrap gap-1">
         <span
           v-for="cap in device.capabilities"
@@ -516,6 +494,53 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasLinkedMember(devi
       @save="emit('save-role-mcp-permissions')"
       @close="roleEditor = null"
     />
+
+    <!-- Member selection modal for assign (contained within workshop column) -->
+    <Transition name="fade">
+      <div
+        v-if="assignMemberModal"
+        class="absolute inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+        @click="closeAssignMember"
+      >
+        <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[420px] p-4" @click.stop>
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+              选择成员分配到 {{ assignMemberModal.name || assignMemberModal.id }}
+            </div>
+            <button class="text-zinc-400 hover:text-zinc-600" @click="closeAssignMember">✕</button>
+          </div>
+          <div v-if="assignableMembers.length === 0" class="text-xs text-zinc-500 py-4 text-center">
+            暂无可分配成员
+          </div>
+          <div v-else class="max-h-64 overflow-auto divide-y divide-zinc-100 dark:divide-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700">
+            <button
+              class="w-full text-left px-3 py-2 text-sm hover:bg-rose-50 dark:hover:bg-rose-950/30 flex justify-between items-center transition-colors text-rose-600"
+              @click="selectMemberAndAssign(null)"
+            >
+              <span class="font-medium">不分配成员</span>
+            </button>
+            <button
+              v-for="m in assignableMembers"
+              :key="m.aiConfigId"
+              class="w-full text-left px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 flex justify-between items-center transition-colors"
+              @click="selectMemberAndAssign(m.aiConfigId)"
+            >
+              <span class="font-medium">{{ m.name }}</span>
+              <span class="text-[10px] text-zinc-500">ID: {{ m.aiConfigId }}</span>
+            </button>
+          </div>
+          <div class="mt-2 flex justify-end">
+            <button
+              type="button"
+              class="text-xs px-3 py-1 rounded border border-zinc-200 hover:bg-zinc-100 dark:border-zinc-700"
+              @click="closeAssignMember"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 

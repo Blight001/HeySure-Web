@@ -21,7 +21,8 @@ import {
 import { getAuthToken } from '@/api/http'
 import { updateAiConfigFields } from '@/api/ai'
 import { me } from '@/api/auth'
-import { runInheritanceMcpTest, type InheritanceMcpTestResult } from '@/api/mcp'
+import { runInheritanceMcpTest, type InheritanceMcpTestResult, callMcpTool } from '@/api/mcp'
+import McpAiTestModal from '@/components/dashboard/modals/McpAiTestModal.vue'
 import { useMessage } from '@/composables/useMessage'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
@@ -55,7 +56,7 @@ const emit = defineEmits<{
   (e: 'update:filterValue', value: Props['filterValue']): void
   (e: 'refresh-user', user: User): void
   (e: 'view-all-mcp'): void
-  (e: 'manage-device-tools'): void
+  (e: 'manage-device-tools', payload?: { deviceType?: string }): void
 }>()
 
 const attrs = useAttrs()
@@ -348,6 +349,12 @@ const mcpTestSelectedPresetId = ref('')
 const mcpTestUserHint = ref('')
 const mcpTestResult = ref<InheritanceMcpTestResult | null>(null)
 
+// Direct param test inside the same popup (for reuse testing)
+const mcpTestDirectArgs = ref('{}')
+const mcpTestDirectResult = ref<any>(null)
+const mcpTestDirectLoading = ref(false)
+const mcpTestDirectError = ref('')
+
 const formatMcpTestJson = (value: unknown) => {
   try {
     return JSON.stringify(value, null, 2)
@@ -381,6 +388,9 @@ const openMcpTestModal = async (device: InheritanceSkillDevice, tool: Inheritanc
   mcpTestError.value = ''
   mcpTestNotice.value = ''
   mcpTestResult.value = null
+  mcpTestDirectArgs.value = '{}'
+  mcpTestDirectResult.value = null
+  mcpTestDirectError.value = ''
   mcpTestModalOpen.value = true
   await loadMcpTestPresetOptions()
 }
@@ -395,6 +405,11 @@ const closeMcpTestModal = () => {
   mcpTestError.value = ''
   mcpTestNotice.value = ''
   mcpTestSubmitting.value = false
+  // clear direct test too
+  mcpTestDirectArgs.value = '{}'
+  mcpTestDirectResult.value = null
+  mcpTestDirectLoading.value = false
+  mcpTestDirectError.value = ''
 }
 
 const submitMcpModelTest = async () => {
@@ -432,6 +447,31 @@ const submitMcpModelTest = async () => {
     mcpTestError.value = (err as Error).message || '发起测试失败'
   } finally {
     mcpTestSubmitting.value = false
+  }
+}
+
+const runDirectMcpTest = async () => {
+  if (!mcpTestTarget.value) return
+  mcpTestDirectLoading.value = true
+  mcpTestDirectError.value = ''
+  mcpTestDirectResult.value = null
+  try {
+    let args: Record<string, unknown> = {}
+    try {
+      args = JSON.parse(mcpTestDirectArgs.value || '{}')
+    } catch (e: any) {
+      mcpTestDirectError.value = '参数 JSON 格式错误：' + (e.message || e)
+      return
+    }
+    const res = await callMcpTool({
+      tool: mcpTestTarget.value.tool.name,
+      arguments: args
+    })
+    mcpTestDirectResult.value = res
+  } catch (err: any) {
+    mcpTestDirectError.value = err?.message || '直接调用失败'
+  } finally {
+    mcpTestDirectLoading.value = false
   }
 }
 
@@ -1755,102 +1795,15 @@ const closeDetail = () => {
         </div>
       </div>
     </div>
-    <div
-      v-if="mcpTestModalOpen && mcpTestTarget"
-      :style="{ zIndex: mcpTestZIndex }"
-      class="fixed inset-0 flex items-center justify-center bg-black/50 p-4"
-      @click.self="closeMcpTestModal"
-    >
-      <div class="flex max-h-[88vh] w-full max-w-xl flex-col rounded-2xl acrylic-modal shadow-2xl">
-        <div class="flex items-center justify-between border-b border-zinc-100 px-5 py-3 dark:border-zinc-800">
-          <div class="min-w-0">
-            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">测试当前 MCP</div>
-            <div class="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
-              {{ getMcpToolZhLabel(mcpTestTarget.tool.name) }} · <code class="text-indigo-600 dark:text-indigo-300">{{ mcpTestTarget.tool.name }}</code>
-            </div>
-          </div>
-          <button type="button" class="text-xl leading-none text-zinc-400 hover:text-zinc-600" @click="closeMcpTestModal">×</button>
-        </div>
-        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-          <div class="rounded-lg border border-zinc-100 bg-zinc-50/60 px-3 py-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-800/40 dark:text-zinc-300">
-            设备：{{ deviceTypeLabel(mcpTestTarget.device.device_type) }}（{{ mcpTestTarget.device.device_id || '未提供' }}）
-          </div>
-          <div v-if="mcpTestError" class="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
-            {{ mcpTestError }}
-          </div>
-          <div v-if="mcpTestNotice" class="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-600 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-            {{ mcpTestNotice }}
-          </div>
-          <label class="block">
-            <span class="mb-1 block text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">选择测试模型</span>
-            <select
-              v-model="mcpTestSelectedPresetId"
-              class="w-full rounded-lg border border-zinc-200 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
-              :disabled="mcpTestPresetLoading || mcpTestSubmitting"
-            >
-              <option v-if="mcpTestPresetLoading" value="">加载中…</option>
-              <option v-else-if="!mcpTestPresetOptions.length" value="">暂无可用模型</option>
-              <option
-                v-for="preset in mcpTestPresetOptions"
-                :key="preset.id"
-                :value="preset.id"
-              >
-                {{ preset.name }}（{{ preset.model }}）
-              </option>
-            </select>
-          </label>
-          <div v-if="selectedMcpTestPreset" class="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-            {{ selectedMcpTestPreset.base_url }}
-          </div>
-          <label class="block">
-            <span class="mb-1 block text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">补充说明（可选）</span>
-            <textarea
-              v-model="mcpTestUserHint"
-              rows="3"
-              spellcheck="false"
-              class="w-full resize-y rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-200 dark:focus:ring-indigo-800"
-              placeholder="例如：请用当前桌面路径做一次轻量测试"
-            />
-          </label>
-          <div class="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-            将把工具描述、参数说明与底层实现填入提示词，由所选模型主动构造参数并调用
-            <code>{{ mcpTestTarget.tool.name }}</code>，随后在下方展示调用结果。
-          </div>
-          <div v-if="mcpTestResult" class="space-y-3 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
-            <div v-if="mcpTestResult.model_reply" class="space-y-1">
-              <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">模型说明</div>
-              <pre class="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">{{ mcpTestResult.model_reply }}</pre>
-            </div>
-            <div v-if="mcpTestResult.tool_call" class="space-y-1">
-              <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">模型生成的参数</div>
-              <pre class="overflow-x-auto rounded border border-zinc-200 bg-white/75 p-2 font-mono text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200">{{ formatMcpTestJson(mcpTestResult.tool_call.arguments) }}</pre>
-            </div>
-            <div v-if="mcpTestResult.tool_result" class="space-y-1">
-              <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">工具返回</div>
-              <pre class="max-h-48 overflow-auto rounded border border-zinc-200 bg-white/75 p-2 font-mono text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200">{{ formatMcpTestJson(mcpTestResult.tool_result) }}</pre>
-            </div>
-          </div>
-        </div>
-        <div class="flex justify-end gap-2 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
-          <button
-            type="button"
-            class="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            :disabled="mcpTestSubmitting"
-            @click="closeMcpTestModal"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="mcpTestSubmitting || mcpTestPresetLoading || !mcpTestSelectedPresetId"
-            @click="submitMcpModelTest"
-          >
-            {{ mcpTestSubmitting ? '测试中…' : '开始测试' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <McpAiTestModal
+      v-model:show="mcpTestModalOpen"
+      :tool-name="mcpTestTarget?.tool?.name || ''"
+      :device-id="mcpTestTarget?.device?.device_id || ''"
+      :device-type="mcpTestTarget?.device?.device_type || 'desktop'"
+      :description="mcpTestTarget?.tool?.description || ''"
+      :input-schema="mcpTestTarget?.tool?.inputSchema || mcpTestTarget?.tool?.input_schema || {}"
+      @close="closeMcpTestModal"
+    />
     <div
       v-if="inheritanceHoverPopover && hoveredInheritanceTool"
       class="fixed overflow-y-auto rounded-lg acrylic-modal p-3 text-left shadow-xl"

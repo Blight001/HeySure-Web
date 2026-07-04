@@ -26,7 +26,7 @@ import {
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import { useMessage } from '@/composables/useMessage'
 
-const props = defineProps<{ show: boolean }>()
+const props = defineProps<{ show: boolean; initialDeviceType?: DeviceToolType }>()
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 const zIndex = usePopupZIndex(() => props.show)
@@ -208,7 +208,16 @@ const savePolicy = async () => {
   }
 }
 
-watch(() => props.show, value => { if (value) { draft.value = null; notice.value = ''; load() } }, { immediate: true })
+watch(() => props.show, value => {
+  if (value) {
+    draft.value = null
+    notice.value = ''
+    if (props.initialDeviceType && ['desktop', 'browser', 'android'].includes(props.initialDeviceType)) {
+      deviceType.value = props.initialDeviceType
+    }
+    load()
+  }
+}, { immediate: true })
 watch(deviceType, () => { draft.value = null; notice.value = ''; load() })
 
 const coerce = (raw: string): unknown => {
