@@ -1,4 +1,4 @@
-import { get, post, put } from './http'
+import { del, get, post, put } from './http'
 
 export interface ConnectedDeviceRow {
   id?: string
@@ -36,6 +36,14 @@ export const assignDeviceAi = (deviceId: string, aiConfigId: number | null) =>
     '/api/devices/bind',
     { deviceId, aiConfigId },
     { fallbackError: '分配 AI 失败' },
+  )
+
+// Forget an offline device entirely: drops its saved AI binding, presence
+// record, and MCP scope. Refused by the server while the device is connected.
+export const deleteDeviceRecord = (deviceId: string) =>
+  del<{ ok: boolean; deviceId: string; deleted: boolean }>(
+    `/api/devices/${encodeURIComponent(deviceId)}`,
+    { fallbackError: '删除设备记录失败' },
   )
 
 export interface DeviceMcpScope {

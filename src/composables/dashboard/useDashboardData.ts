@@ -42,6 +42,9 @@ export interface ConnectedDevice {
   libraryMcpCatalog?: LibraryMcpFullView | null
   version?: string
   lifecycle?: string
+  /** false = last-known device that isn't connected right now (still assignable; the
+   * assignment takes effect on its next reconnect). Missing/true = currently online. */
+  online?: boolean
   group?: string
   workspaceRoot?: string
   lastTaskId?: string | null
@@ -429,6 +432,7 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
       : undefined,
     version: raw?.version ? String(raw.version) : undefined,
     lifecycle: raw?.lifecycle ? String(raw.lifecycle) : undefined,
+    online: raw?.online === false ? false : true,
     group: raw?.group ? String(raw.group) : undefined,
     workspaceRoot: raw?.workspaceRoot ? String(raw.workspaceRoot) : undefined,
     lastTaskId: raw?.lastTaskId ?? null,

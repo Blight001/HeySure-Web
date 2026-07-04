@@ -537,13 +537,13 @@ const onCardPointerUp = (event: PointerEvent) => {
     @dblclick="onCardDblClick"
     @pointerup="onCardPointerUp"
   >
-    <!-- AI头像作为80%透明的背景填充（仅数字生命卡片） -->
+    <!-- AI头像作为背景填充（数字生命卡片）：85% 透明 + 虚化处理，让前景内容更清晰 -->
     <div 
       v-if="aiAvatarUrl"
       class="absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0"
-      :style="{ opacity: '0.2' }"
+      :style="{ opacity: '0.15' }"
     >
-      <img :src="aiAvatarUrl" class="w-full h-full object-cover select-none" alt="" />
+      <img :src="aiAvatarUrl" class="w-full h-full object-cover select-none blur scale-[1.03]" alt="" />
     </div>
 
     <!-- 角色徽章 -->

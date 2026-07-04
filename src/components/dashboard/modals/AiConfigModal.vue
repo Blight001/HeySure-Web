@@ -186,7 +186,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                 <img :src="av" class="w-full h-full object-cover rounded" alt="avatar" />
               </button>
             </div>
-            <div class="mt-1 text-[10px] text-zinc-400">创建/设置 AI 时选择，默认为第一张。数字生命卡片将以 80% 透明度作为背景填充。</div>
+            <div class="mt-1 text-[10px] text-zinc-400">创建/设置 AI 时选择，默认为第一张。数字生命卡片将以虚化头像作为背景填充（低透明度）。</div>
           </div>
 
           <div>

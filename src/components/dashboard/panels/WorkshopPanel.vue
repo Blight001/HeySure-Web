@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import type { McpRoleMeta } from '@/types'
-import { assignDeviceAi } from '@/api/devices'
+import { assignDeviceAi, deleteDeviceRecord } from '@/api/devices'
 import { setWorkshopBinding } from '@/api/workshop'
 import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
 import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
@@ -197,6 +197,33 @@ const selectMemberAndAssign = async (aiConfigId: number | null) => {
   await assign(device, aiConfigId)
 }
 
+// Forget an offline device's record entirely (binding + presence + saved MCP
+// scope). The server refuses this while the device is connected, so the
+// button only ever appears on offline cards. Confirmation is a panel-local
+// modal (matching the assign-member modal below) rather than the browser's
+// native confirm().
+const deleteConfirmTarget = ref<ConnectedDevice | null>(null)
+const deleteRecord = (device: ConnectedDevice) => {
+  deleteConfirmTarget.value = device
+}
+const closeDeleteConfirm = () => {
+  deleteConfirmTarget.value = null
+}
+const confirmDeleteRecord = async () => {
+  const device = deleteConfirmTarget.value
+  if (!device) return
+  closeDeleteConfirm()
+  busy[device.id] = true
+  errors[device.id] = ''
+  try {
+    await deleteDeviceRecord(device.id)
+  } catch (err: any) {
+    errors[device.id] = err?.message || '删除失败'
+  } finally {
+    busy[device.id] = false
+  }
+}
+
 // 内置工具箱作坊：多绑，现在在作坊面板支持分配绑定 + MCP 范围勾选（像其他设备一样）。
 const isToolboxDevice = (device: ConnectedDevice) => String(device.id || '').startsWith('toolbox_builtin_')
 
@@ -275,6 +302,8 @@ const deviceDisplayName = (device: ConnectedDevice) => {
 
 const lifecycleLabel = (lifecycle?: string) => {
   switch (lifecycle) {
+    case 'offline':
+      return '离线，等待重连'
     case 'dispatching':
       return '执行中'
     case 'registered':
@@ -289,6 +318,8 @@ const lifecycleLabel = (lifecycle?: string) => {
 
 const lifecycleClass = (lifecycle?: string) => {
   switch (lifecycle) {
+    case 'offline':
+      return 'bg-zinc-300 dark:bg-zinc-600'
     case 'dispatching':
       return 'bg-indigo-500'
     case 'registered':
@@ -300,6 +331,11 @@ const lifecycleClass = (lifecycle?: string) => {
       return 'bg-zinc-400'
   }
 }
+
+// A device we've seen before but that isn't connected right now. It still gets
+// a card (so its AI assignment can be saved/changed), but live-only actions
+// (remote control, per-device MCP scope) need a connected socket and are hidden.
+const isOffline = (device: ConnectedDevice) => device.online === false
 
 const linkedMember = (device: ConnectedDevice) => {
   const id = linkedConfigId(device)
@@ -327,16 +363,24 @@ const memberPanelClass = (device: ConnectedDevice) => hasAnyLinked(device)
 const deviceCardClass = (device: ConnectedDevice) => {
   const hasAvatar = !!deviceAvatarUrl(device)
   const linked = hasAnyLinked(device)
-  const baseBorder = linked
-    ? 'border-emerald-200 dark:border-emerald-500/30'
-    : 'border-amber-200 dark:border-amber-500/30'
+  const offline = isOffline(device)
+  // Offline cards are always grey (regardless of assignment state) so a
+  // device waiting to reconnect reads as "dormant", not as a warning.
+  const baseBorder = offline
+    ? 'border-zinc-200 dark:border-zinc-600'
+    : linked
+      ? 'border-emerald-200 dark:border-emerald-500/30'
+      : 'border-amber-200 dark:border-amber-500/30'
   if (hasAvatar) {
     // 头像背景时，使用透明底让头像显示；保留边框色调
     return baseBorder + ' bg-transparent dark:bg-transparent'
   }
-  return baseBorder + (linked
-    ? ' bg-emerald-50/60 dark:bg-emerald-500/10'
-    : ' bg-amber-50/60 dark:bg-amber-500/10')
+  const bg = offline
+    ? ' bg-zinc-100/60 dark:bg-zinc-800/40'
+    : linked
+      ? ' bg-emerald-50/60 dark:bg-emerald-500/10'
+      : ' bg-amber-50/60 dark:bg-amber-500/10'
+  return baseBorder + bg
 }
 
 const memberLabelClass = (device: ConnectedDevice) => hasAnyLinked(device)
@@ -380,13 +424,13 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
       class="relative rounded-xl border p-3"
       :class="deviceCardClass(device)"
     >
-      <!-- 单AI绑定设备的AI头像作为90%透明背景填充（类似数字生命卡片） -->
+      <!-- 单AI绑定设备的AI头像作为背景填充（作坊设备卡片）：85% 透明 + 虚化处理（与数字生命一致） -->
       <div 
         v-if="deviceAvatarUrl(device)"
         class="absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0"
-        :style="{ opacity: '0.1' }"
+        :style="{ opacity: '0.15' }"
       >
-        <img :src="deviceAvatarUrl(device)" class="w-full h-full object-cover select-none" alt="" />
+        <img :src="deviceAvatarUrl(device)" class="w-full h-full object-cover select-none blur scale-[1.03]" alt="" />
       </div>
 
       <div class="relative z-10">
@@ -407,13 +451,23 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
           <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
             {{ lifecycleLabel(device.lifecycle) }}
           </span>
+          <button
+            v-if="isOffline(device) && !isToolboxDevice(device) && !isWorkshopDevice(device)"
+            type="button"
+            :disabled="busy[device.id]"
+            title="删除该离线设备的记录"
+            class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-rose-200 text-rose-600 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+            @click="deleteRecord(device)"
+          >
+            删除记录
+          </button>
         </div>
       </div>
 
       <!-- 远程控制 + 动态MCP管理 同行显示 -->
       <div class="mt-2 flex gap-1">
         <button
-          v-if="canRemoteControl(device)"
+          v-if="canRemoteControl(device) && !isOffline(device)"
           type="button"
           class="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
           @click="openRemoteControl(device)"
@@ -484,11 +538,17 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
           @governance-saved="tools => onGovernanceSaved(device, tools)"
         />
         <DeviceMcpScopeEditor
-          v-else-if="isToolboxDevice(device) || (isEndpointDevice(device) && !isWorkshopDevice(device))"
+          v-else-if="(isToolboxDevice(device) || (isEndpointDevice(device) && !isWorkshopDevice(device))) && !isOffline(device)"
           class="flex-1"
           :device-id="device.id"
           :refresh-key="`${(isToolboxDevice(device) ? (linkedConfigIds(device).join(',') || 'multi') : (device.aiConfigId ?? ''))}-${device.lifecycle ?? ''}`"
         />
+        <div
+          v-else-if="isOffline(device) && (isToolboxDevice(device) || (isEndpointDevice(device) && !isWorkshopDevice(device)))"
+          class="flex-1 flex items-center px-1 text-[10px] text-zinc-400 dark:text-zinc-500"
+        >
+          离线，重连后可配置 MCP 权限
+        </div>
       </div>
       <div v-else-if="device.capabilities.length && !(isWorkshopDevice(device) && device.libraryMcpCatalog)" class="mt-2 flex flex-wrap gap-1">
         <span
@@ -567,6 +627,41 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
               @click="closeAssignMember"
             >
               取消
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Delete-record confirmation, scoped to the workshop panel like the assign modal above -->
+    <Transition name="fade">
+      <div
+        v-if="deleteConfirmTarget"
+        class="absolute inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+        @click="closeDeleteConfirm"
+      >
+        <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[380px] p-4" @click.stop>
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">删除设备记录</div>
+            <button class="text-zinc-400 hover:text-zinc-600" @click="closeDeleteConfirm">✕</button>
+          </div>
+          <div class="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+            确认删除设备「{{ deviceDisplayName(deleteConfirmTarget) }}」的记录？包括已保存的 AI 分配与 MCP 权限范围，删除后需要设备重新连接才会再次出现在列表中。
+          </div>
+          <div class="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              class="text-xs px-3 py-1 rounded border border-zinc-200 hover:bg-zinc-100 dark:border-zinc-700"
+              @click="closeDeleteConfirm"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              class="text-xs px-3 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+              @click="confirmDeleteRecord"
+            >
+              删除
             </button>
           </div>
         </div>

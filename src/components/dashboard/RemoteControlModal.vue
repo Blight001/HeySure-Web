@@ -353,7 +353,10 @@ const onKeyDown = (event: KeyboardEvent) => {
   if (status.value !== 'streaming' || !isDesktopLike.value) return
   if (event.isComposing || event.keyCode === 229) return
   event.preventDefault()
-  if (event.repeat) return // the remote OS auto-repeats a held key
+  // A single injected/synthetic key-down never auto-repeats on its own (real
+  // OS auto-repeat comes from the physical keyboard driver re-sending
+  // make-codes) — forward the browser's own repeat keydowns so holding a key
+  // (Backspace, arrows, letters…) actually repeats on the remote end too.
   const payload = keyPayload(event, 'down')
   if (payload) sendInput(payload)
 }
