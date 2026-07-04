@@ -9,6 +9,7 @@ import {
   updateAiConfig,
   type AiConfigUpsertPayload,
 } from '@/api/ai'
+import { DEFAULT_AI_AVATAR, resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
 type SettingsSection = 'mcp' | 'bot'
 
@@ -185,6 +186,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     id: undefined as number | undefined,
     name: role === 'assistant_admin' ? '新辅助管理员' : '新执行AI',
     description: '',
+    avatar: DEFAULT_AI_AVATAR,
     ai_role_group: roleGroupFromRole(role),
     digital_member_role: 'member' as 'manager' | 'member',
     platform: role === 'assistant_admin' ? 'Server-Node' : 'Ubuntu-Worker',
@@ -315,6 +317,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigForm.value = {
       ...aiConfigForm.value,
       description: cfg.description || '',
+      avatar: resolveAiAvatarUrl(cfg.avatar) || DEFAULT_AI_AVATAR,
       ai_role_group: roleGroupFromRole(cfg.ai_role),
       digital_member_role: normalizeDigitalMemberRole(cfg.digital_member_role),
       platform: cfg.platform || aiConfigForm.value.platform,
@@ -349,6 +352,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       id: agent.aiConfigId,
       name: agent.name,
       description: '',
+      avatar: resolveAiAvatarUrl(agent.avatar) || DEFAULT_AI_AVATAR,
       ai_role_group: roleGroupFromRole(agent.aiRole),
       digital_member_role: normalizeDigitalMemberRole(agent.digitalMemberRole || (agent.role === 'admin' ? 'manager' : 'member')),
       platform: agent.platform,
@@ -383,6 +387,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     const payload: AiConfigUpsertPayload = {
       name: aiConfigForm.value.name,
       description: aiConfigForm.value.description,
+      avatar: aiConfigForm.value.avatar || DEFAULT_AI_AVATAR,
       ai_role: roleFromGroup(aiConfigForm.value.ai_role_group),
       digital_member_role: aiConfigForm.value.ai_role_group === 'digital_member'
         ? normalizeDigitalMemberRole(aiConfigForm.value.digital_member_role)

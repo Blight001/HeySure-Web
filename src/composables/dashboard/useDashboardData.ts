@@ -225,6 +225,7 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
       return createAgent({
         id: `cfg-${row.id}`,
         name: row.name,
+        avatar: row.avatar || undefined,
         role: uiRole,
         aiRole,
         digitalMemberRole,

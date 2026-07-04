@@ -23,6 +23,7 @@ export interface AgentTaskSnapshot {
 export interface Agent {
   id: string
   name: string
+  avatar?: string
   role: AgentRole
   aiRole?: 'assistant_admin' | 'digital_member' | 'admin' | 'worker'
   digitalMemberRole?: 'manager' | 'member'

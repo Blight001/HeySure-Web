@@ -7,6 +7,7 @@ import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import DeviceMcpScopeEditor from './DeviceMcpScopeEditor.vue'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import { useMessage } from '@/composables/useMessage'
+import { PRESET_AI_AVATARS, resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
 type SettingsSection = 'mcp' | 'bot'
 
@@ -169,6 +170,25 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
             <label class="block text-xs text-zinc-500 mb-1">名称</label>
             <input v-model="form.name" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
           </div>
+
+          <!-- AI 头像选择（与用户头像类似，内置资产） -->
+          <div class="md:col-span-2">
+            <label class="block text-xs text-zinc-500 mb-1">头像</label>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="av in PRESET_AI_AVATARS"
+                :key="av"
+                type="button"
+                class="w-10 h-10 rounded-lg border overflow-hidden p-0.5 transition-all"
+                :class="resolveAiAvatarUrl(form.avatar) === av ? 'border-indigo-500 ring-2 ring-indigo-200 scale-105' : 'border-zinc-200 hover:border-zinc-400 dark:border-zinc-700'"
+                @click="form.avatar = av"
+              >
+                <img :src="av" class="w-full h-full object-cover rounded" alt="avatar" />
+              </button>
+            </div>
+            <div class="mt-1 text-[10px] text-zinc-400">创建/设置 AI 时选择，默认为第一张。数字生命卡片将以 80% 透明度作为背景填充。</div>
+          </div>
+
           <div>
             <label class="block text-xs text-zinc-500 mb-1">AI 类型</label>
             <!-- 角色扁平化：辅助管理员由系统默认创建（每用户一个），不再支持

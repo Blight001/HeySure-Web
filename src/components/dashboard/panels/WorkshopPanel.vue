@@ -9,10 +9,12 @@ import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
 import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
 import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
+import { resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
 interface Agent {
   id: string
   name: string
+  avatar?: string
   role: 'admin' | 'worker'
   aiRole?: 'assistant_admin' | 'digital_member' | 'admin' | 'worker'
   digitalMemberRole?: 'manager' | 'member'
@@ -322,9 +324,20 @@ const memberPanelClass = (device: ConnectedDevice) => hasAnyLinked(device)
   ? 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-500/30 dark:bg-emerald-500/10'
   : 'border-amber-200 bg-amber-50/80 dark:border-amber-500/30 dark:bg-amber-500/10'
 
-const deviceCardClass = (device: ConnectedDevice) => hasAnyLinked(device)
-  ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/10'
-  : 'border-amber-200 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/10'
+const deviceCardClass = (device: ConnectedDevice) => {
+  const hasAvatar = !!deviceAvatarUrl(device)
+  const linked = hasAnyLinked(device)
+  const baseBorder = linked
+    ? 'border-emerald-200 dark:border-emerald-500/30'
+    : 'border-amber-200 dark:border-amber-500/30'
+  if (hasAvatar) {
+    // 头像背景时，使用透明底让头像显示；保留边框色调
+    return baseBorder + ' bg-transparent dark:bg-transparent'
+  }
+  return baseBorder + (linked
+    ? ' bg-emerald-50/60 dark:bg-emerald-500/10'
+    : ' bg-amber-50/60 dark:bg-amber-500/10')
+}
 
 const memberLabelClass = (device: ConnectedDevice) => hasAnyLinked(device)
   ? 'text-emerald-600 dark:text-emerald-300'
@@ -346,6 +359,13 @@ const memberStatusLabel = (device: ConnectedDevice) => {
 const memberStatusBadgeClass = (device: ConnectedDevice) => hasAnyLinked(device)
   ? 'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200'
   : 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200'
+
+const deviceAvatarUrl = (device: ConnectedDevice) => {
+  // 仅单AI绑定设备（非工具箱等）显示头像背景
+  if (isToolboxDevice(device) || !hasLinkedMember(device)) return ''
+  const member = linkedMember(device)
+  return resolveAiAvatarUrl(member?.avatar) || ''
+}
 </script>
 
 <template>
@@ -357,9 +377,19 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasAnyLinked(device)
     <div
       v-for="device in devices"
       :key="device.id"
-      class="rounded-xl border p-3"
+      class="relative rounded-xl border p-3"
       :class="deviceCardClass(device)"
     >
+      <!-- 单AI绑定设备的AI头像作为90%透明背景填充（类似数字生命卡片） -->
+      <div 
+        v-if="deviceAvatarUrl(device)"
+        class="absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0"
+        :style="{ opacity: '0.1' }"
+      >
+        <img :src="deviceAvatarUrl(device)" class="w-full h-full object-cover select-none" alt="" />
+      </div>
+
+      <div class="relative z-10">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
           <div class="flex items-center gap-1.5">
@@ -473,6 +503,7 @@ const memberStatusBadgeClass = (device: ConnectedDevice) => hasAnyLinked(device)
       <div v-if="device.lastError" class="mt-2 text-[10px] text-rose-500 truncate" :title="device.lastError">
         错误: {{ device.lastError }}
       </div>
+      </div> <!-- /relative z-10 content wrapper for avatar bg -->
     </div>
 
     <RemoteControlModal

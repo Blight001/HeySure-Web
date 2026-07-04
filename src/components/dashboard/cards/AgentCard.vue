@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import type { AppIconName } from '@/components/common/AppIcon.vue'
 import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
+import { resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
 interface AgentTaskSnapshot {
   jobId: string
@@ -27,6 +28,7 @@ interface AgentProps {
   agent: {
     id: string
     name: string
+    avatar?: string
     role: 'admin' | 'worker'
     tokensUsed: number
     tokenLimit: number
@@ -120,6 +122,8 @@ const isUnlimitedLife = computed(() => props.agent.tokenLimit <= 0)
 // AI 自身的代数（进化代际），与任务无关。
 const syncedGeneration = computed(() => Math.max(1, Number(props.agent.generation) || 1))
 
+const aiAvatarUrl = computed(() => resolveAiAvatarUrl(props.agent.avatar))
+
 const lifePercentage = computed(() => {
   if (isUnlimitedLife.value) return 100
   return Math.min((props.agent.tokensUsed / props.agent.tokenLimit) * 100, 100)
@@ -176,6 +180,14 @@ const cardGlowClass = computed(() => {
   if (props.agent.aiRole === 'digital_member' && props.agent.digitalMemberRole === 'manager') return 'agent-card-glow-manager'
   if (props.agent.aiRole === 'digital_member') return 'agent-card-glow-member'
   return 'agent-card-glow-default'
+})
+
+const titleHoverClass = computed(() => {
+  if (props.agent.status === 'dead') return 'group-hover:text-zinc-500'
+  if (props.agent.aiRole === 'assistant_admin') return 'group-hover:text-violet-600 dark:group-hover:text-violet-400'
+  if (props.agent.aiRole === 'digital_member' && props.agent.digitalMemberRole === 'manager') return 'group-hover:text-amber-600 dark:group-hover:text-amber-400'
+  if (props.agent.aiRole === 'digital_member') return 'group-hover:text-sky-600 dark:group-hover:text-sky-400'
+  return 'group-hover:text-indigo-600'
 })
 
 const canControl = computed(() => typeof props.agent.aiConfigId === 'number')
@@ -525,6 +537,15 @@ const onCardPointerUp = (event: PointerEvent) => {
     @dblclick="onCardDblClick"
     @pointerup="onCardPointerUp"
   >
+    <!-- AI头像作为80%透明的背景填充（仅数字生命卡片） -->
+    <div 
+      v-if="aiAvatarUrl"
+      class="absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0"
+      :style="{ opacity: '0.2' }"
+    >
+      <img :src="aiAvatarUrl" class="w-full h-full object-cover select-none" alt="" />
+    </div>
+
     <!-- 角色徽章 -->
     <div
       v-if="roleBadge"
@@ -534,11 +555,13 @@ const onCardPointerUp = (event: PointerEvent) => {
       <AppIcon :name="roleBadge.icon" class="w-3 h-3" /> {{ roleBadge.text }}
     </div>
 
+    <!-- 内容层：确保位于头像背景之上 -->
+    <div class="relative z-10">
     <!-- 头部信息 -->
     <div class="flex justify-between items-start mb-3">
       <div class="min-w-0 flex-1 pr-2">
-        <h3 class="font-bold text-zinc-900 flex items-center gap-2 text-base dark:text-zinc-100 group-hover:text-indigo-600 transition-colors min-w-0">
-          <span class="truncate">{{ agent.name }}</span>
+        <h3 class="font-bold text-zinc-900 flex items-center gap-2 text-base dark:text-zinc-100 transition-colors min-w-0" :class="titleHoverClass">
+          <span class="truncate transition-all group-hover:scale-[1.1] group-hover:origin-left group-hover:[text-shadow:0_0_3px_var(--agent-glow-color),0_0_6px_var(--agent-glow-color)]">{{ agent.name }}</span>
           <span class="text-xs font-normal text-zinc-400 bg-zinc-100/60 px-1.5 py-0.5 rounded border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-400">
             第 {{ syncedGeneration }} 代
           </span>
@@ -737,6 +760,7 @@ const onCardPointerUp = (event: PointerEvent) => {
       :mode="rcTarget.mode"
       @close="rcTarget = null"
     />
+    </div> <!-- /z-10 content wrapper -->
   </div>
 </template>
 
