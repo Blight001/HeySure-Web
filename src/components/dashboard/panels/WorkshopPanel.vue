@@ -42,7 +42,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
   (e: 'save-role-mcp-permissions'): void
-  (e: 'manage-device-tools', payload?: { deviceType?: string }): void
 }>()
 
 // The toolbox tool set (12 tools): used to scope the role-permission editor so
@@ -290,22 +289,6 @@ const isEndpointDevice = (device: ConnectedDevice) => {
   return isSoftwareDevice(device) || isAndroidDevice(device) || !!device.isBrowserExtension || platform.includes('browser') || isWorkshopDevice(device) || isCustomDevice(device)
 }
 
-const getDynamicMcpType = (device: ConnectedDevice): 'desktop' | 'browser' | 'android' | null => {
-  if (isAndroidDevice(device)) return 'android'
-  if (isBrowserDevice(device)) return 'browser'
-  if (isSoftwareDevice(device)) return 'desktop'
-  return null
-}
-
-const openDynamicMcp = (device: ConnectedDevice) => {
-  const dt = getDynamicMcpType(device)
-  if (dt) {
-    emit('manage-device-tools', { deviceType: dt })
-  } else {
-    emit('manage-device-tools')
-  }
-}
-
 const deviceDisplayName = (device: ConnectedDevice) => {
   return device.name || device.id || deviceTypeLabel(device)
 }
@@ -482,7 +465,6 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         </div>
       </div>
 
-      <!-- 远程控制 + 动态MCP管理 同行显示 -->
       <div class="mt-2 flex gap-1">
         <button
           v-if="canRemoteControl(device) && !isOffline(device)"
@@ -491,14 +473,6 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
           @click="openRemoteControl(device)"
         >
           <AppIcon name="monitor" class="w-3.5 h-3.5" /> {{ isAndroidDevice(device) ? '远程控制' : isBrowserDevice(device) ? '浏览器控制' : '桌面控制' }}
-        </button>
-        <button
-          v-if="getDynamicMcpType(device)"
-          type="button"
-          class="flex-1 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700 transition-colors hover:bg-violet-100 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
-          @click="openDynamicMcp(device)"
-        >
-          动态 MCP 管理
         </button>
       </div>
 

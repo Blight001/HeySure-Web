@@ -143,7 +143,6 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           :role-mcp-permissions="roleMcpPermissions"
           @toggle-role-tool="emit('toggle-role-tool', $event)"
           @save-role-mcp-permissions="emit('save-role-mcp-permissions')"
-          @manage-device-tools="emit('manage-device-tools', $event)"
         />
       </Transition>
     </div>

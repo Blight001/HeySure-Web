@@ -21,6 +21,7 @@ import {
   WORLD_W,
   ZONES,
   mulberry32,
+  unionRect,
   workshopSlotPos,
   workshopZone,
   workshopBenchSeat,
@@ -67,7 +68,6 @@ export class WorldScene extends Phaser.Scene {
   private drawer!: Drawer
   private actors = new Map<number, MemberActor>()
   private workshops = new Map<string, WorkshopView>()
-  private slotOwner: (string | null)[] = new Array(WORKSHOP_SLOTS).fill(null)
   private buildings = new Map<string, Phaser.GameObjects.Sprite>()
   private snap: WorldSnapshot | null = null
   private draggingActor: MemberActor | null = null
@@ -1426,19 +1426,41 @@ export class WorldScene extends Phaser.Scene {
     if (m.role === 'core_admin') return ZONES.plaza
     if (m.role === 'librarian') return ZONES.library
     if (m.role === 'assistant_admin') return ZONES.wanderAll
-    // 绑定设备（在线或离线）→ 坐在设备门口区
-    const boundDeviceId = m.boundAgentIds.find(id => this.workshops.has(id))
-    if (boundDeviceId !== undefined) {
-      const view = this.workshops.get(boundDeviceId)
-      if (view) return view.data.type === 'workshop' ? ZONES.library : workshopZone(view.slot)
-    }
+    // 绑定设备（在线）→ 在其全部在线建筑门口区的合并矩形里徘徊
+    const zone = this.boundBuildingsZone(m)
+    if (zone) return zone
     if (!m.projectId || m.lifecycle === 'learning') return ZONES.spawn
     return ZONES.wanderAll
   }
 
-  /** 离线设备绑定：返回对应的长椅就坐位置（只有 slot >=0 的普通设备有） */
+  /** 该成员绑定的**全部在线**建筑门口区的合并矩形（多绑时横跨所有建筑）。
+   *  无在线普通建筑但绑定了在线图书馆 → 图书馆区；否则 null（交回上层回退）。 */
+  private boundBuildingsZone(m: WorldMember): Rect | null {
+    const rects: Rect[] = []
+    let hasOnlineLibrary = false
+    for (const id of m.boundAgentIds) {
+      const view = this.workshops.get(id)
+      if (!view || !view.data.online) continue
+      if (view.data.type === 'workshop') {
+        hasOnlineLibrary = true
+        continue
+      }
+      if (view.slot >= 0) rects.push(workshopZone(view.slot))
+    }
+    if (rects.length > 0) return unionRect(rects)
+    if (hasOnlineLibrary) return ZONES.library
+    return null
+  }
+
+  /** 离线设备绑定：返回对应的长椅就坐位置（只有 slot >=0 的普通设备有）。
+   *  多绑时只要有任一**在线**建筑就去徘徊（返回 null 不锁座），仅当全部离线才坐长椅。 */
   private getLockedBenchSeat(m: WorldMember): Point | null {
     if (!m.boundAgentIds?.length) return null
+    const hasOnlineBuilding = m.boundAgentIds.some(id => {
+      const view = this.workshops.get(id)
+      return !!view && view.data.online && view.data.type !== 'workshop' && view.slot >= 0
+    })
+    if (hasOnlineBuilding) return null
     for (const deviceId of m.boundAgentIds) {
       const view = this.workshops.get(deviceId)
       if (view && view.offlineSince !== null && view.data.aiConfigId === m.id && view.slot >= 0) {
@@ -1457,7 +1479,8 @@ export class WorldScene extends Phaser.Scene {
       seen.add(w.deviceId)
       let view = this.workshops.get(w.deviceId)
       if (!view) {
-        const slot = w.type === 'workshop' ? -1 : this.claimSlot(w.deviceId)
+        // 临时插槽占位创建；本轮末尾 relayoutWorkshopSlots() 会按 AI 分组重排到最终位置。
+        const slot = w.type === 'workshop' ? -1 : this.firstFreeSlot()
         const pos = w.type === 'workshop' ? LIBRARY_DEVICE_POS : workshopSlotPos(slot)
         const sheet = workshopSheetForType(w.type)
         const taskGlow = this.add.image(pos.x, pos.y - 24, 'glow.png', 0)
@@ -1525,26 +1548,48 @@ export class WorldScene extends Phaser.Scene {
       } else if (now - view.offlineSince > OFFLINE_KEEP_MS) {
         view.taskGlow.destroy()
         view.sprite.destroy()
-        this.releaseSlot(deviceId)
         this.workshops.delete(deviceId)
       }
     }
+    // 建筑集合有增删后，按 AI 分组把同一 AI 的建筑重排成相邻的一排。
+    this.relayoutWorkshopSlots()
   }
 
-  private claimSlot(deviceId: string): number {
-    const free = this.slotOwner.findIndex(o => o === null)
-    if (free >= 0) {
-      this.slotOwner[free] = deviceId
-      return free
+  /** 当前未被任何在场建筑占用的最小插槽索引（新建建筑的临时占位）。 */
+  private firstFreeSlot(): number {
+    const used = new Set<number>()
+    for (const v of this.workshops.values()) {
+      if (v.slot >= 0) used.add(v.slot)
     }
-    // 插槽用尽：街道向东延伸
-    this.slotOwner.push(deviceId)
-    return this.slotOwner.length - 1
+    let i = 0
+    while (used.has(i)) i++
+    return i
   }
 
-  private releaseSlot(deviceId: string) {
-    const i = this.slotOwner.indexOf(deviceId)
-    if (i >= 0) this.slotOwner[i] = null
+  /** 确定式分组重排：把非图书馆建筑按绑定 AI 分组（未绑定排最后），
+   *  组内按 deviceId，顺序铺到连续插槽上——同一 AI 的建筑因此总是并排相邻。
+   *  slot 变化的建筑同步把 sprite / taskGlow 移动到新坐标。 */
+  private relayoutWorkshopSlots() {
+    const views = [...this.workshops.values()].filter(v => v.data.type !== 'workshop')
+    views.sort((a, b) => {
+      // 未绑定（aiConfigId=null）分到最后，其余按 aiConfigId 升序聚成组
+      const ga = a.data.aiConfigId
+      const gb = b.data.aiConfigId
+      if (ga !== gb) {
+        if (ga === null) return 1
+        if (gb === null) return -1
+        return ga - gb
+      }
+      return a.data.deviceId.localeCompare(b.data.deviceId)
+    })
+    views.forEach((view, slot) => {
+      if (view.slot === slot) return
+      view.slot = slot
+      const pos = workshopSlotPos(slot)
+      view.sprite.setPosition(pos.x, pos.y)
+      view.sprite.setDepth(pos.y)
+      view.taskGlow.setPosition(pos.x, pos.y - 24)
+    })
   }
 
   private updateBuildingStates(_snap: WorldSnapshot) {}

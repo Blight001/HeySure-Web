@@ -84,6 +84,23 @@ export const workshopBenchSeat = (i: number): Point => {
   return { x: p.x, y: p.y + 72 }
 }
 
+/** 多个矩形的包围矩形（合并区）。用于让绑定多台设备的 AI 在全部建筑门口区徘徊。
+ *  空数组返回一个退化的零尺寸矩形；调用方通常应保证非空。 */
+export const unionRect = (rects: Rect[]): Rect => {
+  if (rects.length === 0) return { x: 0, y: 0, w: 0, h: 0 }
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const r of rects) {
+    minX = Math.min(minX, r.x)
+    minY = Math.min(minY, r.y)
+    maxX = Math.max(maxX, r.x + r.w)
+    maxY = Math.max(maxY, r.y + r.h)
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
 export const randomPointIn = (zone: Rect, rnd: () => number = Math.random): Point => ({
   x: zone.x + rnd() * zone.w,
   y: zone.y + rnd() * zone.h,
