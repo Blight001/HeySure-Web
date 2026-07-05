@@ -228,27 +228,36 @@ const confirmDeleteRecord = async () => {
 const isToolboxDevice = (device: ConnectedDevice) => String(device.id || '').startsWith('toolbox_builtin_')
 
 const deviceTypeLabel = (device: ConnectedDevice) => {
-  const platform = String(device.platform || '').toLowerCase()
   if (isToolboxDevice(device)) return '工具箱'
   if (isWorkshopDevice(device)) return '图书馆'
+  if (isCustomDevice(device)) return '自定义设备'
   if (isAndroidDevice(device)) return '安卓端'
-  if (device.isBrowserExtension || platform.includes('browser')) return '浏览器插件'
-  if (device.isWindowsDesktop || platform.includes('desktop') || platform.includes('windows')) return '软件端'
+  if (isBrowserDevice(device)) return '浏览器插件'
+  if (isSoftwareDevice(device)) return '软件端'
   return '设备端'
 }
 
+// 开发者按 device/read.md 自建的设备：服务端归一化为 deviceType === 'custom'，
+// 绑定 / MCP 范围编辑与内置端一致，但不参与远控与动态工具下发。
+const isCustomDevice = (device: ConnectedDevice) => String(device.deviceType || '').toLowerCase() === 'custom'
+
 // 内置图书馆使用专用绑定接口，但在本面板保持与其它设备一致的交互。
+// 各分类函数优先用服务端归一化的 deviceType（自定义设备的 platform 是任意字符串，
+// 不能再用关键词启发式判断），缺失时退回旧的 platform 启发式。
 const isWorkshopDevice = (device: ConnectedDevice) => {
+  if (device.deviceType) return device.deviceType === 'workshop'
   const platform = String(device.platform || '').toLowerCase()
   return platform.includes('workshop')
 }
 
 const isSoftwareDevice = (device: ConnectedDevice) => {
+  if (device.deviceType) return device.deviceType === 'desktop'
   const platform = String(device.platform || '').toLowerCase()
   return !!device.isWindowsDesktop || platform.includes('desktop') || platform.includes('windows')
 }
 
 const isAndroidDevice = (device: ConnectedDevice) => {
+  if (device.deviceType) return device.deviceType === 'android'
   const platform = String(device.platform || '').toLowerCase()
   return !!device.isAndroid || platform.includes('android')
 }
@@ -260,6 +269,7 @@ const isAndroidDevice = (device: ConnectedDevice) => {
 const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' | 'browser' } | null>(null)
 
 const isBrowserDevice = (device: ConnectedDevice) => {
+  if (device.deviceType) return device.deviceType === 'browser'
   const platform = String(device.platform || '').toLowerCase()
   return !!device.isBrowserExtension || platform.includes('browser')
 }
@@ -277,7 +287,7 @@ const openRemoteControl = (device: ConnectedDevice) => {
 
 const isEndpointDevice = (device: ConnectedDevice) => {
   const platform = String(device.platform || '').toLowerCase()
-  return isSoftwareDevice(device) || isAndroidDevice(device) || !!device.isBrowserExtension || platform.includes('browser') || isWorkshopDevice(device)
+  return isSoftwareDevice(device) || isAndroidDevice(device) || !!device.isBrowserExtension || platform.includes('browser') || isWorkshopDevice(device) || isCustomDevice(device)
 }
 
 const getDynamicMcpType = (device: ConnectedDevice): 'desktop' | 'browser' | 'android' | null => {
@@ -438,6 +448,14 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         <div class="min-w-0">
           <div class="flex items-center gap-1.5">
             <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="lifecycleClass(device.lifecycle)"></span>
+            <!-- 设备自选图标（注册时上报）；未选择时保持网页默认样式 -->
+            <img
+              v-if="device.icon"
+              :src="device.icon"
+              class="w-5 h-5 rounded-md object-cover shrink-0 select-none"
+              alt=""
+              @error="($event.target as HTMLImageElement).style.display = 'none'"
+            />
             <h4 class="text-sm font-bold text-zinc-700 dark:text-zinc-200 truncate">{{ deviceDisplayName(device) }}</h4>
           </div>
           <div class="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">

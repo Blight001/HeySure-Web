@@ -34,6 +34,7 @@ const DeviceDynamicToolsModal = defineAsyncComponent(() => import('./modals/Devi
 const TaskManagementModal = defineAsyncComponent(() => import('./modals/TaskManagementModal.vue'))
 const AiConfigModal = defineAsyncComponent(() => import('./modals/AiConfigModal.vue'))
 const AdminModal = defineAsyncComponent(() => import('./modals/AdminModal.vue'))
+const DeviceDevDocModal = defineAsyncComponent(() => import('./modals/DeviceDevDocModal.vue'))
 
 const { alert, confirm } = useMessage()
 
@@ -67,6 +68,7 @@ const chatInitialSessionId = ref('')
 const chatCurrentSessionId = ref('')
 const chatTaskPlanRefreshSignal = ref(0)
 const adminModalOpen = ref(false)
+const deviceDocOpen = ref(false)
 const isAdminUser = computed(() => ['owner', 'admin'].includes(props.currentUser?.role || ''))
 let dashboardRefreshTimer: number | null = null
 let dashboardRefreshLoopActive = false
@@ -463,6 +465,13 @@ onUnmounted(() => {
           <AppIcon name="shield" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
         </button>
         <button
+          class="ml-1 sm:ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-emerald-500/50 dark:hover:bg-zinc-800 dark:hover:text-emerald-300 md:h-9 md:w-9"
+          title="设备开发文档"
+          @click.stop="deviceDocOpen = true"
+        >
+          <AppIcon name="book" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
+        </button>
+        <button
           class="ml-1 sm:ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
           title="系统设置"
           @click.stop="settingsOpen = true"
@@ -728,6 +737,11 @@ onUnmounted(() => {
       :show="adminModalOpen"
       :current-user="currentUser"
       @close="adminModalOpen = false"
+    />
+
+    <DeviceDevDocModal
+      :show="deviceDocOpen"
+      @close="deviceDocOpen = false"
     />
 
     </div>

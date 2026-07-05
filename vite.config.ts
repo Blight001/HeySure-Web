@@ -75,6 +75,10 @@ export default defineConfig({
       '/tmp-images': {
         target: process.env.SERVER_URL || 'http://localhost:3000',
         changeOrigin: true
+      },
+      '/device_png': {
+        target: process.env.SERVER_URL || 'http://localhost:3000',
+        changeOrigin: true
       }
     }
   }

@@ -12,6 +12,9 @@ export interface ConnectedDeviceRow {
   isWindowsDesktop?: boolean
   isBrowserExtension?: boolean
   isAndroid?: boolean
+  deviceType?: string
+  /** 设备注册时自选的图标 URL（/device_png/N.webp 或绝对 URL），空 = 网页默认样式 */
+  icon?: string
   capabilities?: any[]
   version?: string
   lifecycle?: string
@@ -49,7 +52,7 @@ export const deleteDeviceRecord = (deviceId: string) =>
 export interface DeviceMcpScope {
   deviceId: string
   agentName?: string
-  deviceType?: 'desktop' | 'browser' | 'android' | 'workshop' | 'toolbox' | null
+  deviceType?: 'desktop' | 'browser' | 'android' | 'workshop' | 'toolbox' | 'custom' | null
   platform?: string
   aiConfigId?: number | null
   capabilities: string[]
@@ -76,3 +79,21 @@ export const setDeviceMcpScope = (deviceId: string, tools: string[]) =>
     { tools },
     { fallbackError: 'Agent MCP 权限保存失败' },
   )
+
+// 设备开发手册（控制台"设备开发文档"弹窗）：默认内容随服务端打包，
+// 房主编辑后持久化；保存空内容 = 恢复默认。
+export interface DeviceDevManual {
+  content: string
+  isCustom: boolean
+  updatedAt?: number | null
+}
+
+export const getDeviceDevManual = () =>
+  get<DeviceDevManual>('/api/devices/dev-manual', {
+    fallbackError: '设备开发文档加载失败',
+  })
+
+export const saveDeviceDevManual = (content: string) =>
+  put<DeviceDevManual>('/api/devices/dev-manual', { content }, {
+    fallbackError: '设备开发文档保存失败',
+  })
