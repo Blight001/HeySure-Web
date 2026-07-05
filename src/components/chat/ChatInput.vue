@@ -18,6 +18,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'send'): void
+  (e: 'stop'): void
   (e: 'toggleFileSelector'): void
   (e: 'closeFileSelector'): void
   (e: 'navigateTo', path: string): void
@@ -36,7 +37,12 @@ const inputValue = computed({
 const attachCount = computed(() =>
   props.selectedFiles.length + (props.selectedToolGroups?.length || 0))
 
-const canSend = computed(() => !!inputValue.value.trim() && !props.isTyping)
+const hasContent = computed(() => !!inputValue.value.trim())
+// 参考 Claude Code：AI 生成中且输入框有内容时，发送按钮保持「发送」——点击会把这条
+// 消息排队，等本轮结束后自动接上，不打断当前生成。只有生成中且输入框为空时，按钮
+// 才切换成「停止」。空闲无内容时禁用。
+const showStop = computed(() => props.isTyping && !hasContent.value)
+const canSend = computed(() => hasContent.value)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const TEXTAREA_MIN_HEIGHT = 36
 const TEXTAREA_MAX_HEIGHT = 146
@@ -63,8 +69,18 @@ const handleKeydown = (e: KeyboardEvent) => {
   if (isCoarsePointer) return
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    emit('send')
+    // 回车只负责发送，且永远不触发停止：有内容才发（生成中则排队），
+    // 空内容（此时按钮为停止态）直接忽略，避免回车误停当前生成。
+    if (hasContent.value) emit('send')
   }
+}
+
+const handlePrimaryAction = () => {
+  if (showStop.value) {
+    emit('stop')
+    return
+  }
+  if (canSend.value) emit('send')
 }
 
 const handleInput = (e: Event) => {
@@ -133,14 +149,19 @@ watch(() => props.modelValue, async () => {
 
       <button
         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200"
-        :class="canSend
-          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500 active:scale-95'
-          : 'cursor-not-allowed bg-zinc-100/60 text-zinc-300 dark:bg-zinc-800/60 dark:text-zinc-600'"
-        @click="emit('send')"
-        :disabled="!canSend"
-        title="发送"
+        :class="showStop
+          ? 'bg-rose-600 text-white shadow-md shadow-rose-500/30 hover:bg-rose-500 active:scale-95'
+          : canSend
+            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30 hover:bg-indigo-500 active:scale-95'
+            : 'cursor-not-allowed bg-zinc-100/60 text-zinc-300 dark:bg-zinc-800/60 dark:text-zinc-600'"
+        @click="handlePrimaryAction"
+        :disabled="!showStop && !canSend"
+        :title="showStop ? '终止生成' : '发送'"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 -translate-x-px">
+        <svg v-if="showStop" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-3.5 w-3.5">
+          <rect x="6" y="6" width="12" height="12" rx="2.5" />
+        </svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 -translate-x-px">
           <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
         </svg>
       </button>

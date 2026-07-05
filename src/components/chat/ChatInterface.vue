@@ -95,6 +95,10 @@ const liveAssistantText = ref('')
 const liveTargetText = ref('')
 const liveCursor = ref(0)
 const shownRunErrorIds = ref<Set<string>>(new Set())
+// Claude-Code 风格的「不打断」排队：AI 生成期间用户仍可发送，这些消息先入队，
+// 本轮结束后自动合并成一次续发，而不是强行中断当前生成。队列按会话持久化到
+// localStorage，网页关闭/重开后仍能同步（进行中→本轮完成后续发；已结束→重开即续发）。
+const pendingQueue = ref<string[]>([])
 
 // Runtime duration tracking for current AI run (total / MCP / deep-thinking)
 const runStartTs = ref<number | null>(null)
@@ -953,6 +957,8 @@ const finishRun = async (runId: string, status: string, errorMessage: string) =>
   await loadTotalTokens()
   stopTimeTicker()
   bumpTaskPlan()
+  // 本轮结束，若有排队的续发消息，自动接上（Claude-Code 风格的不打断续发）。
+  await drainPendingQueue()
 }
 
 const stopRunPolling = () => {
@@ -1711,6 +1717,8 @@ const stopCurrentRun = async () => {
     await fetchRunHistoryIncrementalOnce()
     await loadTotalTokens()
     stopTimeTicker()
+    // 用户主动终止仅停当前生成；已排队的消息仍是用户想发的意图，续发出去。
+    await drainPendingQueue()
   } catch (err: any) {
     alert({ message: `终止失败: ${String(err?.message || '未知错误')}`, type: 'error' })
   }
@@ -1890,12 +1898,67 @@ const revertAction = async (msgIdx: number, blockIdx: number) => {
   await loadTotalTokens()
 }
 
+const pendingQueueStorageKey = () => {
+  const ai = props.aiConfigId ?? 'na'
+  const sid = currentSessionId.value || 'none'
+  return `heysure_pending_queue_${aiKindValue.value}_${ai}_${sid}`
+}
+
+const persistPendingQueue = () => {
+  try {
+    const key = pendingQueueStorageKey()
+    if (pendingQueue.value.length > 0) {
+      localStorage.setItem(key, JSON.stringify(pendingQueue.value))
+    } else {
+      localStorage.removeItem(key)
+    }
+  } catch {
+    // localStorage unavailable
+  }
+}
+
+const restorePendingQueue = () => {
+  try {
+    const raw = localStorage.getItem(pendingQueueStorageKey())
+    const arr = raw ? JSON.parse(raw) : []
+    pendingQueue.value = Array.isArray(arr)
+      ? arr.filter((x: unknown): x is string => typeof x === 'string' && !!x.trim())
+      : []
+  } catch {
+    pendingQueue.value = []
+  }
+}
+
+const enqueuePending = (content: string) => {
+  pendingQueue.value = [...pendingQueue.value, content]
+  persistPendingQueue()
+}
+
+// Drain the queued follow-ups once no run is active: merge them into a single
+// continuation send so the AI naturally picks up where it left off.
+const drainPendingQueue = async () => {
+  if (isTyping.value || isRunActive.value) return
+  if (pendingQueue.value.length === 0) return
+  const combined = pendingQueue.value.join('\n\n').trim()
+  pendingQueue.value = []
+  persistPendingQueue()
+  if (combined) await sendChat(combined)
+}
+
 const sendChat = async (overrideContent?: string, options: { silent?: boolean } = {}) => {
   const content = (overrideContent ?? chatInput.value).trim()
   const silent = !!options.silent
   if (silent) return
-  if (!content || isTyping.value || !currentSessionId.value) return
+  if (!content || !currentSessionId.value) return
   if (!getAuthToken()) return
+
+  // 生成中不打断：把这条消息入队，clear 输入框，等本轮结束由 drainPendingQueue 续发。
+  // overrideContent 有值时来自续发本身，不再入队也不动输入框。
+  if (overrideContent === undefined && (isTyping.value || isRunActive.value)) {
+    chatInput.value = ''
+    enqueuePending(content)
+    return
+  }
 
   const selectedReadableFiles = props.selectedFiles
     .map(file => normalizeSelectionPath(file))
@@ -2016,11 +2079,16 @@ watch(currentSessionId, async (sid, oldSid) => {
   currentMcpTool.value = ''
   clearLiveAssistantView()
   isTyping.value = false
+  // 切换会话/重开面板：先按新会话恢复其排队消息，再由 checkActiveRun 判定运行态。
+  restorePendingQueue()
   // Don't block the freshly-rendered conversation on these: checkActiveRun
   // resumes any in-progress run, and the prompt preview only feeds the hover
   // panel. Run them in the background so the message list paints immediately.
   startSessionSyncPolling()
-  void checkActiveRun()
+  void checkActiveRun().then(() => {
+    // 进行中→等本轮完成后 finishRun 续发；已结束→重开即把排队消息续发出去。
+    if (!isRunActive.value && !isTyping.value) void drainPendingQueue()
+  })
   void loadEffectiveSystemPromptPreview()
 })
 
@@ -2114,17 +2182,15 @@ onBeforeUnmount(() => {
       </div>
       <div class="flex items-center gap-1 sm:gap-2 shrink-0">
         <span
+          v-if="pendingQueue.length"
+          class="shrink-0 text-[11px] tabular-nums text-amber-600 dark:text-amber-400"
+          title="AI 正在生成，这些消息将于本轮结束后自动接上"
+        >待发送 {{ pendingQueue.length }} 条</span>
+        <span
           v-if="runTimingText"
           class="text-[11px] tabular-nums"
           :class="isRunActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400 dark:text-zinc-500'"
         >{{ runTimingText }}</span>
-        <button
-          v-if="isRunActive"
-          class="shrink-0 text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-900/20"
-          @click="stopCurrentRun"
-        >
-          终止
-        </button>
         <div class="relative group/front-prompt">
           <button
             class="shrink-0 text-xs px-2 py-1 rounded border border-violet-200 text-violet-600 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/20"
@@ -2202,6 +2268,7 @@ onBeforeUnmount(() => {
         :toolGroups="attachableToolGroups"
         :selectedToolGroups="selectedToolGroupKeys"
         @send="sendChat"
+        @stop="stopCurrentRun"
         @toggleFileSelector="handleToggleFileSelector"
         @closeFileSelector="isFileSelectorOpen = false"
         @navigateTo="navigateTo"

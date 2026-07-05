@@ -307,7 +307,7 @@ const copyDoc = async () => {
 
           <!-- 阅读模式：左目录（章 + 锚点子节） + 右内容（一次一章） -->
           <template v-else>
-            <nav class="hidden w-56 shrink-0 overflow-y-auto border-r border-zinc-100 py-2 custom-scrollbar sm:block dark:border-zinc-800">
+            <nav class="hidden w-56 shrink-0 overflow-y-auto border-r border-zinc-100 bg-zinc-50/40 py-2 custom-scrollbar sm:block dark:border-zinc-800 dark:bg-zinc-950/40">
               <template v-for="(chapter, ci) in chapters" :key="`c-${ci}`">
                 <button
                   type="button"
@@ -354,7 +354,8 @@ const copyDoc = async () => {
                 <div v-if="error" class="mx-4 mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                   {{ error }}
                 </div>
-                <div class="p-4 text-sm text-zinc-700 dark:text-zinc-200">
+                <!-- Modern documentation surface: background, spacing, rounded card look -->
+                <div class="doc-surface mx-2 my-2 rounded-2xl border border-zinc-200/80 bg-white/80 p-5 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/80 sm:mx-3 sm:p-6">
                   <div
                     v-for="block in currentBlocks"
                     :key="`${selectedIndex}-${block.subIndex}`"
@@ -396,8 +397,25 @@ const copyDoc = async () => {
 </template>
 
 <style scoped>
+/* Modern doc surface container - provides background, breathing room, card-like polish */
+.doc-surface {
+  /* extra visual separation and nice surface for the markdown content */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.dark .doc-surface {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* Spacing between chapter blocks inside the doc */
 .doc-block + .doc-block {
-  margin-top: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(228, 228, 231, 0.6);
+}
+
+.dark .doc-block + .doc-block {
+  border-top-color: rgba(63, 63, 70, 0.5);
 }
 
 /* 点击子标题定位后的短暂高亮：内容太短滚动不了时也能看出已经切换 */
@@ -409,5 +427,17 @@ const copyDoc = async () => {
 @keyframes docBlockFlash {
   0% { background-color: rgba(99, 102, 241, 0.14); }
   100% { background-color: transparent; }
+}
+
+/* Slight boost inside the doc surface for the markdown renderer */
+.doc-surface :deep(.markdown-text) {
+  font-size: 0.95em;
+}
+
+/* Make sure first heading in a block doesn't have excessive top margin */
+.doc-surface :deep(.markdown-text > h1:first-child),
+.doc-surface :deep(.markdown-text > h2:first-child),
+.doc-surface :deep(.markdown-text > .md-heading:first-child) {
+  margin-top: 0.1rem;
 }
 </style>
