@@ -13,6 +13,9 @@ interface Props {
   toolGroups?: McpCatalogToolGroup[]
   /** 已勾选的工具组 groupKey 列表 */
   selectedToolGroups?: string[]
+  /** 工作模式列表 + 当前 key（模式切换栏目） */
+  agentModes?: any[]
+  currentModeKey?: string
 }
 
 const props = defineProps<Props>()
@@ -25,6 +28,7 @@ const emit = defineEmits<{
   (e: 'clear'): void
   (e: 'refresh'): void
   (e: 'toggleToolGroup', groupKey: string): void
+  (e: 'switchMode', modeKey: string): void
 }>()
 
 const isHiddenSandboxPath = (path: string) => {
@@ -236,12 +240,19 @@ const groupKindLabel = (group: McpCatalogToolGroup) =>
 
 const groupTitle = (group: McpCatalogToolGroup) =>
   group.disabled ? (group.disabledReason || '当前工作模式不允许勾选该组工具') : ''
+
+const modeList = computed(() => (props.agentModes || []).filter((m: any) => m && m.mode_key))
+const isCurrentMode = (key: string) => String(key || '') === String(props.currentModeKey || '')
+const onModeClick = (key: string) => {
+  if (isCurrentMode(key)) return
+  emit('switchMode', key)
+}
 </script>
 
 <template>
   <div
     v-if="isOpen"
-    class="absolute bottom-full left-0 z-[100] mb-2 flex max-h-[460px] flex-col overflow-hidden rounded-2xl acrylic-modal shadow-2xl shadow-zinc-900/10 dark:shadow-black/40"
+    class="absolute bottom-full left-0 z-[100] mb-2 flex max-h-[460px] flex-col overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-zinc-900/10 dark:shadow-black/40"
     :class="previewPath ? 'w-[min(42rem,calc(100vw-2rem))]' : 'w-80'"
   >
     <!-- 头部：路径导航 -->
@@ -260,7 +271,7 @@ const groupTitle = (group: McpCatalogToolGroup) =>
         <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
         </svg>
-        <span class="truncate font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{{ currentPath || '工作区根目录' }}</span>
+        <span class="truncate text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">{{ currentPath || '工作区根目录' }}</span>
       </div>
       <button
         @click="emit('close')"
@@ -333,6 +344,10 @@ const groupTitle = (group: McpCatalogToolGroup) =>
 
     <!-- 文件目录 -->
     <div v-else class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1.5">
+      <!-- 工作区目录 标题，与“工具调用”字体统一 -->
+      <div class="px-2 pb-1">
+        <span class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">工作区目录</span>
+      </div>
       <div
         v-if="currentFolderItems.folders.length === 0 && currentFolderItems.files.length === 0"
         class="p-5 text-center text-[11px] text-zinc-400"
@@ -442,10 +457,47 @@ const groupTitle = (group: McpCatalogToolGroup) =>
       </div>
     </div>
 
+    <!-- 模式切换：点击主动调用 mode.manage(use) 触发切换（与初始化对话方式一致），切换后删除之前的切换记录 -->
+    <div v-if="!previewPath && modeList.length > 0" class="shrink-0 border-t border-zinc-100 dark:border-zinc-800">
+      <div class="flex items-baseline gap-1.5 px-3 pb-1 pt-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 translate-y-0.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+        </svg>
+        <span class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">模式切换</span>
+        <span class="truncate text-[10px] text-zinc-400 dark:text-zinc-500">点击切换（MCP 触发，清理旧记录）</span>
+      </div>
+      <div class="custom-scrollbar max-h-28 overflow-y-auto px-1.5 pb-1.5">
+        <div
+          v-for="m in modeList"
+          :key="m.mode_key"
+          class="flex items-center gap-2 rounded-xl px-2 py-1.5 text-[11px] transition-colors"
+          :class="[
+            isCurrentMode(m.mode_key)
+              ? 'bg-amber-100/70 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 cursor-default'
+              : 'cursor-pointer hover:bg-amber-50/70 dark:hover:bg-amber-900/20 text-zinc-700 dark:text-zinc-200'
+          ]"
+          :title="m.description || m.name"
+          @click="onModeClick(m.mode_key)"
+        >
+          <span class="min-w-0 flex-1 truncate font-medium">{{ m.name || m.mode_key }}</span>
+          <span
+            v-if="m.allow_device_mcp === false"
+            class="shrink-0 rounded-full bg-zinc-200 px-1 py-px text-[9px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+            title="该模式不允许调用设备端 MCP"
+          >🔒</span>
+          <span
+            v-if="isCurrentMode(m.mode_key)"
+            class="shrink-0 rounded-full bg-amber-600 px-1.5 py-0.5 text-[9px] font-bold text-white dark:bg-amber-500"
+          >当前</span>
+          <span v-else class="shrink-0 text-[10px] text-amber-500">切换</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 底部：统计 + 操作 -->
     <div v-if="!previewPath" class="flex shrink-0 items-center justify-between border-t border-zinc-100 bg-zinc-50/70 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-800/60">
       <span class="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
-        已选 {{ selectedFiles.length }} 个路径<template v-if="toolGroupList.length > 0"> · {{ (selectedToolGroups || []).length }} 组工具</template>
+        已选 {{ selectedFiles.length }} 个路径<template v-if="toolGroupList.length > 0"> · {{ (selectedToolGroups || []).length }} 组工具</template><template v-if="modeList.length"> · 模式: {{ (modeList.find((mm: any) => isCurrentMode(mm.mode_key))?.name) || currentModeKey || 'initial' }}</template>
       </span>
       <div class="flex gap-1">
         <button

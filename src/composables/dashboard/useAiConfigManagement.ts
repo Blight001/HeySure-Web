@@ -248,10 +248,10 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
         }))
         .filter((item: McpToolDefinition) => !!item.name)
       : []
-    // Server-side MCP tools (the old per-AI checkboxes) have been removed from the
-    // AI config picker. Tools are now configured in the toolbox DeviceMcpScope
-    // ("工具箱 MCP 权限") and granted to bound AIs. This load still populates
-    // role meta and full tool list for other UIs (Task override, global views).
+    // Server system MCP tools (knowledge.search etc.) are now direct-callable by AI
+    // (no longer gated like device MCPs or requiring toolbox selection to "display").
+    // This load populates role meta + full list for other UIs (Task override, catalog).
+    // Toolbox / library bindings still affect governance + UI grouping.
     const map: Record<string, McpToolDefinition> = {}
     for (const row of rows) {
       map[row.name] = row

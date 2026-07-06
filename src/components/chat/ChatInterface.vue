@@ -9,6 +9,7 @@ import { isSameAssistantVisibleReply, normalizeAssistantReplyText } from '@/util
 import * as chatApi from '@/api/chat'
 import { listAiConfigs } from '@/api/ai'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
+import { listAgentModes, type AgentMode } from '@/api/agentModes'
 import { getAuthToken } from '@/api/http'
 import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
 import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
@@ -95,6 +96,15 @@ const liveAssistantText = ref('')
 const liveTargetText = ref('')
 const liveCursor = ref(0)
 const shownRunErrorIds = ref<Set<string>>(new Set())
+
+// Trackers for turn-boundary detection (reset after non-empty live text/reasoning, or
+// waiting_mcp -> generating). Used to eagerly fetch incremental history so that
+// the just-saved assistant message (with 深度思考 + content = 待发送内容) appears
+// immediately after a tool call ends or deep-thinking phase ends for the turn,
+// instead of waiting for the entire run to complete.
+let prevLiveTextForBoundary = ''
+let prevLiveReasoningForBoundary = ''
+let prevRunPhaseForBoundary = 'idle'
 // Claude-Code 风格的「不打断」排队：AI 生成期间用户仍可发送，这些消息先入队，
 // 本轮结束后自动合并成一次续发，而不是强行中断当前生成。队列按会话持久化到
 // localStorage，网页关闭/重开后仍能同步（进行中→本轮完成后续发；已结束→重开即续发）。
@@ -162,9 +172,11 @@ const frontPromptToolSchemaError = ref('')
 // 当前工作模式是否允许调用设备端 MCP：false 时加号面板里的设备工具组置灰禁选。
 const frontPromptAllowDeviceMcp = ref(true)
 const frontPromptModeKey = ref('')
+const agentModes = ref<AgentMode[]>([])
 const appliedEditsArray = computed(() => Array.from(appliedEdits.value))
 const appliedSignaturesArray = computed(() => Array.from(appliedSignatures.value))
 const isRunActive = computed(() => ['queued', 'running'].includes(currentRunStatus.value))
+const currentModeKey = computed(() => frontPromptModeKey.value || 'initial')
 const latestRecordedSystemPrompt = computed(() => {
   for (let i = chatMessages.value.length - 1; i >= 0; i -= 1) {
     const prompt = String(chatMessages.value[i]?.system_prompt || '').trim()
@@ -398,6 +410,106 @@ const toggleToolGroup = (groupKey: string) => {
 const clearAttachments = () => {
   emit('update:selectedFiles', [])
   uncheckedToolGroupKeys.value = attachableToolGroups.value.map(group => group.groupKey)
+}
+
+// 模式切换：通过 MCP 方式（mode.manage use）主动触发，与新会话初始化一致。
+// 成功后删除“之前的”切换记录（保留最早的 seed 以防历史合成逻辑误插 initial），
+// 然后保存一条新的合成 mcp_tool_call 记录，最后刷新工具组与历史。
+const switchMode = async (modeKey: string) => {
+  const targetKey = String(modeKey || '').trim()
+  if (!targetKey || targetKey === currentModeKey.value) return
+  if (isRunActive.value) {
+    alert({ message: '生成中无法切换模式，请稍后再试', type: 'warning' })
+    return
+  }
+  if (!getAuthToken() || !currentSessionId.value) {
+    // 至少执行 MCP 切换（不依赖会话记录）
+    try {
+      await callMcpTool({
+        tool: 'mode.manage',
+        arguments: { action: 'use', mode_key: targetKey },
+        ai_config_id: props.aiConfigId,
+      })
+      frontPromptModeKey.value = targetKey
+      void loadFrontPromptToolSchemas()
+      isFileSelectorOpen.value = false
+    } catch (err: any) {
+      alert({ message: err?.message || '模式切换失败', type: 'error' })
+    }
+    return
+  }
+  try {
+    const res = await callMcpTool({
+      tool: 'mode.manage',
+      arguments: { action: 'use', mode_key: targetKey },
+      ai_config_id: props.aiConfigId,
+    })
+
+    // 识别并删除之前的模式切换记录（保留最早的一条，避免破坏初始 seed 合成）
+    const isModeSwitchRecord = (msg: ChatMessage) => {
+      if (msg.role !== 'system') return false
+      const c = String(msg.content || '')
+      const t = String(msg.tags || '')
+      return t.includes('mcp_tool_call') && c.includes('mode.manage') && /["']?action["']?\s*[:=]\s*["']?use["']?/i.test(c)
+    }
+    const modeRecords = chatMessages.value
+      .filter(m => m.id && m.id > 0 && isModeSwitchRecord(m))
+      .sort((a, b) => (a.id || 0) - (b.id || 0))
+    if (modeRecords.length > 1) {
+      // 删除除最早之外的“之前”记录
+      for (let i = 1; i < modeRecords.length; i += 1) {
+        try {
+          await chatApi.deleteChatMessage(modeRecords[i].id!)
+        } catch {}
+      }
+      // 同步本地列表（移除被删的）
+      const toRemoveIds = new Set(modeRecords.slice(1).map(m => m.id))
+      chatMessages.value = chatMessages.value.filter(m => !toRemoveIds.has(m.id))
+    }
+
+    // 构建并保存新的合成切换记录（记录本次用户主动切换）
+    const argumentsStr = JSON.stringify({ action: 'use', mode_key: targetKey }, null, 2)
+    const resultText = buildMcpDisplayResult({} as any, { result: res })
+    const switchContent = [
+      '[MCP工具]',
+      '工具: mode.manage',
+      '状态: 成功',
+      '',
+      '[参数]',
+      argumentsStr,
+      '',
+      '[结果]',
+      resultText,
+    ].join('\n')
+    try {
+      const sessionName = chatMessages.value.find(m => m.session_name)?.session_name || '未命名会话'
+      await chatApi.saveChatMessage({
+        role: 'system',
+        content: switchContent,
+        tags: 'mcp_tool_call',
+        ai_config_id: props.aiConfigId,
+        ai_kind: aiKindValue.value,
+        session_id: currentSessionId.value,
+        session_name: sessionName,
+        total_tokens: 0,
+      })
+    } catch (e) {
+      // 保存记录失败不影响切换本身
+      console.warn('save mode switch record failed', e)
+    }
+
+    frontPromptModeKey.value = targetKey
+    await loadFrontPromptToolSchemas()
+    // 刷新历史以同步删除+新增的记录
+    if (currentSessionId.value) {
+      try {
+        await loadChatHistory(currentSessionId.value)
+      } catch {}
+    }
+    isFileSelectorOpen.value = false
+  } catch (err: any) {
+    alert({ message: err?.message || '模式切换失败', type: 'error' })
+  }
 }
 
 const buildMcpCatalogSection = (groups: McpCatalogToolGroup[]) => {
@@ -898,6 +1010,11 @@ const handleWheel = () => {
 // --- Socket-primary live streaming ------------------------------------------
 // Subscribe to the backend's chat:run_live / chat:run_done push events. The HTTP
 // polling below stays only as a fallback for when this socket is disconnected.
+//
+// Turn-boundary detection below (reset of text/reasoning, phase waiting->generating)
+// causes early fetchRunHistoryIncrementalOnce so content generated after deep
+// think or after a tool call is committed ("sent") into the visible history
+// without waiting for the entire multi-step AI process to finish.
 let lastFinishedRunId = ''
 const STREAM_PLAN_TOOLS = ['plan.create', 'plan.phase_complete', 'plan.finish']
 
@@ -927,11 +1044,40 @@ const handleStreamLive = (payload: RunLivePayload) => {
   // timer so the header shows this call's own elapsed, not a running total.
   if (toolChanged && incomingTool && currentRunPhase.value === 'waiting_mcp') resetSegmentTimer()
   currentMcpTool.value = incomingTool
+
+  const hadContentBefore = !!(prevLiveTextForBoundary || prevLiveReasoningForBoundary)
+  const prevPhase = prevRunPhaseForBoundary
+
   liveThinkingText.value = String(payload.reasoning || '')
   updateLiveAssistantView(String(payload.text || ''))
   liveCursor.value = String(payload.text || '').length
-  // A tool boundary means new tool-call/result bubbles were just persisted.
+
+  const currText = String(payload.text || '')
+  const currReason = String(payload.reasoning || '')
+
+  // NEW: turn-boundary signals so 待发送内容 (assistant msg with think/content)
+  // is pulled into history list right after deep think ends or after tool call ends,
+  // instead of only at full run completion.
+  if (hadContentBefore && !currText && !currReason) {
+    // Previous generation turn just ended (backend does _set_run_live_text("") +
+    // reasoning reset after each save of assistant). Fetch the persisted turn.
+    void fetchRunHistoryIncrementalOnce()
+  }
+  if (prevPhase === 'waiting_mcp' && incomingPhase === 'generating') {
+    // Tool call(s) just finished; next generation is starting. Fetch ensures
+    // tool bubbles + prepares for the post-tool content.
+    void fetchRunHistoryIncrementalOnce()
+  }
+
+  // Tool boundary (and now also general turn boundaries via reset/phase) trigger
+  // incremental fetch so 待发送内容 (assistant replies + 深度思考) appears right
+  // after tool ends or deep-thinking phase ends, not only after full run.
   if (toolChanged) void fetchRunHistoryIncrementalOnce()
+
+  prevLiveTextForBoundary = currText
+  prevLiveReasoningForBoundary = currReason
+  prevRunPhaseForBoundary = incomingPhase
+
   void refreshTokensDuringRunIfNeeded()
 }
 
@@ -967,6 +1113,10 @@ const finishRun = async (runId: string, status: string, errorMessage: string) =>
   finalizeRunTimers()
   currentRunPhase.value = 'idle'
   currentMcpTool.value = ''
+  // Reset boundary trackers for next run.
+  prevLiveTextForBoundary = ''
+  prevLiveReasoningForBoundary = ''
+  prevRunPhaseForBoundary = 'idle'
   await fetchRunHistoryIncrementalOnce()
   await ensureFinalAssistantMessage(epoch)
   clearLiveAssistantView()
@@ -977,6 +1127,7 @@ const finishRun = async (runId: string, status: string, errorMessage: string) =>
   stopTimeTicker()
   bumpTaskPlan()
   // 本轮 AI 可能用 mode.manage 切换了工作模式（或设备上下线）：刷新工具组，
+  // 用户在 + 面板主动切换也会触发同类刷新。
   // 让加号面板里设备 MCP 的置灰 / 可勾选状态立即跟上新模式。
   void loadFrontPromptToolSchemas()
   // 本轮结束，若有排队的续发消息，自动接上（Claude-Code 风格的不打断续发）。
@@ -1234,6 +1385,7 @@ const createSession = async (nameInput?: string) => {
   currentSessionId.value = session.id
   chatMessages.value = []
   // 新会话开场时服务端已把该 AI 重置回初始对话模式：刷新工具组，
+  // 用户主动切换模式也会调用 loadFrontPromptToolSchemas。
   // 让设备 MCP 的置灰状态立即对齐。
   void loadFrontPromptToolSchemas()
 }
@@ -1397,8 +1549,20 @@ const loadFrontPromptToolSchemas = async () => {
       : null
     frontPromptAllowDeviceMcp.value = response.promptToolsAllowDeviceMcp !== false
     frontPromptModeKey.value = String(response.promptToolsModeKey || '')
+    void loadAgentModes()
   } catch (error: any) {
     frontPromptToolSchemaError.value = error?.message || 'MCP schema 加载失败'
+  }
+}
+
+const loadAgentModes = async () => {
+  agentModes.value = []
+  if (!getAuthToken()) return
+  try {
+    const res = await listAgentModes(props.aiConfigId)
+    agentModes.value = Array.isArray(res?.modes) ? res.modes : []
+  } catch {
+    // modes list is optional for the switcher UI; ignore errors
   }
 }
 
@@ -1649,6 +1813,10 @@ const pollRunLive = async (epoch: number) => {
       resetSegmentTimer()
     }
     currentMcpTool.value = incomingTool
+
+    const hadContentBefore = !!(prevLiveTextForBoundary || prevLiveReasoningForBoundary)
+    const prevPhase = prevRunPhaseForBoundary
+
     const delta = String(run.live_delta || '')
     liveThinkingText.value = String(run.live_reasoning || '')
     if (delta) {
@@ -1661,6 +1829,23 @@ const pollRunLive = async (epoch: number) => {
     } else {
       liveCursor.value = liveTargetText.value.length
     }
+
+    const currText = String(run.live_text || '')
+    const currReason = String(run.live_reasoning || '')
+    const currPhaseForPoll = incomingPhase
+
+    // Mirror boundary detection for HTTP poll fallback path.
+    if (hadContentBefore && !currText && !currReason) {
+      void fetchRunHistoryIncrementalOnce()
+    }
+    if (prevPhase === 'waiting_mcp' && currPhaseForPoll === 'generating') {
+      void fetchRunHistoryIncrementalOnce()
+    }
+
+    prevLiveTextForBoundary = currText
+    prevLiveReasoningForBoundary = currReason
+    prevRunPhaseForBoundary = currPhaseForPoll
+
     if (['completed', 'error', 'stopped'].includes(currentRunStatus.value)) {
       await finishRun(currentRunId.value, currentRunStatus.value, String(run.error_message || ''))
       return
@@ -1743,6 +1928,9 @@ const stopCurrentRun = async () => {
     currentRunPhase.value = 'idle'
     currentMcpTool.value = ''
     clearLiveAssistantView()
+    prevLiveTextForBoundary = ''
+    prevLiveReasoningForBoundary = ''
+    prevRunPhaseForBoundary = 'idle'
     await fetchRunHistoryIncrementalOnce()
     await loadTotalTokens()
     stopTimeTicker()
@@ -2032,6 +2220,10 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
     // Pull just the freshly-persisted user message instead of reloading and
     // re-parsing the whole page right as the run begins.
     await fetchRunHistoryIncrementalOnce()
+    // Reset boundary trackers for the new run (so first turn-end reset will trigger).
+    prevLiveTextForBoundary = ''
+    prevLiveReasoningForBoundary = ''
+    prevRunPhaseForBoundary = 'idle'
     startRunPolling()
   } catch (err: any) {
     isTyping.value = false
@@ -2296,6 +2488,8 @@ onBeforeUnmount(() => {
         :selectable-file-root="selectableFileRoot"
         :toolGroups="attachableToolGroups"
         :selectedToolGroups="selectedToolGroupKeys"
+        :agentModes="agentModes"
+        :currentModeKey="currentModeKey"
         @send="sendChat"
         @stop="stopCurrentRun"
         @toggleFileSelector="handleToggleFileSelector"
@@ -2306,6 +2500,7 @@ onBeforeUnmount(() => {
         @clearFiles="clearAttachments"
         @refreshFiles="handleRefreshFiles"
         @toggleToolGroup="toggleToolGroup"
+        @switchMode="switchMode"
       />
     </div>
   </div>

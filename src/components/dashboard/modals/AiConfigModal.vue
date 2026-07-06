@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-// getMcpToolZhLabel no longer needed here after removing per-AI server MCP list (tools selected in toolbox scope instead)
+// System MCPs (knowledge.* etc) are direct now; device tools + governance use scopes/toolbox. getMcpToolZhLabel not needed for server list here.
 import { fetchWorkshopBindings, setWorkshopBinding, type WorkshopAgentItem } from '@/api/workshop'
 import type { ModelPreset } from '@/types'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
@@ -339,7 +339,8 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                   <input type="checkbox" v-model="form.mcp_auto_approve" />
                 </label>
                 <p class="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  服务端工具通过「工具箱」MCP 权限控制（作坊面板编辑）。绑定工具箱后，工具箱中勾选的工具即为该 AI 可用。图书馆工具同理。端侧工具由各设备单独范围控制。
+                  系统自带 MCP（knowledge.search、workspace.*、plan.*、task.* 等）默认直接可用，无需工具箱选择/显示。
+                  工具箱/图书馆绑定主要用于治理类工具与分组展示。端侧设备 MCP 仍需各 Agent 范围单独授予。
                 </p>
 
                 <!-- Endpoint agents bound to this AI: per-agent MCP permission.
@@ -396,7 +397,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                 </div>
 
                 <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  服务端 MCP 工具选择已迁移到工具箱（作坊面板的“工具箱 MCP 权限”）。此处不再显示服务器工具列表，以避免与工具箱范围冲突。绑定工具箱后，工具箱中选中的工具即生效。
+                  系统自带 MCP 工具现在直接调用（不受工具箱绑定硬限制）。工具箱绑定仍用于展示分组与治理工具；端侧工具由各设备范围控制。
                 </div>
               </div>
 
