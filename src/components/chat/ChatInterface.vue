@@ -413,7 +413,8 @@ const clearAttachments = () => {
 }
 
 // 模式切换：通过 MCP 方式（mode.manage use）主动触发，与新会话初始化一致。
-// 成功后删除“之前的”切换记录（保留最早的 seed 以防历史合成逻辑误插 initial），
+// 连续多次切换时，只保留最新的模式切换记录，删除所有旧的/重复的 mode.manage 记录，
+// 避免历史中出现多条重复的模式信息干扰 AI 理解当前模式。
 // 然后保存一条新的合成 mcp_tool_call 记录，最后刷新工具组与历史。
 const switchMode = async (modeKey: string) => {
   const targetKey = String(modeKey || '').trim()
@@ -445,7 +446,8 @@ const switchMode = async (modeKey: string) => {
       ai_config_id: props.aiConfigId,
     })
 
-    // 识别并删除之前的模式切换记录（保留最早的一条，避免破坏初始 seed 合成）
+    // 连续切换模式时，删除所有旧的模式切换记录，只保留/添加最新的一条。
+    // 防止多条重复的 "mode.manage use" 信息干扰 AI 对当前模式的理解。
     const isModeSwitchRecord = (msg: ChatMessage) => {
       if (msg.role !== 'system') return false
       const c = String(msg.content || '')
@@ -455,15 +457,15 @@ const switchMode = async (modeKey: string) => {
     const modeRecords = chatMessages.value
       .filter(m => m.id && m.id > 0 && isModeSwitchRecord(m))
       .sort((a, b) => (a.id || 0) - (b.id || 0))
-    if (modeRecords.length > 1) {
-      // 删除除最早之外的“之前”记录
-      for (let i = 1; i < modeRecords.length; i += 1) {
+    if (modeRecords.length > 0) {
+      // 删除所有之前的切换记录（包括最早的 seed）
+      for (const rec of modeRecords) {
         try {
-          await chatApi.deleteChatMessage(modeRecords[i].id!)
+          await chatApi.deleteChatMessage(rec.id!)
         } catch {}
       }
-      // 同步本地列表（移除被删的）
-      const toRemoveIds = new Set(modeRecords.slice(1).map(m => m.id))
+      // 同步本地列表
+      const toRemoveIds = new Set(modeRecords.map(m => m.id))
       chatMessages.value = chatMessages.value.filter(m => !toRemoveIds.has(m.id))
     }
 
@@ -1384,8 +1386,8 @@ const createSession = async (nameInput?: string) => {
   await loadSessions()
   currentSessionId.value = session.id
   chatMessages.value = []
-  // 新会话开场时服务端已把该 AI 重置回初始对话模式：刷新工具组，
-  // 用户主动切换模式也会调用 loadFrontPromptToolSchemas。
+  // 新会话开场时沿用 AI 当前工作模式（用户上次在弹窗选择的模式）显示起始记录；
+  // 刷新工具组（用户主动切换模式也会调用 loadFrontPromptToolSchemas）。
   // 让设备 MCP 的置灰状态立即对齐。
   void loadFrontPromptToolSchemas()
 }

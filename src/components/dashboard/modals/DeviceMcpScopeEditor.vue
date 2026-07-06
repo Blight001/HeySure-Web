@@ -34,7 +34,14 @@ const load = async () => {
   try {
     const data = await getDeviceMcpScope(props.deviceId)
     scope.value = data
-    selected.value = new Set(data.allowed || [])
+    // Default to *all* capabilities for a newly seen device (!hasRecord).
+    // This matches the documented auto-full behavior on first connect
+    // (reconcile creates the row; hasRecord signals an explicit saved scope).
+    // The game drawer already did this; the main editor did not, causing
+    // "默认全部不勾选" after device:register.
+    const caps = data.capabilities || []
+    const allowedList = data.allowed || []
+    selected.value = new Set(data.hasRecord ? allowedList : caps)
   } catch (err: any) {
     scope.value = null
     error.value = err?.message || 'Agent MCP 权限加载失败'

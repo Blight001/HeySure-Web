@@ -457,7 +457,7 @@ const onModeClick = (key: string) => {
       </div>
     </div>
 
-    <!-- 模式切换：点击主动调用 mode.manage(use) 触发切换（与初始化对话方式一致），切换后删除之前的切换记录 -->
+    <!-- 模式切换：点击主动调用 mode.manage(use) 触发切换，连续切换时只保留最新的一条记录，自动清理旧的重复信息 -->
     <div v-if="!previewPath && modeList.length > 0" class="shrink-0 border-t border-zinc-100 dark:border-zinc-800">
       <div class="flex items-baseline gap-1.5 px-3 pb-1 pt-2">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 translate-y-0.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
