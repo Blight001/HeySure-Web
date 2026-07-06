@@ -177,7 +177,7 @@ const openExtensionTestPage = () => {
 
 <template>
   <Transition name="fade">
-    <div v-if="show" :style="{ zIndex: mainZIndex }" class="fixed inset-0 bg-black/40 flex items-center justify-center backdrop-blur-sm p-4" @click="emit('update:show', false)">
+    <div v-if="show" :style="{ zIndex: mainZIndex }" class="fixed inset-0 modal-overlay flex items-center justify-center p-4" @click="emit('update:show', false)">
       <div class="acrylic-modal rounded-2xl shadow-xl w-full max-w-[560px] sm:max-w-[560px] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-5 md:p-6 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800" @click.stop>
         <div class="flex items-center justify-between mb-6">
           <h3 class="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
@@ -303,7 +303,7 @@ const openExtensionTestPage = () => {
         <div
           v-if="settingsDialog"
           :style="{ zIndex: settingsDialogZIndex }"
-          class="fixed inset-0 bg-black/45 flex items-center justify-center p-4 backdrop-blur-sm"
+          class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
           @click.stop="closeSettingsDialog"
         >
           <div

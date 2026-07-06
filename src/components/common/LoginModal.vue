@@ -135,7 +135,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+  <div v-if="show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center modal-overlay p-4">
     <div class="acrylic-modal rounded-2xl shadow-xl w-full max-w-md border border-zinc-200 dark:border-zinc-800 p-5 sm:p-6 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-xl font-bold text-zinc-800 dark:text-zinc-100">{{ title }}</h2>

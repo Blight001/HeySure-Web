@@ -70,11 +70,14 @@ const detailLoading = ref(false)
 const detailError = ref('')
 const selectedItem = ref<KnowledgeItem | null>(null)
 const currentDetail = ref<KnowledgeEntryItem | null>(null)
-const editingPersonaId = ref<number | null>(null)
 const savingPersonaId = ref<number | null>(null)
 const personaEditError = ref('')
 const personaEditNotice = ref('')
 const personaDraftPrompt = ref('')
+// 人格详情弹窗：当前打开的 AI，及其工作模式草稿。
+const detailPersonaId = ref<number | null>(null)
+const personaDraftMode = ref('')
+const savingPersonaMode = ref(false)
 const editingPropertyCategory = ref<string | null>(null)
 const savingPropertyCategory = ref<string | null>(null)
 const propertyEditError = ref('')
@@ -133,6 +136,10 @@ const deviceTypeLabel = (kind?: string | null) => ({
 }[String(kind || '').toLowerCase()] || String(kind || '端侧设备'))
 const detailContent = computed(() => currentDetail.value?.body || currentDetail.value?.summary || '（无内容）')
 const intrinsicPersonas = computed(() => currentDetail.value?.intrinsic_personas || null)
+const availableModes = computed(() => intrinsicPersonas.value?.available_modes || [])
+const detailAgent = computed(() =>
+  intrinsicPersonas.value?.agents.find(agent => agent.id === detailPersonaId.value) || null,
+)
 const systemPrompts = computed(() => currentDetail.value?.system_prompts || null)
 const inheritanceSkills = computed(() => currentDetail.value?.inheritance_skills || null)
 const inheritanceServerCategories = computed(() => inheritanceSkills.value?.server_categories || [])
@@ -336,6 +343,7 @@ const mcpTestTarget = ref<McpTestTarget | null>(null)
 
 // 弹窗自动置顶：每个 overlay 各领一个自增 z-index，后开者居上
 const detailZIndex = usePopupZIndex(detailOpen)
+const personaDetailZIndex = usePopupZIndex(() => !!detailAgent.value)
 const clawhubZIndex = usePopupZIndex(clawhubModalOpen)
 const installedClawhubZIndex = usePopupZIndex(installedClawhubModalOpen)
 const mcpTestZIndex = usePopupZIndex(() => mcpTestModalOpen.value && !!mcpTestTarget.value)
@@ -482,18 +490,21 @@ const selectedMcpTestPreset = computed(() =>
 type IntrinsicPersonaAgent = NonNullable<KnowledgeEntryItem['intrinsic_personas']>['agents'][number]
 type InheritanceServerCategory = NonNullable<NonNullable<KnowledgeEntryItem['inheritance_skills']>['server_categories']>[number]
 
-const startEditPersona = (agent: IntrinsicPersonaAgent) => {
+const openPersonaDetail = (agent: IntrinsicPersonaAgent) => {
   if (!agent.id) return
-  editingPersonaId.value = agent.id
+  detailPersonaId.value = agent.id
   personaEditError.value = ''
   personaEditNotice.value = ''
   personaDraftPrompt.value = agent.prompt || ''
+  personaDraftMode.value = agent.current_mode_key || 'initial'
 }
 
-const cancelEditPersona = () => {
-  editingPersonaId.value = null
+const closePersonaDetail = () => {
+  detailPersonaId.value = null
   personaEditError.value = ''
+  personaEditNotice.value = ''
   personaDraftPrompt.value = ''
+  personaDraftMode.value = ''
 }
 
 const savePersona = async (agent: IntrinsicPersonaAgent) => {
@@ -506,12 +517,33 @@ const savePersona = async (agent: IntrinsicPersonaAgent) => {
       prompt: personaDraftPrompt.value,
     })
     agent.prompt = personaDraftPrompt.value
-    editingPersonaId.value = null
-    personaEditNotice.value = `${agent.name} 已保存`
+    personaEditNotice.value = `${agent.name} 人格 Prompt 已保存`
   } catch (err) {
     personaEditError.value = (err as Error).message || '保存失败'
   } finally {
     savingPersonaId.value = null
+  }
+}
+
+const savePersonaMode = async (agent: IntrinsicPersonaAgent) => {
+  if (!agent.id) return
+  savingPersonaMode.value = true
+  personaEditError.value = ''
+  personaEditNotice.value = ''
+  try {
+    const nextKey = personaDraftMode.value || 'initial'
+    await updateAiConfigFields(agent.id, {
+      current_mode_key: nextKey,
+    })
+    agent.current_mode_key = nextKey
+    agent.current_mode_name =
+      availableModes.value.find(mode => mode.mode_key === nextKey)?.name || ''
+    personaEditNotice.value = `${agent.name} 工作模式已切换为「${agent.current_mode_name || nextKey}」`
+  } catch (err) {
+    personaEditError.value = (err as Error).message || '切换失败'
+    personaDraftMode.value = agent.current_mode_key || 'initial'
+  } finally {
+    savingPersonaMode.value = false
   }
 }
 
@@ -859,7 +891,8 @@ const openDetail = async (item: KnowledgeItem) => {
   detailLoading.value = true
   detailError.value = ''
   currentDetail.value = null
-  editingPersonaId.value = null
+  detailPersonaId.value = null
+  personaDraftMode.value = ''
   personaEditError.value = ''
   personaEditNotice.value = ''
   editingPropertyCategory.value = null
@@ -899,8 +932,10 @@ const closeDetail = () => {
   }
   closeMcpTestModal()
   selectedItem.value = null
-  editingPersonaId.value = null
   savingPersonaId.value = null
+  detailPersonaId.value = null
+  personaDraftMode.value = ''
+  savingPersonaMode.value = false
   personaEditError.value = ''
   personaEditNotice.value = ''
   personaDraftPrompt.value = ''
@@ -998,7 +1033,7 @@ const closeDetail = () => {
     <div
       v-if="detailOpen"
       :style="{ zIndex: detailZIndex }"
-      class="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
       @click.self="closeDetail"
     >
       <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[88vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
@@ -1097,76 +1132,43 @@ const closeDetail = () => {
             </div>
 
             <template v-if="intrinsicPersonas">
-              <div class="space-y-4">
+              <div class="space-y-3">
                 <div v-if="personaEditNotice" class="text-xs text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900 rounded-lg px-3 py-2">
                   {{ personaEditNotice }}
                 </div>
                 <div v-if="personaEditError" class="text-xs text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900 rounded-lg px-3 py-2">
                   {{ personaEditError }}
                 </div>
-                <details
+                <div
                   v-for="agent in intrinsicPersonas.agents"
                   :key="agent.id || agent.name"
-                  :open="editingPersonaId === agent.id || undefined"
-                  class="group rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40 overflow-hidden"
+                  class="rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40 px-3 py-2.5"
                 >
-                  <summary class="list-none cursor-pointer px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 select-none">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div class="flex min-w-0 items-center gap-2">
-                        <span class="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-                        <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ agent.name }}</div>
-                      </div>
-                      <div class="flex flex-wrap gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">ID {{ agent.id }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ agent.role }}</span>
-                        <span v-if="agent.is_librarian" class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">图书管理员</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">可用</span>
-                        <button
-                          v-if="agent.id && editingPersonaId !== agent.id"
-                          type="button"
-                          class="ml-1 px-2 py-0.5 rounded border border-indigo-200 bg-white/75 text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-                          @click.stop.prevent="startEditPersona(agent)"
-                        >
-                          编辑
-                        </button>
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ agent.name }}</div>
+                      <div class="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                        {{ agent.platform }} · 第 {{ agent.generation }} 代 · {{ agent.model || '未设置模型' }}
                       </div>
                     </div>
-                    <div class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-                      {{ agent.platform }} · 第 {{ agent.generation }} 代 · {{ agent.model || '未设置模型' }}
-                    </div>
-                  </summary>
-                  <div class="p-3 space-y-3">
-                    <div>
-                      <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">人格 Prompt</div>
-                      <textarea
-                        v-if="editingPersonaId === agent.id"
-                        :value="personaDraftPrompt"
-                        rows="10"
-                        class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
-                        @input="personaDraftPrompt = ($event.target as HTMLTextAreaElement).value"
-                      />
-                      <pre v-else class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-100 dark:border-zinc-700">{{ agent.prompt || '（空）' }}</pre>
-                    </div>
-                    <div v-if="editingPersonaId === agent.id" class="flex justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        class="px-3 py-1.5 rounded border border-zinc-200 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                        :disabled="savingPersonaId === agent.id"
-                        @click="cancelEditPersona"
-                      >
-                        取消
-                      </button>
-                      <button
-                        type="button"
-                        class="px-3 py-1.5 rounded bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                        :disabled="savingPersonaId === agent.id"
-                        @click="savePersona(agent)"
-                      >
-                        {{ savingPersonaId === agent.id ? '保存中…' : '保存' }}
-                      </button>
-                    </div>
+                    <button
+                      v-if="agent.id"
+                      type="button"
+                      class="shrink-0 px-3 py-1.5 rounded border border-indigo-200 bg-white/75 text-xs text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                      @click="openPersonaDetail(agent)"
+                    >
+                      详情
+                    </button>
                   </div>
-                </details>
+                  <div class="mt-2 flex flex-wrap gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                    <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">ID {{ agent.id }}</span>
+                    <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ agent.role }}</span>
+                    <span v-if="agent.is_librarian" class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">图书管理员</span>
+                    <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
+                      工作模式：{{ agent.current_mode_name || agent.current_mode_key || '初始模式' }}
+                    </span>
+                  </div>
+                </div>
               </div>
             </template>
             <template v-else-if="systemPrompts">
@@ -1579,9 +1581,89 @@ const closeDetail = () => {
       </div>
     </div>
     <div
+      v-if="detailAgent"
+      :style="{ zIndex: personaDetailZIndex }"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
+      @click.self="closePersonaDetail"
+    >
+      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-3xl max-h-[85vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">{{ detailAgent.name }} · 详情</div>
+            <div class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 truncate">
+              ID {{ detailAgent.id }} · {{ detailAgent.role }} · {{ detailAgent.model || '未设置模型' }}
+            </div>
+          </div>
+          <button class="ml-3 text-zinc-400 hover:text-zinc-600 text-xl leading-none" @click="closePersonaDetail">×</button>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+          <div v-if="personaEditNotice" class="text-xs text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900 rounded-lg px-3 py-2">
+            {{ personaEditNotice }}
+          </div>
+          <div v-if="personaEditError" class="text-xs text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900 rounded-lg px-3 py-2">
+            {{ personaEditError }}
+          </div>
+
+          <div>
+            <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">工作模式</div>
+            <div class="flex items-center gap-2">
+              <select
+                v-model="personaDraftMode"
+                class="min-w-0 flex-1 text-xs text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-2 py-1.5 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+              >
+                <option v-for="mode in availableModes" :key="mode.mode_key" :value="mode.mode_key">
+                  {{ mode.name || mode.mode_key }}
+                </option>
+              </select>
+              <button
+                type="button"
+                class="shrink-0 px-3 py-1.5 rounded bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                :disabled="savingPersonaMode || personaDraftMode === (detailAgent.current_mode_key || 'initial')"
+                @click="savePersonaMode(detailAgent)"
+              >
+                {{ savingPersonaMode ? '切换中…' : '切换模式' }}
+              </button>
+            </div>
+            <div class="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+              当前：{{ detailAgent.current_mode_name || detailAgent.current_mode_key || '初始模式' }}。切换后该模式的前置 prompt 会在下一轮对话注入。
+            </div>
+          </div>
+
+          <div>
+            <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">人格 Prompt</div>
+            <textarea
+              :value="personaDraftPrompt"
+              rows="14"
+              class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+              @input="personaDraftPrompt = ($event.target as HTMLTextAreaElement).value"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-800">
+          <button
+            type="button"
+            class="px-3 py-1.5 rounded border border-zinc-200 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            @click="closePersonaDetail"
+          >
+            关闭
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 rounded bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="savingPersonaId === detailAgent.id"
+            @click="savePersona(detailAgent)"
+          >
+            {{ savingPersonaId === detailAgent.id ? '保存中…' : '保存人格 Prompt' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    <div
       v-if="clawhubModalOpen"
       :style="{ zIndex: clawhubZIndex }"
-      class="fixed inset-0 bg-black/55 flex items-center justify-center p-4"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
       @click.self="closeClawHubModal"
     >
       <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
@@ -1700,7 +1782,7 @@ const closeDetail = () => {
     <div
       v-if="installedClawhubModalOpen"
       :style="{ zIndex: installedClawhubZIndex }"
-      class="fixed inset-0 bg-black/55 flex items-center justify-center p-4"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
       @click.self="closeInstalledClawHubModal"
     >
       <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-5xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">

@@ -637,7 +637,7 @@ onUnmounted(() => {
     />
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
+        <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 modal-overlay flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
           <!-- 手机比例：对话界面覆盖整个页面（无圆角/无边框/无外边距）；≥sm 恢复居中弹窗 -->
           <div class="acrylic-modal rounded-none sm:rounded-2xl !border-0 sm:!border shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
             <div class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200/60 bg-white/40 px-2 py-2 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:px-3 sm:py-2.5">

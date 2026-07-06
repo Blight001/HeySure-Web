@@ -226,7 +226,7 @@ watch(() => props.show, (show) => {
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="props.show" :style="{ zIndex }" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4" @click="emit('close')">
+      <div v-if="props.show" :style="{ zIndex }" class="fixed inset-0 modal-overlay flex items-center justify-center p-4" @click="emit('close')">
       <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[560px] max-h-[75vh] p-4 overflow-auto" @click.stop>
         <div class="mb-3 flex items-center justify-between gap-2">
           <div class="flex items-center gap-1.5 min-w-0">

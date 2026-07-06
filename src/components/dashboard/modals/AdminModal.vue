@@ -1403,7 +1403,7 @@ const avatarFor = (u: AdminUser) =>
       <div
         v-if="show"
         :style="{ zIndex: mainZIndex }"
-        class="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center backdrop-blur-sm p-0 sm:p-4"
+        class="fixed inset-0 modal-overlay flex items-start sm:items-center justify-center p-0 sm:p-4"
         @click="emit('close')"
       >
         <div
@@ -2477,7 +2477,7 @@ const avatarFor = (u: AdminUser) =>
       <div
         v-if="repoCommitDetail"
         :style="{ zIndex: repoCommitZIndex }"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
         @click="repoCommitDetail = null"
       >
         <div
@@ -2520,7 +2520,7 @@ const avatarFor = (u: AdminUser) =>
       <div
         v-if="dbEditor"
         :style="{ zIndex: dbEditorZIndex }"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
         @click="closeDbEditor"
       >
         <div
@@ -2588,7 +2588,7 @@ const avatarFor = (u: AdminUser) =>
       <div
         v-if="dbCleanupOpen"
         :style="{ zIndex: dbCleanupZIndex }"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
         @click="closeDbCleanup"
       >
         <div
@@ -2680,7 +2680,7 @@ const avatarFor = (u: AdminUser) =>
       <div
         v-if="dbImportOpen"
         :style="{ zIndex: dbImportZIndex }"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm p-4"
+        class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
         @click="closeDbImport"
       >
         <div

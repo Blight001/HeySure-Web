@@ -582,7 +582,7 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
     <Transition name="fade">
       <div
         v-if="assignMemberModal"
-        class="absolute inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+        class="absolute inset-0 modal-overlay flex items-center justify-center p-4 z-50"
         @click="closeAssignMember"
       >
         <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[420px] p-4" @click.stop>
@@ -629,7 +629,7 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
     <Transition name="fade">
       <div
         v-if="deleteConfirmTarget"
-        class="absolute inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+        class="absolute inset-0 modal-overlay flex items-center justify-center p-4 z-50"
         @click="closeDeleteConfirm"
       >
         <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[380px] p-4" @click.stop>

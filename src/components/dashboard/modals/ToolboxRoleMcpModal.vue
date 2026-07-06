@@ -78,7 +78,7 @@ const onSave = () => {
     <div
       v-if="show"
       :style="{ zIndex }"
-      class="fixed inset-0 bg-black/45 flex items-center justify-center p-4 backdrop-blur-sm"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
       @click="emit('close')"
     >
       <div

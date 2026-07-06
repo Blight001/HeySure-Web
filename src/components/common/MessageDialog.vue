@@ -74,7 +74,7 @@ const getIcon = () => {
   >
     <div v-if="state.show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center p-4 sm:p-6">
       <!-- Backdrop -->
-      <div class="fixed inset-0 bg-zinc-900/40 backdrop-blur-sm transition-opacity" @click="handleCancel"></div>
+      <div class="fixed inset-0 modal-overlay transition-opacity" @click="handleCancel"></div>
 
       <!-- Modal Content -->
       <div class="relative acrylic-modal rounded-2xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">

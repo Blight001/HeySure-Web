@@ -184,7 +184,7 @@ watch(() => props.show, (v) => {
       <div
         v-if="show"
         :style="{ zIndex }"
-        class="fixed inset-0 flex items-center justify-center bg-black/40 p-4"
+        class="fixed inset-0 flex items-center justify-center modal-overlay p-4"
         @click.self="close"
       >
         <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-xl max-h-[88vh] flex flex-col overflow-hidden">

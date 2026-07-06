@@ -364,6 +364,23 @@ select:focus {
   border-color: rgba(129, 140, 248, 0.55);
 }
 
+/* ---------------------------------------------------------------------------
+ * 弹窗遮罩（Modal Overlay / Scrim）统一封装
+ *  - 所有全屏弹窗的背景遮罩统一用 .modal-overlay，避免各处 bg-black/xx + backdrop-blur
+ *    取值不一（曾并存 35/40/45/50/55/70 透明度、无模糊 / sm / [2px] / xl 多种）
+ *  - 布局（fixed inset-0 flex items-center justify-center p-4 / z-index / @click）仍由各弹窗自行控制
+ *  - 只负责“磨砂 + 压暗”这一层视觉质感，亮/暗主题各自调校
+ * ------------------------------------------------------------------------- */
+.modal-overlay {
+  background-color: rgba(9, 9, 11, 0.44);
+  backdrop-filter: blur(5px) saturate(115%);
+  -webkit-backdrop-filter: blur(5px) saturate(115%);
+}
+
+.dark .modal-overlay {
+  background-color: rgba(0, 0, 0, 0.55);
+}
+
 .glass {
   @apply backdrop-blur-md border;
   background-color: rgba(255, 255, 255, 0.60);

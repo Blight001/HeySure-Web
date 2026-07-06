@@ -58,6 +58,7 @@ export interface KnowledgeEntryItem {
   intrinsic_personas?: {
     description: string
     total: number
+    available_modes?: Array<{ mode_key: string; name: string }>
     agents: Array<{
       id: number | null
       name: string
@@ -70,6 +71,8 @@ export interface KnowledgeEntryItem {
       platform: string
       generation: number
       prompt: string
+      current_mode_key?: string
+      current_mode_name?: string
       updated_at: number
     }>
   }

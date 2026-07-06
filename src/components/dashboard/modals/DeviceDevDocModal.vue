@@ -227,7 +227,7 @@ const copyDoc = async () => {
 
 <template>
   <Transition name="fade">
-    <div v-if="show" class="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-3 sm:p-6" @click.self="emit('close')">
+    <div v-if="show" class="fixed inset-0 z-[90] flex items-center justify-center modal-overlay p-3 sm:p-6" @click.self="emit('close')">
       <div class="flex h-full max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
         <!-- header -->
         <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">

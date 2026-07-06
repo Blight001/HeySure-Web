@@ -189,7 +189,7 @@ const startTestTool = (tool: string) => {
         <div
           v-if="detailOpen"
           :style="{ zIndex: detailZIndex }"
-          class="fixed inset-0 bg-black/40 flex items-center justify-center p-4"
+          class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
           @click="closeDetail"
         >
           <div
