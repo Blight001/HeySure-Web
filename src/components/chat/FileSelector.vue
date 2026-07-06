@@ -228,11 +228,14 @@ onBeforeUnmount(() => {
 const toolGroupList = computed(() =>
   (props.toolGroups || []).filter(group => group.groupKey && group.tools.length > 0))
 
-const isGroupChecked = (groupKey: string) =>
-  (props.selectedToolGroups || []).includes(groupKey)
+const isGroupChecked = (group: McpCatalogToolGroup) =>
+  !group.disabled && (props.selectedToolGroups || []).includes(group.groupKey)
 
 const groupKindLabel = (group: McpCatalogToolGroup) =>
   group.groupKind === 'device' ? '端侧' : '工作区'
+
+const groupTitle = (group: McpCatalogToolGroup) =>
+  group.disabled ? (group.disabledReason || '当前工作模式不允许勾选该组工具') : ''
 </script>
 
 <template>
@@ -409,15 +412,25 @@ const groupKindLabel = (group: McpCatalogToolGroup) =>
         <label
           v-for="group in toolGroupList"
           :key="group.groupKey"
-          class="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"
+          class="flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors"
+          :class="group.disabled
+            ? 'cursor-not-allowed opacity-50'
+            : 'cursor-pointer hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20'"
+          :title="groupTitle(group)"
         >
           <input
             type="checkbox"
-            :checked="isGroupChecked(group.groupKey)"
-            @change="emit('toggleToolGroup', group.groupKey)"
-            class="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800/60"
+            :checked="isGroupChecked(group)"
+            :disabled="group.disabled"
+            @change="!group.disabled && emit('toggleToolGroup', group.groupKey)"
+            class="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800/60"
+            :class="group.disabled ? 'cursor-not-allowed' : 'cursor-pointer'"
           >
           <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-200">{{ group.groupLabel }}</span>
+          <span
+            v-if="group.disabled"
+            class="shrink-0 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
+          >模式受限</span>
           <span
             class="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none"
             :class="group.groupKind === 'device'

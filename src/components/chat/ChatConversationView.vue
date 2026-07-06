@@ -357,6 +357,8 @@ const frontPromptToolGroups = ref<McpCatalogToolGroup[]>([])
 const frontPromptToolScope = ref('')
 const frontPromptToolMcpEnabled = ref<boolean | null>(null)
 const frontPromptToolSchemaError = ref('')
+// 当前工作模式是否允许调用设备端 MCP：false 时目录里剔除设备组并标注原因。
+const frontPromptAllowDeviceMcp = ref(true)
 const normalizePromptTool = (tool: any) => ({
   name: String(tool?.name || '').trim(),
   description: String(tool?.description || '').trim(),
@@ -420,12 +422,14 @@ const loadFrontPromptToolSchemas = async () => {
     frontPromptToolMcpEnabled.value = typeof response.promptToolsMcpEnabled === 'boolean'
       ? response.promptToolsMcpEnabled
       : null
+    frontPromptAllowDeviceMcp.value = response.promptToolsAllowDeviceMcp !== false
     frontPromptToolSchemaError.value = ''
   } catch (error: any) {
     frontPromptAvailableTools.value = []
     frontPromptToolGroups.value = []
     frontPromptToolScope.value = ''
     frontPromptToolMcpEnabled.value = null
+    frontPromptAllowDeviceMcp.value = true
     frontPromptToolSchemaError.value = error?.message || 'MCP schema 加载失败'
   }
 }
@@ -447,15 +451,25 @@ const frontPromptMcpCatalogText = computed(() => {
   }
   const error = frontPromptToolSchemaError.value
   if (error) return `- （工具目录加载失败：${error}）`
+  // 当前模式不允许设备端 MCP：目录中剔除设备组（运行时同样收走），并标注原因。
+  const deviceBlockedNote = frontPromptAllowDeviceMcp.value
+    ? ''
+    : '\n\n端侧设备 MCP\n- （当前工作模式不允许调用设备端 MCP）'
   if (frontPromptToolGroups.value.length > 0) {
-    return renderGroupedMcpToolCatalog(frontPromptToolGroups.value)
+    const groups = frontPromptAllowDeviceMcp.value
+      ? frontPromptToolGroups.value
+      : frontPromptToolGroups.value.filter(group => group.groupKind !== 'device')
+    return renderGroupedMcpToolCatalog(groups) + deviceBlockedNote
   }
   const serverTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') === 'server')
   const deviceTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') !== 'server')
-  return renderGroupedMcpToolCatalog([
+  const fallbackGroups: McpCatalogToolGroup[] = [
     { groupKey: 'workspace', groupLabel: '工作区 MCP', groupKind: 'workspace', tools: serverTools },
-    { groupKey: 'device:fallback', groupLabel: '端侧设备 MCP', groupKind: 'device', tools: deviceTools },
-  ])
+  ]
+  if (frontPromptAllowDeviceMcp.value) {
+    fallbackGroups.push({ groupKey: 'device:fallback', groupLabel: '端侧设备 MCP', groupKind: 'device', tools: deviceTools })
+  }
+  return renderGroupedMcpToolCatalog(fallbackGroups) + deviceBlockedNote
 })
 const frontPromptDetails = computed(() => frontPromptMcpCatalogText.value)
 

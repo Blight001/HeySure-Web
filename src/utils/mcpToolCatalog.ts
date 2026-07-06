@@ -11,6 +11,10 @@ export interface McpCatalogToolGroup {
   deviceId?: string
   deviceType?: string
   tools: McpCatalogTool[]
+  /** 当前工作模式不允许该组（如设备端 MCP）：置灰、禁勾选、不随消息附带 */
+  disabled?: boolean
+  /** 置灰原因，作 tooltip 展示 */
+  disabledReason?: string
 }
 
 export const toolNamespace = (name: string): string => {

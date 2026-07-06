@@ -159,6 +159,9 @@ const frontPromptToolGroups = ref<McpCatalogToolGroup[]>([])
 const frontPromptToolScope = ref('')
 const frontPromptToolMcpEnabled = ref<boolean | null>(null)
 const frontPromptToolSchemaError = ref('')
+// 当前工作模式是否允许调用设备端 MCP：false 时加号面板里的设备工具组置灰禁选。
+const frontPromptAllowDeviceMcp = ref(true)
+const frontPromptModeKey = ref('')
 const appliedEditsArray = computed(() => Array.from(appliedEdits.value))
 const appliedSignaturesArray = computed(() => Array.from(appliedSignatures.value))
 const isRunActive = computed(() => ['queued', 'running'].includes(currentRunStatus.value))
@@ -346,10 +349,23 @@ const CLIENT_MCP_CATALOG_TITLE = '本轮可用 MCP 工具'
 // 新上线的设备会自动进入默认勾选，而用户取消过的组跨消息保持取消状态。
 const uncheckedToolGroupKeys = ref<string[]>([])
 
+// 不允许设备端 MCP 的模式下，设备工具组仍展示但置灰：用户能看到有哪些工具，
+// 但无法勾选、也不会随消息附带（与后端 chat_runtime 的运行时门禁一致）。
+const withModeGating = (group: McpCatalogToolGroup): McpCatalogToolGroup => {
+  if (group.groupKind === 'device' && !frontPromptAllowDeviceMcp.value) {
+    return {
+      ...group,
+      disabled: true,
+      disabledReason: '当前工作模式不允许调用设备端 MCP，切换到允许设备端 MCP 的工作模式后可勾选',
+    }
+  }
+  return group
+}
+
 const attachableToolGroups = computed<McpCatalogToolGroup[]>(() => {
   if (frontPromptToolMcpEnabled.value === false) return []
   if (frontPromptToolGroups.value.length > 0) {
-    return frontPromptToolGroups.value.filter(group => group.tools.length > 0)
+    return frontPromptToolGroups.value.filter(group => group.tools.length > 0).map(withModeGating)
   }
   // 旧版后端没有分组数据时，退化为「工作区 / 端侧」两个组
   const serverTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') === 'server')
@@ -357,11 +373,12 @@ const attachableToolGroups = computed<McpCatalogToolGroup[]>(() => {
   const fallback: McpCatalogToolGroup[] = []
   if (serverTools.length > 0) fallback.push({ groupKey: 'workspace', groupLabel: '工作区 MCP', groupKind: 'workspace', tools: serverTools })
   if (deviceTools.length > 0) fallback.push({ groupKey: 'device:fallback', groupLabel: '端侧设备 MCP', groupKind: 'device', tools: deviceTools })
-  return fallback
+  return fallback.map(withModeGating)
 })
 
 const selectedToolGroupKeys = computed(() =>
   attachableToolGroups.value
+    .filter(group => !group.disabled)
     .map(group => group.groupKey)
     .filter(key => !uncheckedToolGroupKeys.value.includes(key)))
 
@@ -369,6 +386,8 @@ const checkedToolGroups = computed(() =>
   attachableToolGroups.value.filter(group => selectedToolGroupKeys.value.includes(group.groupKey)))
 
 const toggleToolGroup = (groupKey: string) => {
+  const group = attachableToolGroups.value.find(item => item.groupKey === groupKey)
+  if (group?.disabled) return
   const next = [...uncheckedToolGroupKeys.value]
   const idx = next.indexOf(groupKey)
   if (idx >= 0) next.splice(idx, 1)
@@ -957,6 +976,9 @@ const finishRun = async (runId: string, status: string, errorMessage: string) =>
   await loadTotalTokens()
   stopTimeTicker()
   bumpTaskPlan()
+  // 本轮 AI 可能用 mode.manage 切换了工作模式（或设备上下线）：刷新工具组，
+  // 让加号面板里设备 MCP 的置灰 / 可勾选状态立即跟上新模式。
+  void loadFrontPromptToolSchemas()
   // 本轮结束，若有排队的续发消息，自动接上（Claude-Code 风格的不打断续发）。
   await drainPendingQueue()
 }
@@ -1211,6 +1233,9 @@ const createSession = async (nameInput?: string) => {
   await loadSessions()
   currentSessionId.value = session.id
   chatMessages.value = []
+  // 新会话开场时服务端已把该 AI 重置回初始对话模式：刷新工具组，
+  // 让设备 MCP 的置灰状态立即对齐。
+  void loadFrontPromptToolSchemas()
 }
 
 const createSessionFromButton = async () => {
@@ -1348,6 +1373,8 @@ const loadFrontPromptToolSchemas = async () => {
   frontPromptToolScope.value = ''
   frontPromptToolMcpEnabled.value = null
   frontPromptToolSchemaError.value = ''
+  frontPromptAllowDeviceMcp.value = true
+  frontPromptModeKey.value = ''
   if (!getAuthToken()) return
   try {
     const response = await listMcpTools({ aiConfigId: props.aiConfigId })
@@ -1368,6 +1395,8 @@ const loadFrontPromptToolSchemas = async () => {
     frontPromptToolMcpEnabled.value = typeof response.promptToolsMcpEnabled === 'boolean'
       ? response.promptToolsMcpEnabled
       : null
+    frontPromptAllowDeviceMcp.value = response.promptToolsAllowDeviceMcp !== false
+    frontPromptModeKey.value = String(response.promptToolsModeKey || '')
   } catch (error: any) {
     frontPromptToolSchemaError.value = error?.message || 'MCP schema 加载失败'
   }

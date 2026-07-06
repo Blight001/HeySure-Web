@@ -19,6 +19,7 @@ import {
   type KnowledgeEntryItem,
 } from '@/api/librarian'
 import { getAuthToken } from '@/api/http'
+import { updateAgentMode } from '@/api/agentModes'
 import { updateAiConfigFields } from '@/api/ai'
 import { me } from '@/api/auth'
 import { runInheritanceMcpTest, type InheritanceMcpTestResult, callMcpTool } from '@/api/mcp'
@@ -74,10 +75,13 @@ const savingPersonaId = ref<number | null>(null)
 const personaEditError = ref('')
 const personaEditNotice = ref('')
 const personaDraftPrompt = ref('')
-// 人格详情弹窗：当前打开的 AI，及其工作模式草稿。
+// 人格详情弹窗：当前打开的 AI。点击详情后看到两个栏目（人格栏目 + 模式栏目），模式栏目内可切换显示/编辑 4 个模式的 prompt（不是并列布局），无需显示当前工作模式。
 const detailPersonaId = ref<number | null>(null)
-const personaDraftMode = ref('')
-const savingPersonaMode = ref(false)
+const modeDraftPrompt = ref('')
+// 当前选中模式的「暴露设备端 MCP」开关草稿（模式类型，按 AI 隔离）
+const modeDraftAllowDevice = ref(true)
+const savingModePrompt = ref(false)
+const selectedModeKey = ref('initial')
 const editingPropertyCategory = ref<string | null>(null)
 const savingPropertyCategory = ref<string | null>(null)
 const propertyEditError = ref('')
@@ -140,6 +144,12 @@ const availableModes = computed(() => intrinsicPersonas.value?.available_modes |
 const detailAgent = computed(() =>
   intrinsicPersonas.value?.agents.find(agent => agent.id === detailPersonaId.value) || null,
 )
+// 模式栏目数据源：该 AI 自己的模式清单（按 AI 隔离）；旧后端没有 per-AI 数据时回退共享清单。
+const detailAgentModes = computed(() => {
+  const own = detailAgent.value?.modes
+  if (own && own.length > 0) return own
+  return availableModes.value.map(mode => ({ ...mode, allow_device_mcp: true, is_builtin: true }))
+})
 const systemPrompts = computed(() => currentDetail.value?.system_prompts || null)
 const inheritanceSkills = computed(() => currentDetail.value?.inheritance_skills || null)
 const inheritanceServerCategories = computed(() => inheritanceSkills.value?.server_categories || [])
@@ -490,13 +500,23 @@ const selectedMcpTestPreset = computed(() =>
 type IntrinsicPersonaAgent = NonNullable<KnowledgeEntryItem['intrinsic_personas']>['agents'][number]
 type InheritanceServerCategory = NonNullable<NonNullable<KnowledgeEntryItem['inheritance_skills']>['server_categories']>[number]
 
+const loadModeDraft = (key: string) => {
+  const modes = detailAgentModes.value
+  const mode = modes.find(m => m.mode_key === key) || modes[0] || null
+  selectedModeKey.value = mode?.mode_key || key
+  modeDraftPrompt.value = mode?.prompt || ''
+  modeDraftAllowDevice.value = mode?.allow_device_mcp !== false
+}
+
 const openPersonaDetail = (agent: IntrinsicPersonaAgent) => {
   if (!agent.id) return
   detailPersonaId.value = agent.id
   personaEditError.value = ''
   personaEditNotice.value = ''
   personaDraftPrompt.value = agent.prompt || ''
-  personaDraftMode.value = agent.current_mode_key || 'initial'
+  // 载入模式栏目：模式按 AI 隔离，这里显示该 AI 自己的模式清单；默认显示系统初始
+  // 显示的 initial 模式的 prompt，可在栏目内点标签切换查看/编辑其它模式。
+  loadModeDraft('initial')
 }
 
 const closePersonaDetail = () => {
@@ -504,7 +524,14 @@ const closePersonaDetail = () => {
   personaEditError.value = ''
   personaEditNotice.value = ''
   personaDraftPrompt.value = ''
-  personaDraftMode.value = ''
+  modeDraftPrompt.value = ''
+  modeDraftAllowDevice.value = true
+  selectedModeKey.value = 'initial'
+}
+
+const switchMode = (key: string) => {
+  // 在模式栏目内切换显示不同模式的 prompt（不是切换 AI 的当前模式，AI 仍动态 use 切换）
+  loadModeDraft(key)
 }
 
 const savePersona = async (agent: IntrinsicPersonaAgent) => {
@@ -525,25 +552,37 @@ const savePersona = async (agent: IntrinsicPersonaAgent) => {
   }
 }
 
-const savePersonaMode = async (agent: IntrinsicPersonaAgent) => {
-  if (!agent.id) return
-  savingPersonaMode.value = true
+const saveModePrompt = async () => {
+  // 保存当前选中模式的 prompt + 设备 MCP 开关。模式按 AI 隔离，只写当前详情 AI 自己的清单。
+  const agent = detailAgent.value
+  if (!agent?.id) return
+  const key = selectedModeKey.value || 'initial'
+  savingModePrompt.value = true
   personaEditError.value = ''
   personaEditNotice.value = ''
   try {
-    const nextKey = personaDraftMode.value || 'initial'
-    await updateAiConfigFields(agent.id, {
-      current_mode_key: nextKey,
-    })
-    agent.current_mode_key = nextKey
-    agent.current_mode_name =
-      availableModes.value.find(mode => mode.mode_key === nextKey)?.name || ''
-    personaEditNotice.value = `${agent.name} 工作模式已切换为「${agent.current_mode_name || nextKey}」`
+    const updated = await updateAgentMode(
+      key,
+      { prompt: modeDraftPrompt.value || '', allow_device_mcp: modeDraftAllowDevice.value },
+      agent.id,
+    )
+    // 本地同步该 AI 的该模式（agent.modes 是响应式对象上的数组）
+    if (Array.isArray(agent.modes)) {
+      const idx = agent.modes.findIndex(m => m.mode_key === key)
+      if (idx >= 0) {
+        agent.modes[idx] = { ...agent.modes[idx], ...updated }
+      } else {
+        agent.modes.push(updated)
+      }
+    } else {
+      agent.modes = [updated]
+    }
+    const modeName = updated?.name || key
+    personaEditNotice.value = `${agent.name} 的「${modeName}」已保存`
   } catch (err) {
-    personaEditError.value = (err as Error).message || '切换失败'
-    personaDraftMode.value = agent.current_mode_key || 'initial'
+    personaEditError.value = (err as Error).message || '保存失败'
   } finally {
-    savingPersonaMode.value = false
+    savingModePrompt.value = false
   }
 }
 
@@ -892,7 +931,10 @@ const openDetail = async (item: KnowledgeItem) => {
   detailError.value = ''
   currentDetail.value = null
   detailPersonaId.value = null
-  personaDraftMode.value = ''
+  modeDraftPrompt.value = ''
+  modeDraftAllowDevice.value = true
+  savingModePrompt.value = false
+  selectedModeKey.value = 'initial'
   personaEditError.value = ''
   personaEditNotice.value = ''
   editingPropertyCategory.value = null
@@ -934,8 +976,9 @@ const closeDetail = () => {
   selectedItem.value = null
   savingPersonaId.value = null
   detailPersonaId.value = null
-  personaDraftMode.value = ''
-  savingPersonaMode.value = false
+  modeDraftPrompt.value = ''
+  savingModePrompt.value = false
+  selectedModeKey.value = 'initial'
   personaEditError.value = ''
   personaEditNotice.value = ''
   personaDraftPrompt.value = ''
@@ -1164,9 +1207,6 @@ const closeDetail = () => {
                     <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">ID {{ agent.id }}</span>
                     <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ agent.role }}</span>
                     <span v-if="agent.is_librarian" class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">图书管理员</span>
-                    <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
-                      工作模式：{{ agent.current_mode_name || agent.current_mode_key || '初始模式' }}
-                    </span>
                   </div>
                 </div>
               </div>
@@ -1586,7 +1626,7 @@ const closeDetail = () => {
       class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
       @click.self="closePersonaDetail"
     >
-      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-3xl max-h-[85vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
+      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-5xl max-h-[90vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
         <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">{{ detailAgent.name }} · 详情</div>
@@ -1605,39 +1645,55 @@ const closeDetail = () => {
             {{ personaEditError }}
           </div>
 
-          <div>
-            <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">工作模式</div>
-            <div class="flex items-center gap-2">
-              <select
-                v-model="personaDraftMode"
-                class="min-w-0 flex-1 text-xs text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-2 py-1.5 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
-              >
-                <option v-for="mode in availableModes" :key="mode.mode_key" :value="mode.mode_key">
-                  {{ mode.name || mode.mode_key }}
-                </option>
-              </select>
+          <!-- 两个栏目：人格栏目 + 模式栏目。模式栏目内可分别切换显示 4 个模式的 prompt（initial / task / learning / fix），不是左右并列布局。AI 动态切换当前模式，不在此预设。 -->
+          <div class="space-y-4">
+            <div>
+              <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">人格栏目</div>
+              <textarea
+                :value="personaDraftPrompt"
+                rows="12"
+                class="w-full min-h-[160px] resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                @input="personaDraftPrompt = ($event.target as HTMLTextAreaElement).value"
+              />
+            </div>
+            <div>
+              <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">模式栏目（该 AI 专属）</div>
+              <div class="text-[10px] text-zinc-400 dark:text-zinc-500 mb-1.5">工作模式按 AI 隔离：这里是 {{ detailAgent?.name }} 自己的模式。prompt 可编辑（点击标签切换查看不同模式），可设置该模式是否向 AI 暴露设备端 MCP。</div>
+              <!-- 模式切换显示：使用标签切换，不是“切换模式”按钮（不改变 AI 当前模式，AI 运行时动态 use） -->
+              <div class="flex flex-wrap gap-1 mb-2">
+                <button
+                  v-for="mode in detailAgentModes"
+                  :key="mode.mode_key"
+                  type="button"
+                  class="px-2.5 py-0.5 text-[11px] rounded border transition-colors"
+                  :class="selectedModeKey === mode.mode_key
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white/70 dark:bg-zinc-900/60 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'"
+                  :title="mode.description"
+                  @click="switchMode(mode.mode_key)"
+                >
+                  {{ mode.name || mode.mode_key }}<span v-if="mode.allow_device_mcp === false" class="ml-0.5 opacity-70" title="该模式不暴露设备端 MCP">🔒</span>
+                </button>
+              </div>
+              <!-- 模式类型：是否向 AI 暴露设备端 MCP（关闭后运行时收走设备工具，对话中置灰不可勾选） -->
               <button
                 type="button"
-                class="shrink-0 px-3 py-1.5 rounded bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="savingPersonaMode || personaDraftMode === (detailAgent.current_mode_key || 'initial')"
-                @click="savePersonaMode(detailAgent)"
+                class="mb-2 w-full px-3 py-2 rounded border text-xs transition-all flex items-center justify-between gap-2"
+                :class="modeDraftAllowDevice
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400'
+                  : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400'"
+                @click="modeDraftAllowDevice = !modeDraftAllowDevice"
               >
-                {{ savingPersonaMode ? '切换中…' : '切换模式' }}
+                <span>暴露设备端 MCP</span>
+                <span class="text-[10px] font-semibold">{{ modeDraftAllowDevice ? '开（此模式下 AI 可调用设备端工具）' : '关（收走设备端工具，对话中置灰）' }}</span>
               </button>
+              <textarea
+                :value="modeDraftPrompt"
+                rows="12"
+                class="w-full min-h-[160px] resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
+                @input="modeDraftPrompt = ($event.target as HTMLTextAreaElement).value"
+              />
             </div>
-            <div class="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">
-              当前：{{ detailAgent.current_mode_name || detailAgent.current_mode_key || '初始模式' }}。切换后该模式的前置 prompt 会在下一轮对话注入。
-            </div>
-          </div>
-
-          <div>
-            <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">人格 Prompt</div>
-            <textarea
-              :value="personaDraftPrompt"
-              rows="14"
-              class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
-              @input="personaDraftPrompt = ($event.target as HTMLTextAreaElement).value"
-            />
           </div>
         </div>
 
@@ -1648,6 +1704,14 @@ const closeDetail = () => {
             @click="closePersonaDetail"
           >
             关闭
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 rounded bg-zinc-700 text-xs text-white hover:bg-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="savingModePrompt"
+            @click="saveModePrompt"
+          >
+            {{ savingModePrompt ? '保存中…' : '保存当前模式' }}
           </button>
           <button
             type="button"
