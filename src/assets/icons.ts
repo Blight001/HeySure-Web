@@ -42,6 +42,7 @@ export type AppIconName =
   | 'check'
   | 'chat'
   | 'monitor'
+  | 'terminal'
   | 'question'
   | 'play'
   | 'close'
@@ -213,6 +214,11 @@ export const APP_ICONS: Record<AppIconName, string> = {
   monitor:
     '<rect x="3.4" y="4.6" width="17.2" height="12" rx="1.9"/>'
     + '<path d="M9.4 20.2h5.2M12 16.6v3.6"/>',
+
+  // 终端（命令行远程）：窗口框 + 提示符 ">" + 输入行
+  terminal:
+    '<rect x="3.4" y="4.6" width="17.2" height="14.8" rx="1.9"/>'
+    + '<path d="M7.4 9.2l3 2.8-3 2.8M12.6 15h4.2"/>',
 
   // 问号（未知）
   question:

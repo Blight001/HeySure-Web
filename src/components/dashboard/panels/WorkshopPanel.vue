@@ -8,6 +8,7 @@ import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
 import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
 import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
 import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
+import RemoteTerminalModal from '@/components/dashboard/RemoteTerminalModal.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
@@ -284,6 +285,14 @@ const openRemoteControl = (device: ConnectedDevice) => {
   }
 }
 
+// 命令行远程（PTY）：仅桌面端。走服务器 rt:* relay，与画面远程一样凭
+// remote_terminal 能力放行；旧客户端会在会话里返回明确错误。
+const rtTarget = ref<{ deviceId: string; name: string } | null>(null)
+const canRemoteTerminal = (device: ConnectedDevice) => isSoftwareDevice(device)
+const openRemoteTerminal = (device: ConnectedDevice) => {
+  rtTarget.value = { deviceId: device.id, name: deviceDisplayName(device) }
+}
+
 const isEndpointDevice = (device: ConnectedDevice) => {
   const platform = String(device.platform || '').toLowerCase()
   return isSoftwareDevice(device) || isAndroidDevice(device) || !!device.isBrowserExtension || platform.includes('browser') || isWorkshopDevice(device) || isCustomDevice(device)
@@ -474,6 +483,14 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         >
           <AppIcon name="monitor" class="w-3.5 h-3.5" /> {{ isAndroidDevice(device) ? '远程控制' : isBrowserDevice(device) ? '浏览器控制' : '桌面控制' }}
         </button>
+        <button
+          v-if="canRemoteTerminal(device) && !isOffline(device)"
+          type="button"
+          class="flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+          @click="openRemoteTerminal(device)"
+        >
+          <AppIcon name="terminal" class="w-3.5 h-3.5" /> 命令行
+        </button>
       </div>
 
       <div v-if="isToolboxDevice(device) || (hasLinkedMember(device) && linkedMember(device)?.status === 'learning')" class="mt-2 rounded-lg border p-2" :class="memberPanelClass(device)">
@@ -564,6 +581,13 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
       :device-name="rcTarget.name"
       :mode="rcTarget.mode"
       @close="rcTarget = null"
+    />
+
+    <RemoteTerminalModal
+      v-if="rtTarget"
+      :device-id="rtTarget.deviceId"
+      :device-name="rtTarget.name"
+      @close="rtTarget = null"
     />
 
     <ToolboxRoleMcpModal
