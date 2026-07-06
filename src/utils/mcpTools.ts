@@ -120,7 +120,7 @@ const getEndpointCapabilityTag = (name: string) => {
 const getMcpToolFallbackTag = (name: string) => {
   const endpointCapabilityTag = getEndpointCapabilityTag(name)
   if (endpointCapabilityTag) return endpointCapabilityTag
-  // workspace.manage（文件）、workspace.run_command（终端）、workspace.search（联网搜索）同归「工作区」。
+  // workspace.run_command（终端/文件操作）、workspace.search（联网搜索）同归「工作区」。
   if (hasMcpPrefix(name, 'workspace')) return '工作区'
   if (hasMcpPrefix(name, 'librarian')) return '图书馆'
   if (hasMcpPrefix(name, 'knowledge')) return '知识总结'
@@ -128,6 +128,7 @@ const getMcpToolFallbackTag = (name: string) => {
   if (hasMcpPrefix(name, 'desktop')) return '桌面能力'
   if (hasMcpPrefix(name, 'task')) return '任务'
   if (hasMcpPrefix(name, 'prompt')) return 'Prompt'
+  if (hasMcpPrefix(name, 'mode')) return '工作模式'
   // 发消息：发给用户 / 发给其他 AI，单独成栏，不再混入「会话管理」。
   if (hasMcpPrefix(name, 'message')) return '发消息'
   if (hasMcpPrefix(name, 'feishu')) return '会话管理'
@@ -155,13 +156,13 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   'mcp.describe_tool': '工具说明',
   'workspace.search': '联网搜索',
   'workspace.run_command': '执行命令',
-  'workspace.manage': '文件管理',
   'admin.manage': '系统总览',
   'task.manage': '任务管理',
   'message.send_to_user': '发给用户',
   'message.send_to_ai': '发给 AI',
   'conversation.manage': '会话管理',
   'prompt.manage': 'Prompt 管理',
+  'mode.manage': '工作模式',
   'knowledge.manage': '知识库管理',
   'device_mcp.manage': '管理设备 MCP',
   'mcp.manage_dynamic_tool': '管理动态 MCP',

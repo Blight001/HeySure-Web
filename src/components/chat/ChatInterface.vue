@@ -481,7 +481,7 @@ const buildAttachedPathSection = (paths: string[]) => {
   const lines = normalized.map(path => `- ${path.endsWith('/') ? '文件夹' : '文件'}: \`${path}\``)
   return [
     '[本轮附加工作区路径]',
-    '用户勾选了以下工作区路径。路径均按当前 AI 工作目录视角给出。不要假设内容已被直接提供；如需查看，请使用 workspace.manage / workspace.run_command 等可用工作区工具自行读取、列目录或检索。',
+    '用户勾选了以下工作区路径。路径均按当前 AI 工作目录视角给出。不要假设内容已被直接提供；如需查看，请使用 workspace.run_command 执行 shell 命令（如 type/cat 读取、dir/ls 列目录）自行读取、列目录或检索。',
     ...lines,
   ].join('\n')
 }
