@@ -34,11 +34,12 @@ const load = async () => {
   try {
     const data = await getDeviceMcpScope(props.deviceId)
     scope.value = data
-    // Default to *all* capabilities for a newly seen device (!hasRecord).
-    // This matches the documented auto-full behavior on first connect
-    // (reconcile creates the row; hasRecord signals an explicit saved scope).
-    // The game drawer already did this; the main editor did not, causing
-    // "默认全部不勾选" after device:register.
+    // selected uses server's `allowed` (reconcile on device:register + dynamic push
+    // now always (re)sets full live capabilities for *any* device type + new MCPs).
+    // For browser_automation plugin devices we explicitly union device-reported
+    // tools (manage_card, save_cookies etc.) with dynamic so 全部勾选 (not just
+    // the dynamic "匹配" subset). Reconnect / new device / added MCPs => auto full-checked in 作坊.
+    // hasRecord becomes true quickly; kept for the ternary + info.
     const caps = data.capabilities || []
     const allowedList = data.allowed || []
     selected.value = new Set(data.hasRecord ? allowedList : caps)

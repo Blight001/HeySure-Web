@@ -161,6 +161,8 @@ const mcpScopeSection = (panel: PanelController, deviceId: string) => {
       saveFb.textContent = '该 Agent 当前没有上报 MCP 工具'
       return
     }
+    // Reconcile on (re)connect now ensures full live caps (new MCPs auto-included)
+    // for any device type; UI defaults to all checked in 作坊/game drawer.
     const selected = new Set(scope.hasRecord ? scope.allowed : scope.capabilities)
     const boxes: HTMLInputElement[] = []
     for (const tool of scope.capabilities) {
