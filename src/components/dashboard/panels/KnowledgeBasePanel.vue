@@ -1645,7 +1645,7 @@ const closeDetail = () => {
             {{ personaEditError }}
           </div>
 
-          <!-- 两个栏目：人格栏目 + 模式栏目。模式栏目内可分别切换显示 4 个模式的 prompt（initial / task / learning / fix），不是左右并列布局。AI 动态切换当前模式，不在此预设。 -->
+          <!-- 两个栏目：人格栏目 + 模式栏目。模式栏目内可分别切换显示各模式的 prompt（initial / task / learning），不是左右并列布局。AI 动态切换当前模式，不在此预设。 -->
           <div class="space-y-4">
             <div>
               <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">人格栏目</div>

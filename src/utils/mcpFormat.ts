@@ -1,8 +1,31 @@
 export const createMcpCallBlockPattern = () =>
   /<mcp[-_]call>\s*([\s\S]*?)\s*<\/\s*(?:mcp[-_]call|[｜|]*\s*DSML\s*[｜|]*\s*(?:invoke|tool[-_]?calls?))\s*>/gi
 
+// Anthropic / DSML style: <...invoke name="tool">...</...invoke> (namespace prefixes allowed).
+const createInvokeBlockPattern = () =>
+  /<[^<>]*?\binvoke\b[^<>]*?\bname\s*=\s*["']?[^"'>\s]+["']?[^<>]*?>[\s\S]*?<\/[^<>]*?\binvoke\b[^<>]*?>/gi
+
+// Hermes / Qwen style: <tool_call> {json} </tool_call> (plural <tool_calls> wrapper excluded).
+const createToolCallBlockPattern = () =>
+  /<[^<>]*?\btool[_-]?call\b[^<>]*?>[\s\S]*?<\/[^<>]*?\btool[_-]?call\b[^<>]*?>/gi
+
+// Leftover wrapper tags, e.g. <mcp:tool_calls> … </function_calls>.
+const createWrapperTagPattern = () =>
+  /<\/?[^<>]*?\b(?:tool[_-]?calls?|function[_-]?calls?)\b[^<>]*?>/gi
+
+// A tool-call block that started but never closed (streaming tail).
+const createPartialTailPattern = () =>
+  /<[^<>]*?\b(?:mcp[-_]call|invoke|parameter|tool[_-]?calls?|function[_-]?calls?)\b[\s\S]*$/i
+
 export const stripMcpCallBlocks = (raw?: string) => {
-  return String(raw || '').replace(createMcpCallBlockPattern(), '').trim()
+  return String(raw || '')
+    .replace(createMcpCallBlockPattern(), '')
+    .replace(createInvokeBlockPattern(), '')
+    .replace(createToolCallBlockPattern(), '')
+    .replace(createWrapperTagPattern(), '')
+    .replace(createPartialTailPattern(), '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export interface McpToolBubbleSections {
