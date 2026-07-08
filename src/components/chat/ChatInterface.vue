@@ -2171,12 +2171,32 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
   if (!content || !currentSessionId.value) return
   if (!getAuthToken()) return
 
-  // 生成中不打断：把这条消息入队，clear 输入框，等本轮结束由 drainPendingQueue 续发。
-  // overrideContent 有值时来自续发本身，不再入队也不动输入框。
+  // 生成中不打断整轮，但也不再干等：把消息投递给正在跑的 run，由后端 worker
+  // 在下一个步骤边界（一次深度思考 / 一次 MCP 调用之后）直接插入给 AI。
+  // overrideContent 有值时来自续发/回退本身，走正常发送。
   if (overrideContent === undefined && (isTyping.value || isRunActive.value)) {
     chatInput.value = ''
-    enqueuePending(content)
-    return
+    try {
+      const res = await chatApi.injectMessage({
+        content,
+        session_id: currentSessionId.value,
+        session_name: sessionList.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话',
+        ai_config_id: props.aiConfigId,
+        ai_kind: aiKindValue.value,
+      })
+      if (res?.active) {
+        // 消息已投递给运行中的 run：立刻把用户气泡拉出来，并确保在轮询这个 run。
+        await fetchRunHistoryIncrementalOnce()
+        if (!isRunActive.value) await checkActiveRun()
+        return
+      }
+    } catch {
+      // 后端不可用时退回旧行为：本地排队，等本轮结束续发。
+      enqueuePending(content)
+      return
+    }
+    // 后端判定当前已无进行中的 run（竞态：刚好跑完）→ 当成一次正常发送。
+    return sendChat(content)
   }
 
   const selectedReadableFiles = props.selectedFiles

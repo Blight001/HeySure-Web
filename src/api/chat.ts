@@ -118,6 +118,19 @@ export const startRun = (payload: {
   ai_kind: AiKind
 }) => post<{ run_id: string }>('/api/chat/run/start', payload, { fallbackError: 'run start failed' })
 
+export const injectMessage = (payload: {
+  content: string
+  session_id: string
+  session_name: string
+  ai_config_id?: number
+  ai_kind: AiKind
+}) =>
+  post<{ active: boolean; run_id?: string; user_message_id?: number }>(
+    '/api/chat/run/inject',
+    payload,
+    { fallbackError: 'inject failed' },
+  )
+
 export const deleteChatMessage = (messageId: number) =>
   del<void>(`/api/chat/${messageId}`, { fallbackError: '删除消息失败' })
 
