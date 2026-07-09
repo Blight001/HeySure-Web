@@ -4,6 +4,8 @@ import type { WorldWorkshop } from '../world/store'
 export interface WorkshopView {
   sprite: Phaser.GameObjects.Sprite
   taskGlow: Phaser.GameObjects.Image
+  label: Phaser.GameObjects.Text
+  textureKey: string
   slot: number
   data: WorldWorkshop
   offlineSince: number | null

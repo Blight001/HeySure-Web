@@ -22,7 +22,14 @@ const workshopTypeLabel = (type: WorldSnapshot['workshops'][number]['type'] | un
   if (type === 'browser') return '瞭望塔'
   if (type === 'android') return '移动工坊'
   if (type === 'workshop') return '图书馆'
+  if (type === 'custom') return '自定义设备'
   return '机械坊'
+}
+
+const workshopDisplayName = (w: WorldSnapshot['workshops'][number] | undefined, fallback: string): string => {
+  if (!w) return fallback
+  const remark = String(w.remark || '').trim()
+  return remark ? `${w.name}（${remark}）` : w.name
 }
 
 export const openMemberPanel = (
@@ -124,7 +131,7 @@ const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapsh
     const item = document.createElement('div')
     item.className = 'd-item d-flex'
     const label = document.createElement('span')
-    label.textContent = `${w?.name || deviceId}（${workshopTypeLabel(w?.type)}）`
+    label.textContent = `${workshopDisplayName(w, deviceId)}（${workshopTypeLabel(w?.type)}）`
     const un = document.createElement('button')
     un.type = 'button'
     un.className = 'd-btn warn'
@@ -141,7 +148,7 @@ const memberBindTab = (panel: PanelController, m: WorldMember, snap: WorldSnapsh
     sel.innerHTML =
       `<option value="">选择作坊以绑定本成员…</option>` +
       freeWorkshops
-        .map(w => `<option value="${esc(w.deviceId)}">${esc(w.name)}（${workshopTypeLabel(w.type)}${w.aiConfigId ? ' · 已有成员' : ''}）</option>`)
+        .map(w => `<option value="${esc(w.deviceId)}">${esc(workshopDisplayName(w, w.deviceId))}（${workshopTypeLabel(w.type)}${w.aiConfigId ? ' · 已有成员' : ''}）</option>`)
         .join('')
     const bd = document.createElement('button')
     bd.type = 'button'

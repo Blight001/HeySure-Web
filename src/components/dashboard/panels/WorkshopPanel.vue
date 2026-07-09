@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import type { McpRoleMeta } from '@/types'
-import { assignDeviceAi, deleteDeviceRecord } from '@/api/devices'
+import { assignDeviceAi, deleteDeviceRecord, updateDeviceDisplay } from '@/api/devices'
 import { setWorkshopBinding } from '@/api/workshop'
 import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
 import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
@@ -101,6 +101,17 @@ const busy = reactive<Record<string, boolean>>({})
 const errors = reactive<Record<string, string>>({})
 const bindingOverride = reactive<Record<string, number | null>>({})
 const governanceToolsOverride = reactive<Record<number, string[]>>({})
+const displayRemarkOverride = reactive<Record<string, string>>({})
+const displayIconOverride = reactive<Record<string, string>>({})
+const displayIconSettingOverride = reactive<Record<string, string>>({})
+
+const DEVICE_ICON_PRESETS = Array.from({ length: 8 }, (_, index) => `/device_png/${index + 1}.webp`)
+const DEVICE_ICON_CACHE_BUST = Date.now().toString(36)
+
+const deviceIconUrl = (url: string) => {
+  if (!url.startsWith('/device_png/')) return url
+  return `${url}${url.includes('?') ? '&' : '?'}v=${DEVICE_ICON_CACHE_BUST}`
+}
 
 const parseMcpTools = (raw?: string): string[] => {
   try {
@@ -224,6 +235,42 @@ const confirmDeleteRecord = async () => {
   }
 }
 
+const deviceSettingsTarget = ref<ConnectedDevice | null>(null)
+const deviceSettingsDraft = reactive({ remark: '', icon: '' })
+const openDeviceSettings = (device: ConnectedDevice) => {
+  deviceSettingsTarget.value = device
+  deviceSettingsDraft.remark = displayRemark(device)
+  deviceSettingsDraft.icon = device.id in displayIconSettingOverride
+    ? displayIconSettingOverride[device.id]
+    : device.iconOverride ?? device.icon ?? ''
+}
+const closeDeviceSettings = () => {
+  deviceSettingsTarget.value = null
+}
+const selectDeviceIcon = (icon: string) => {
+  deviceSettingsDraft.icon = icon
+}
+const saveDeviceSettings = async () => {
+  const device = deviceSettingsTarget.value
+  if (!device) return
+  busy[device.id] = true
+  errors[device.id] = ''
+  try {
+    const data = await updateDeviceDisplay(device.id, {
+      remark: deviceSettingsDraft.remark,
+      icon: deviceSettingsDraft.icon,
+    })
+    displayRemarkOverride[device.id] = data.remark || ''
+    displayIconOverride[device.id] = data.icon || ''
+    displayIconSettingOverride[device.id] = data.iconOverride || ''
+    closeDeviceSettings()
+  } catch (err: any) {
+    errors[device.id] = err?.message || '显示设置保存失败'
+  } finally {
+    busy[device.id] = false
+  }
+}
+
 // 内置工具箱作坊：多绑，现在在作坊面板支持分配绑定 + MCP 范围勾选（像其他设备一样）。
 const isToolboxDevice = (device: ConnectedDevice) => String(device.id || '').startsWith('toolbox_builtin_')
 
@@ -249,6 +296,8 @@ const isWorkshopDevice = (device: ConnectedDevice) => {
   const platform = String(device.platform || '').toLowerCase()
   return platform.includes('workshop')
 }
+
+const canCustomizeDevice = (device: ConnectedDevice) => !isToolboxDevice(device) && !isWorkshopDevice(device)
 
 const isSoftwareDevice = (device: ConnectedDevice) => {
   if (device.deviceType) return device.deviceType === 'desktop'
@@ -298,8 +347,20 @@ const isEndpointDevice = (device: ConnectedDevice) => {
   return isSoftwareDevice(device) || isAndroidDevice(device) || !!device.isBrowserExtension || platform.includes('browser') || isWorkshopDevice(device) || isCustomDevice(device)
 }
 
+const displayRemark = (device: ConnectedDevice) => {
+  if (device.id in displayRemarkOverride) return displayRemarkOverride[device.id]
+  return String(device.remark || '').trim()
+}
+
 const deviceDisplayName = (device: ConnectedDevice) => {
-  return device.name || device.id || deviceTypeLabel(device)
+  const base = device.name || device.id || deviceTypeLabel(device)
+  const remark = displayRemark(device)
+  return remark ? `${base}（${remark}）` : base
+}
+
+const deviceIcon = (device: ConnectedDevice) => {
+  const icon = device.id in displayIconOverride ? displayIconOverride[device.id] : device.icon || ''
+  return icon ? deviceIconUrl(icon) : ''
 }
 
 const lifecycleLabel = (lifecycle?: string) => {
@@ -385,10 +446,6 @@ const deviceCardClass = (device: ConnectedDevice) => {
   return baseBorder + bg
 }
 
-const memberLabelClass = (device: ConnectedDevice) => hasAnyLinked(device)
-  ? 'text-emerald-600 dark:text-emerald-300'
-  : 'text-amber-600 dark:text-amber-300'
-
 const memberStatusLabel = (device: ConnectedDevice) => {
   const names = getBoundMemberNames(device)
   if (names.length === 0) {
@@ -442,9 +499,10 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
             <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="lifecycleClass(device.lifecycle)"></span>
             <!-- 设备自选图标（注册时上报）；未选择时保持网页默认样式 -->
             <img
-              v-if="device.icon"
-              :src="device.icon"
-              class="w-5 h-5 rounded-md object-cover shrink-0 select-none"
+              v-if="deviceIcon(device)"
+              :src="deviceIcon(device)"
+              class="w-5 h-5 rounded-md object-contain shrink-0 select-none"
+              :class="isOffline(device) ? 'opacity-60 grayscale' : ''"
               alt=""
               @error="($event.target as HTMLImageElement).style.display = 'none'"
             />
@@ -461,6 +519,16 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
           <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
             {{ lifecycleLabel(device.lifecycle) }}
           </span>
+          <button
+            v-if="canCustomizeDevice(device)"
+            type="button"
+            :disabled="busy[device.id]"
+            title="设备显示设置"
+            class="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-200 bg-white/70 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            @click="openDeviceSettings(device)"
+          >
+            <AppIcon name="gear" class="w-3.5 h-3.5" />
+          </button>
           <button
             v-if="isOffline(device) && !isToolboxDevice(device) && !isWorkshopDevice(device)"
             type="button"
@@ -601,6 +669,84 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
       @save="emit('save-role-mcp-permissions')"
       @close="roleEditor = null"
     />
+
+    <!-- Device display customization modal -->
+    <Transition name="fade">
+      <div
+        v-if="deviceSettingsTarget"
+        class="absolute inset-0 modal-overlay flex items-center justify-center p-4 z-50"
+        @click="closeDeviceSettings"
+      >
+        <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[430px] p-4" @click.stop>
+          <div class="flex items-center justify-between mb-3">
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">设备显示设置</div>
+              <div class="mt-0.5 text-[10px] text-zinc-400 truncate">{{ deviceSettingsTarget.name || deviceSettingsTarget.id }}</div>
+            </div>
+            <button class="text-zinc-400 hover:text-zinc-600" @click="closeDeviceSettings">✕</button>
+          </div>
+
+          <label class="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">备注</label>
+          <input
+            v-model.trim="deviceSettingsDraft.remark"
+            maxlength="64"
+            class="w-full rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
+            placeholder="例如：客厅电脑、测试手机、仓库传感器"
+          />
+
+          <div class="mt-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">图标</div>
+          <div class="mt-2 grid grid-cols-5 gap-2">
+            <button
+              type="button"
+              class="h-12 rounded-lg border text-[11px] transition-colors"
+              :class="!deviceSettingsDraft.icon ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200' : 'border-zinc-200 bg-white/70 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:bg-zinc-800'"
+              @click="selectDeviceIcon('')"
+            >
+              默认
+            </button>
+            <button
+              v-for="icon in DEVICE_ICON_PRESETS"
+              :key="icon"
+              type="button"
+              class="h-12 rounded-lg border p-1 transition-colors"
+              :class="deviceSettingsDraft.icon === icon ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-500/40 dark:bg-indigo-500/10' : 'border-zinc-200 bg-white/70 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900/60 dark:hover:bg-zinc-800'"
+              @click="selectDeviceIcon(icon)"
+            >
+              <img :src="deviceIconUrl(icon)" class="mx-auto h-9 w-9 rounded-md object-contain" alt="" />
+            </button>
+          </div>
+
+          <label class="mt-3 block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">自定义图标 URL</label>
+          <input
+            v-model.trim="deviceSettingsDraft.icon"
+            class="w-full rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 text-xs outline-none transition-colors focus:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
+            placeholder="/device_png/3.webp 或 https://..."
+          />
+
+          <div v-if="errors[deviceSettingsTarget.id]" class="mt-2 text-[10px] text-rose-500">
+            {{ errors[deviceSettingsTarget.id] }}
+          </div>
+
+          <div class="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              class="text-xs px-3 py-1.5 rounded border border-zinc-200 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              @click="closeDeviceSettings"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              :disabled="busy[deviceSettingsTarget.id]"
+              class="text-xs px-3 py-1.5 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"
+              @click="saveDeviceSettings"
+            >
+              {{ busy[deviceSettingsTarget.id] ? '保存中...' : '保存' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Member selection modal for assign (contained within workshop column) -->
     <Transition name="fade">

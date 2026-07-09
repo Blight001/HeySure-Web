@@ -62,11 +62,13 @@ export interface WorldMember {
 export interface WorldWorkshop {
   deviceId: string
   name: string
-  type: 'desktop' | 'browser' | 'android' | 'workshop'
+  remark: string
+  type: 'desktop' | 'browser' | 'android' | 'workshop' | 'custom'
   lifecycle: string
   aiConfigId: number | null
   lastError: string | null
   platform: string
+  icon: string
   capabilities: number
   online: boolean
 }
@@ -110,17 +112,19 @@ const roleOf = (row: Record<string, any>): MemberRole => {
   return 'member'
 }
 
-const workshopTypeOf = (raw: Record<string, any>): 'desktop' | 'browser' | 'android' | 'workshop' | null => {
+const workshopTypeOf = (raw: Record<string, any>): WorldWorkshop['type'] | null => {
   const platform = String(raw.platform || '').toLowerCase()
   const id = String(raw.id || '')
+  const declared = String(raw.deviceType || raw.device_type || '').toLowerCase()
   if (raw.isToolbox) return null // 工具箱在游戏世界里没有对应建筑，不作为作坊显示（避免显示成图书馆）
   // 知识与进化工坊（图书馆）：服务端内置，常在线（/api/agents/connected 注入虚拟条目）
-  if (raw.isWorkshop || platform.includes('workshop')) return 'workshop'
-  if (raw.isAndroid || platform.includes('android')) return 'android'
-  if (raw.isWindowsDesktop || id.startsWith('win-desktop-') || platform.includes('desktop') || platform.includes('windows')) {
+  if (declared === 'workshop' || raw.isWorkshop || platform.includes('workshop')) return 'workshop'
+  if (declared === 'android' || raw.isAndroid || platform.includes('android')) return 'android'
+  if (declared === 'desktop' || raw.isWindowsDesktop || id.startsWith('win-desktop-') || platform.includes('desktop') || platform.includes('windows')) {
     return 'desktop'
   }
-  if (raw.isBrowserExtension || platform.includes('browser')) return 'browser'
+  if (declared === 'browser' || raw.isBrowserExtension || platform.includes('browser')) return 'browser'
+  if (declared === 'custom' || raw.isCustomDevice) return 'custom'
   return null
 }
 
@@ -275,11 +279,13 @@ export class WorldStore {
       workshops.push({
         deviceId: String(raw.id || raw.socketId || ''),
         name: String(raw.name || raw.id || 'agent'),
+        remark: String(raw.remark || ''),
         type,
         lifecycle: String(raw.lifecycle || 'connected'),
         aiConfigId: workshopAiConfigId(raw),
         lastError: raw.lastError ? String(raw.lastError) : null,
         platform: String(raw.platform || ''),
+        icon: String(raw.icon || ''),
         capabilities: Array.isArray(raw.capabilities) ? raw.capabilities.length : 0,
         online: raw.online !== false && String(raw.lifecycle || '').toLowerCase() !== 'offline',
       })

@@ -15,6 +15,10 @@ export interface ConnectedDeviceRow {
   deviceType?: string
   /** 设备注册时自选的图标 URL（/device_png/N.webp 或绝对 URL），空 = 网页默认样式 */
   icon?: string
+  /** 用户在作坊面板保存的显示备注，展示在设备名后面 */
+  remark?: string
+  /** 用户覆盖图标；存在时 icon 会优先返回这个值 */
+  iconOverride?: string
   capabilities?: any[]
   version?: string
   lifecycle?: string
@@ -39,6 +43,13 @@ export const assignDeviceAi = (deviceId: string, aiConfigId: number | null) =>
     '/api/devices/bind',
     { deviceId, aiConfigId },
     { fallbackError: '分配 AI 失败' },
+  )
+
+export const updateDeviceDisplay = (deviceId: string, payload: { remark?: string; icon?: string }) =>
+  put<{ ok: boolean; deviceId: string; remark: string; icon: string; iconOverride: string }>(
+    `/api/devices/${encodeURIComponent(deviceId)}/display`,
+    { remark: payload.remark || '', icon: payload.icon || '' },
+    { fallbackError: '设备显示设置保存失败' },
   )
 
 // Forget an offline device entirely: drops its saved AI binding, presence

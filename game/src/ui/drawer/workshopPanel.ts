@@ -9,6 +9,11 @@ const SCREEN_TYPES: ReadonlyArray<WorldWorkshop['type']> = ['desktop', 'browser'
 const canViewScreen = (w: WorldWorkshop) =>
   w.online && w.lifecycle !== 'waiting' && SCREEN_TYPES.includes(w.type)
 
+const workshopDisplayName = (w: WorldWorkshop): string => {
+  const remark = String(w.remark || '').trim()
+  return remark ? `${w.name}（${remark}）` : w.name
+}
+
 export const openWorkshopPanel = (
   panel: PanelController,
   deviceId: string,
@@ -23,9 +28,11 @@ export const openWorkshopPanel = (
       ? '瞭望塔（浏览器 Agent）'
       : w.type === 'android'
         ? '移动工坊（安卓端）'
-        : '图书馆'
+        : w.type === 'custom'
+          ? '自定义设备'
+          : '图书馆'
   panel.openPanel({
-    title: `${typeTitle} · ${w.name}`,
+    title: `${typeTitle} · ${workshopDisplayName(w)}`,
     subtitle: w.lifecycle === 'waiting' ? '等待连接' : w.lifecycle === 'dispatching' ? '执行中' : w.online ? '在线' : '离线',
     portrait,
     tabs: [
@@ -34,7 +41,7 @@ export const openWorkshopPanel = (
         build: () => {
           const info = panel.section('设备')
           panel.rows(info, [
-            ['名称', w.name],
+            ['名称', workshopDisplayName(w)],
             ['平台', w.platform || 'unknown'],
             ['状态', w.lifecycle === 'waiting' ? '等待连接' : w.lifecycle === 'dispatching' ? '执行中' : w.online ? '在线' : '离线'],
             ['工具', `${w.capabilities} 个端侧工具`],

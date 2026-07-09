@@ -39,6 +39,10 @@ export interface ConnectedDevice {
   deviceType?: string
   /** 设备注册时自选的图标 URL；空 = 网页默认样式。 */
   icon?: string
+  /** 用户备注，显示在设备名后面。 */
+  remark?: string
+  /** 用户覆盖图标；存在时 icon 已按该值生效。 */
+  iconOverride?: string
   capabilities: string[]
   /** 图书馆治理类 MCP（prompt/admin/device/knowledge.manage）。 */
   libraryGovernanceTools?: string[]
@@ -429,6 +433,8 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     isAndroid: !!raw?.isAndroid,
     deviceType: raw?.deviceType ? String(raw.deviceType).toLowerCase() : undefined,
     icon: raw?.icon ? String(raw.icon) : undefined,
+    remark: raw?.remark ? String(raw.remark) : undefined,
+    iconOverride: raw?.iconOverride ? String(raw.iconOverride) : undefined,
     capabilities: Array.isArray(raw?.capabilities) ? raw.capabilities.map((c: any) => String(c)) : [],
     libraryGovernanceTools: Array.isArray(raw?.libraryGovernanceTools)
       ? raw.libraryGovernanceTools.map((c: any) => String(c))

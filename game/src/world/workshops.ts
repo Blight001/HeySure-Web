@@ -16,6 +16,7 @@ export const workshopGlowTintForType = (type: WorldWorkshop['type']): number => 
   if (type === 'browser') return 0x72d8ff
   if (type === 'android') return 0x63f0a8
   if (type === 'workshop') return 0xc99cff
+  if (type === 'custom') return 0xff8fc7
   return 0xffd36b
 }
 

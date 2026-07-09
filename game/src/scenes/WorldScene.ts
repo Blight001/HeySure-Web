@@ -60,7 +60,35 @@ import {
 import { Drawer } from '../ui/drawer'
 import { createDrawerActions } from '../ui/drawer/actions'
 import type { Overlay, TooltipData } from '../ui/overlay'
-import { buildingTooltipData, hudHtml, memberTooltipData, workshopTooltipData } from '../ui/worldText'
+import { buildingTooltipData, hudHtml, memberTooltipData, workshopDisplayName, workshopTooltipData } from '../ui/worldText'
+
+const DEVICE_ICON_CACHE_BUST = Date.now().toString(36)
+
+const deviceIconLoadUrl = (url: string): string => {
+  if (!url.startsWith('/device_png/')) return url
+  return `${url}${url.includes('?') ? '&' : '?'}v=${DEVICE_ICON_CACHE_BUST}`
+}
+
+const CUSTOM_WORKSHOP_ICON_SIZE = 138
+const CUSTOM_LIBRARY_ICON_SIZE = 168
+const WORKSHOP_LABEL_GAP = 8
+const WORKSHOP_LABEL_WRAP_WIDTH = 170
+
+const setSpriteMaxDisplaySize = (sprite: Phaser.GameObjects.Sprite, maxSize: number) => {
+  const width = sprite.frame?.realWidth || sprite.frame?.width || sprite.width
+  const height = sprite.frame?.realHeight || sprite.frame?.height || sprite.height
+  if (!width || !height) {
+    sprite.setScale(1)
+    return
+  }
+  sprite.setScale(Math.min(maxSize / width, maxSize / height))
+}
+
+const positionWorkshopLabel = (view: WorkshopView) => {
+  const topY = view.sprite.y - view.sprite.displayHeight * view.sprite.originY
+  view.label.setPosition(view.sprite.x, topY - WORKSHOP_LABEL_GAP)
+  view.label.setDepth(view.sprite.depth + 12)
+}
 
 export class WorldScene extends Phaser.Scene {
   private store!: WorldStore
@@ -68,6 +96,8 @@ export class WorldScene extends Phaser.Scene {
   private drawer!: Drawer
   private actors = new Map<number, MemberActor>()
   private workshops = new Map<string, WorkshopView>()
+  private deviceIconLoads = new Set<string>()
+  private deviceIconFailures = new Set<string>()
   private buildings = new Map<string, Phaser.GameObjects.Sprite>()
   private snap: WorldSnapshot | null = null
   private draggingActor: MemberActor | null = null
@@ -1470,6 +1500,80 @@ export class WorldScene extends Phaser.Scene {
     return null
   }
 
+  private deviceIconTextureKey(url: string): string {
+    let hash = 2166136261
+    for (let i = 0; i < url.length; i++) {
+      hash ^= url.charCodeAt(i)
+      hash = Math.imul(hash, 16777619)
+    }
+    return `device_icon_${url.length}_${(hash >>> 0).toString(36)}`
+  }
+
+  private ensureDeviceIconTexture(key: string, url: string) {
+    if (this.textures.exists(key) || this.deviceIconLoads.has(key) || this.deviceIconFailures.has(key)) return
+    this.deviceIconLoads.add(key)
+    const img = new Image()
+    if (/^https?:\/\//i.test(url)) img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      this.deviceIconLoads.delete(key)
+      if (!this.textures.exists(key)) this.textures.addImage(key, img)
+      this.refreshWorkshopTextures()
+    }
+    img.onerror = () => {
+      this.deviceIconLoads.delete(key)
+      this.deviceIconFailures.add(key)
+      this.refreshWorkshopTextures()
+    }
+    img.src = deviceIconLoadUrl(url)
+  }
+
+  private workshopTextureKey(workshop: WorldWorkshop): string {
+    const url = String(workshop.icon || '').trim()
+    if (!url) return workshopSheetForType(workshop.type)
+    const key = this.deviceIconTextureKey(url)
+    this.ensureDeviceIconTexture(key, url)
+    return this.textures.exists(key) ? key : workshopSheetForType(workshop.type)
+  }
+
+  private applyWorkshopTexture(view: WorkshopView) {
+    const key = this.workshopTextureKey(view.data)
+    const customIconLoaded = key.startsWith('device_icon_')
+    if (view.textureKey !== key) {
+      view.sprite.stop()
+      view.sprite.setTexture(key)
+      view.sprite.setFrame(0)
+      view.textureKey = key
+      view.sprite.setInteractive({ pixelPerfect: !customIconLoaded })
+      view.sprite.setData('tooltip', () => this.workshopTooltip(view))
+      view.sprite.setData('deviceId', view.data.deviceId)
+    }
+    view.sprite.setOrigin(0.5, customIconLoaded ? 0.5 : 0.6)
+    if (customIconLoaded) {
+      const size = view.data.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
+      setSpriteMaxDisplaySize(view.sprite, size)
+    } else {
+      view.sprite.setScale(view.data.type === 'workshop' ? LIBRARY_DEVICE_SCALE : WORKSHOP_SCALE)
+    }
+    view.sprite.setAlpha(view.offlineSince !== null || !view.data.online ? 0.62 : 1)
+    this.syncWorkshopLabel(view)
+  }
+
+  private syncWorkshopLabel(view: WorkshopView) {
+    view.label.setText(workshopDisplayName(view.data))
+    view.label.setAlpha(view.offlineSince !== null || !view.data.online ? 0.72 : 1)
+    positionWorkshopLabel(view)
+  }
+
+  private refreshWorkshopTextures() {
+    for (const view of this.workshops.values()) this.applyWorkshopTexture(view)
+  }
+
+  private workshopAnimKey(view: WorkshopView): string {
+    const url = String(view.data.icon || '').trim()
+    if (url && view.sprite.texture.key === this.deviceIconTextureKey(url)) return ''
+    return `${view.sprite.texture.key}:loop`
+  }
+
   private reconcileWorkshops(snap: WorldSnapshot) {
     const seen = new Set<string>()
     // 绑定成员索引：避免循环内对每个作坊都线性 find（O(作坊×成员) → O(作坊)）
@@ -1482,7 +1586,8 @@ export class WorldScene extends Phaser.Scene {
         // 临时插槽占位创建；本轮末尾 relayoutWorkshopSlots() 会按 AI 分组重排到最终位置。
         const slot = w.type === 'workshop' ? -1 : this.firstFreeSlot()
         const pos = w.type === 'workshop' ? LIBRARY_DEVICE_POS : workshopSlotPos(slot)
-        const sheet = workshopSheetForType(w.type)
+        const textureKey = this.workshopTextureKey(w)
+        const customIconLoaded = textureKey.startsWith('device_icon_')
         const taskGlow = this.add.image(pos.x, pos.y - 24, 'glow.png', 0)
         taskGlow.setBlendMode(Phaser.BlendModes.ADD)
         taskGlow.setTint(workshopGlowTintForType(w.type))
@@ -1490,15 +1595,33 @@ export class WorldScene extends Phaser.Scene {
         // 夜幕遮罩 depth=150000；任务高光需要位于其上方才不会在夜间消失。
         taskGlow.setDepth(155100)
         taskGlow.setAlpha(0)
-        const sprite = this.add.sprite(pos.x, pos.y, sheet, 0)
-        sprite.setOrigin(0.5, 0.6)
-        sprite.setScale(w.type === 'workshop' ? LIBRARY_DEVICE_SCALE : WORKSHOP_SCALE)
+        const sprite = this.add.sprite(pos.x, pos.y, textureKey, 0)
+        sprite.setOrigin(0.5, customIconLoaded ? 0.5 : 0.6)
+        if (customIconLoaded) {
+          const size = w.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
+          setSpriteMaxDisplaySize(sprite, size)
+        } else {
+          sprite.setScale(w.type === 'workshop' ? LIBRARY_DEVICE_SCALE : WORKSHOP_SCALE)
+        }
         sprite.setDepth(pos.y)
+        const label = this.add.text(pos.x, pos.y, workshopDisplayName(w), {
+          fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
+          fontSize: '12px',
+          color: '#fff4d2',
+          backgroundColor: '#14100dcc',
+          padding: { x: 5, y: 2 },
+          align: 'center',
+          wordWrap: { width: WORKSHOP_LABEL_WRAP_WIDTH, useAdvancedWrap: true },
+          lineSpacing: -1,
+        })
+        label.setOrigin(0.5, 1)
         // 同建筑：像素级命中，避免点到作坊贴图透明边距而误开抽屉。
-        sprite.setInteractive({ pixelPerfect: true })
+        sprite.setInteractive({ pixelPerfect: !customIconLoaded })
         view = {
           sprite,
           taskGlow,
+          label,
+          textureKey,
           slot,
           data: w,
           offlineSince: w.online ? null : Date.now(),
@@ -1521,14 +1644,15 @@ export class WorldScene extends Phaser.Scene {
         view.sprite.setFrame(0)
         view.sprite.setTint(w.lifecycle === 'waiting' ? 0xb9c4d8 : 0x8a8a8a)
       }
+      this.applyWorkshopTexture(view)
       // 动效：绑定成员在干活 or agent 正在执行任务
       const boundMember = w.aiConfigId !== null ? memberById.get(w.aiConfigId) : undefined
       const active = workshopIsActive(w, boundMember)
       view.taskActive = !!active
       if (!active) view.taskGlow.setAlpha(0)
-      const animKey = `${view.sprite.texture.key}:loop`
+      const animKey = this.workshopAnimKey(view)
       if (active) {
-        if (view.sprite.anims.currentAnim?.key !== animKey || !view.sprite.anims.isPlaying) {
+        if (animKey && (view.sprite.anims.currentAnim?.key !== animKey || !view.sprite.anims.isPlaying)) {
           view.sprite.play(animKey)
         }
       } else {
@@ -1545,9 +1669,12 @@ export class WorldScene extends Phaser.Scene {
         view.sprite.stop()
         view.sprite.setFrame(0)
         view.sprite.setTint(0x8a8a8a)
+        view.sprite.setAlpha(0.62)
+        this.syncWorkshopLabel(view)
       } else if (now - view.offlineSince > OFFLINE_KEEP_MS) {
         view.taskGlow.destroy()
         view.sprite.destroy()
+        view.label.destroy()
         this.workshops.delete(deviceId)
       }
     }
@@ -1589,6 +1716,7 @@ export class WorldScene extends Phaser.Scene {
       view.sprite.setPosition(pos.x, pos.y)
       view.sprite.setDepth(pos.y)
       view.taskGlow.setPosition(pos.x, pos.y - 24)
+      this.applyWorkshopTexture(view)
     })
   }
 

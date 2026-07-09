@@ -13,6 +13,11 @@ export const MEMBER_ROLE_LABELS: Record<WorldMember['role'], string> = {
   member: '数字成员',
 }
 
+export const workshopDisplayName = (workshop: WorldWorkshop): string => {
+  const remark = String(workshop.remark || '').trim()
+  return remark ? `${workshop.name}（${remark}）` : workshop.name
+}
+
 export const memberTooltipData = (member: WorldMember): TooltipData => {
   const ratio = member.tokenLimit > 0 ? member.tokensUsed / member.tokenLimit : undefined
   return {
@@ -50,11 +55,19 @@ export const workshopTooltipData = (
       ],
     }
   }
+  const title =
+    workshop.type === 'desktop'
+      ? '机械坊（桌面 Agent）'
+      : workshop.type === 'android'
+        ? '移动工坊（安卓端）'
+        : workshop.type === 'custom'
+          ? '自定义设备'
+          : '瞭望塔（浏览器 Agent）'
   return {
-    title: workshop.type === 'desktop' ? '机械坊（桌面 Agent）' : '瞭望塔（浏览器 Agent）',
+    title,
     badge: workshop.lifecycle === 'waiting' ? '等待连接' : view.offlineSince !== null ? '离线' : workshop.lifecycle === 'dispatching' ? '执行中' : '在线',
     rows: [
-      { label: '设备', value: `${workshop.name}（${workshop.platform || 'unknown'}）` },
+      { label: '设备', value: `${workshopDisplayName(workshop)}（${workshop.platform || 'unknown'}）` },
       { label: '成员', value: workshop.lifecycle === 'waiting' ? '连接后可分配' : boundMember ? `${boundMember.name}（ID ${boundMember.id}）` : '未分配' },
       { label: '工具', value: `${workshop.capabilities} 个端侧工具` },
       { label: '错误', value: workshop.lastError || '' },
