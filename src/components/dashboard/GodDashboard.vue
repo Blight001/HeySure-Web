@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useMessage } from '@/composables/useMessage'
 import { useMcpAndWorkspaceModal } from '@/composables/dashboard/useMcpAndWorkspaceModal'
 import { useTaskManagement } from '@/composables/dashboard/useTaskManagement'
@@ -35,6 +35,7 @@ const TaskManagementModal = defineAsyncComponent(() => import('./modals/TaskMana
 const AiConfigModal = defineAsyncComponent(() => import('./modals/AiConfigModal.vue'))
 const AdminModal = defineAsyncComponent(() => import('./modals/AdminModal.vue'))
 const DeviceDevDocModal = defineAsyncComponent(() => import('./modals/DeviceDevDocModal.vue'))
+const MessageDialog = defineAsyncComponent(() => import('@/components/common/MessageDialog.vue'))
 
 const { alert, confirm } = useMessage()
 
@@ -304,6 +305,147 @@ const closeAgentChat = () => {
   chatInitialSessionId.value = ''
   chatCurrentSessionId.value = ''
   chatTaskPlanRefreshSignal.value = 0
+  // v-if 卸载后内联几何样式随元素消失，标志位必须一并复位，
+  // 否则下次打开会以"无定位的悬浮态"渲染
+  chatFloating.value = false
+  endChatDrag()
+  closeChatPip()
+}
+
+// ── 聊天悬浮小窗（桌面端）────────────────────────────────────
+// 把居中弹窗切换为右下角可拖拽/可缩放的悬浮面板，去掉遮罩层以便同时操作
+// 仪表盘。同一 DOM 节点只切换 class，ChatInterface 不会重挂载、会话不丢。
+// 几何（left/top/width/height）全部命令式写到 el.style：宽高由浏览器原生
+// resize 拖角改写，交给 Vue 绑定会在重渲染时被覆盖（同 RemoteControlModal）。
+const chatFloating = ref(false)
+const chatPanelRef = ref<HTMLElement | null>(null)
+const chatFloatConstraints = { minWidth: '320px', minHeight: '380px', maxWidth: '96vw', maxHeight: '92vh' }
+const CHAT_FLOAT_MARGIN = 16
+
+const toggleChatFloating = async () => {
+  chatFloating.value = !chatFloating.value
+  await nextTick()
+  const el = chatPanelRef.value
+  if (!el) return
+  if (chatFloating.value) {
+    const w = Math.min(420, window.innerWidth - CHAT_FLOAT_MARGIN * 2)
+    const h = Math.min(620, window.innerHeight - CHAT_FLOAT_MARGIN * 2)
+    el.style.width = `${w}px`
+    el.style.height = `${h}px`
+    el.style.left = `${window.innerWidth - w - CHAT_FLOAT_MARGIN}px`
+    el.style.top = `${window.innerHeight - h - CHAT_FLOAT_MARGIN}px`
+  } else {
+    endChatDrag()
+    el.style.width = ''
+    el.style.height = ''
+    el.style.left = ''
+    el.style.top = ''
+  }
+}
+
+const clampChatFloatIntoView = () => {
+  const el = chatPanelRef.value
+  if (!el || !chatFloating.value) return
+  const rect = el.getBoundingClientRect()
+  el.style.left = `${Math.min(Math.max(rect.left, CHAT_FLOAT_MARGIN), Math.max(CHAT_FLOAT_MARGIN, window.innerWidth - rect.width - CHAT_FLOAT_MARGIN))}px`
+  el.style.top = `${Math.min(Math.max(rect.top, CHAT_FLOAT_MARGIN), Math.max(CHAT_FLOAT_MARGIN, window.innerHeight - rect.height - CHAT_FLOAT_MARGIN))}px`
+}
+
+let chatDragOffset: { dx: number; dy: number } | null = null
+const onChatDragMove = (e: PointerEvent) => {
+  const el = chatPanelRef.value
+  if (!el || !chatDragOffset) return
+  const rect = el.getBoundingClientRect()
+  el.style.left = `${Math.min(Math.max(e.clientX - chatDragOffset.dx, CHAT_FLOAT_MARGIN), Math.max(CHAT_FLOAT_MARGIN, window.innerWidth - rect.width - CHAT_FLOAT_MARGIN))}px`
+  el.style.top = `${Math.min(Math.max(e.clientY - chatDragOffset.dy, CHAT_FLOAT_MARGIN), Math.max(CHAT_FLOAT_MARGIN, window.innerHeight - rect.height - CHAT_FLOAT_MARGIN))}px`
+}
+const endChatDrag = () => {
+  chatDragOffset = null
+  window.removeEventListener('pointermove', onChatDragMove)
+  window.removeEventListener('pointerup', endChatDrag)
+}
+const onChatHeaderPointerDown = (e: PointerEvent) => {
+  if (!chatFloating.value) return
+  // 头部里的按钮/任务进度等可交互元素不触发拖动
+  if ((e.target as HTMLElement).closest('button, a, input, textarea, select, [data-chat-drag-ignore]')) return
+  const el = chatPanelRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  chatDragOffset = { dx: e.clientX - rect.left, dy: e.clientY - rect.top }
+  window.addEventListener('pointermove', onChatDragMove)
+  window.addEventListener('pointerup', endChatDrag)
+  e.preventDefault()
+}
+
+// ── 聊天桌面置顶小窗（Document Picture-in-Picture，Chrome/Edge 116+）────
+// 与页面内悬浮窗不同：这是操作系统级的置顶窗口，切到其他应用也悬浮在最前。
+// 只把面板 DOM Teleport 进 PiP 文档展示，逻辑仍运行在主页面（Socket/会话不断）。
+// 该 API 要求安全上下文（https 或 localhost），不满足时按钮自动隐藏。
+const chatPipSupported = typeof window !== 'undefined' && 'documentPictureInPicture' in window
+const chatPipContainer = ref<HTMLElement | null>(null)
+const chatPipActive = computed(() => !!chatPipContainer.value)
+let chatPipWindow: Window | null = null
+
+const closeChatPip = () => {
+  const win = chatPipWindow
+  chatPipWindow = null
+  chatPipContainer.value = null
+  if (win && !win.closed) win.close()
+}
+
+const openChatPip = async () => {
+  if (!chatPipSupported || chatPipWindow) return
+  // 从页面内悬浮态进入时先复位其内联几何，避免 left/top/resize 带进 PiP
+  if (chatFloating.value) {
+    chatFloating.value = false
+    endChatDrag()
+    const panel = chatPanelRef.value
+    if (panel) {
+      panel.style.width = ''
+      panel.style.height = ''
+      panel.style.left = ''
+      panel.style.top = ''
+    }
+  }
+  try {
+    const pip: Window = await (window as unknown as {
+      documentPictureInPicture: { requestWindow(options: { width: number; height: number }): Promise<Window> }
+    }).documentPictureInPicture.requestWindow({ width: 420, height: 640 })
+    // PiP 是一份空白文档：把主页面样式表整份同步过去，Tailwind 类才会生效
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        const style = pip.document.createElement('style')
+        style.textContent = Array.from(sheet.cssRules).map(rule => rule.cssText).join('\n')
+        pip.document.head.appendChild(style)
+      } catch {
+        // 跨域样式表读不了 cssRules，退回 <link> 引用
+        if (sheet.href) {
+          const link = pip.document.createElement('link')
+          link.rel = 'stylesheet'
+          link.href = sheet.href
+          pip.document.head.appendChild(link)
+        }
+      }
+    }
+    // 同步主题（暗色模式靠 <html> 上的 class）与底色
+    pip.document.documentElement.className = document.documentElement.className
+    pip.document.documentElement.style.height = '100%'
+    pip.document.body.className = 'overflow-hidden bg-zinc-50 dark:bg-zinc-950'
+    pip.document.body.style.height = '100%'
+    pip.document.body.style.margin = '0'
+    const host = pip.document.createElement('div')
+    host.style.height = '100%'
+    pip.document.body.appendChild(host)
+    // 用户点 PiP 窗口自带的关闭/返回按钮时，面板自动还原为页面内弹窗
+    pip.addEventListener('pagehide', () => {
+      chatPipWindow = null
+      chatPipContainer.value = null
+    })
+    chatPipWindow = pip
+    chatPipContainer.value = host
+  } catch (err) {
+    console.warn('打开桌面置顶小窗失败', err)
+  }
 }
 
 const chatTargetAiKind = computed<'assistant' | 'core'>(() => {
@@ -418,11 +560,15 @@ onMounted(async () => {
   }
   startDashboardRefreshLoop()
   document.addEventListener('visibilitychange', handleDashboardVisibilityChange)
+  window.addEventListener('resize', clampChatFloatIntoView)
 })
 
 onUnmounted(() => {
   stopDashboardRefreshLoop()
   document.removeEventListener('visibilitychange', handleDashboardVisibilityChange)
+  window.removeEventListener('resize', clampChatFloatIntoView)
+  endChatDrag()
+  closeChatPip()
 })
 </script>
 
@@ -637,10 +783,33 @@ onUnmounted(() => {
     />
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="chatTarget && chatModalOpen" :style="{ zIndex: agentChatZIndex }" class="fixed inset-0 modal-overlay flex items-center justify-center p-0 sm:p-4" @click="closeAgentChat">
-          <!-- 手机比例：对话界面覆盖整个页面（无圆角/无边框/无外边距）；≥sm 恢复居中弹窗 -->
-          <div class="acrylic-modal rounded-none sm:rounded-2xl !border-0 sm:!border shadow-xl w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0" @click.stop>
-            <div class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200/60 bg-white/40 px-2 py-2 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:px-3 sm:py-2.5">
+        <div
+          v-if="chatTarget && chatModalOpen"
+          :style="{ zIndex: agentChatZIndex }"
+          class="fixed inset-0"
+          :class="(chatFloating || chatPipActive) ? 'pointer-events-none' : 'modal-overlay flex items-center justify-center p-0 sm:p-4'"
+          @click="(chatFloating || chatPipActive) ? undefined : closeAgentChat()"
+        >
+          <!-- 手机比例：对话界面覆盖整个页面（无圆角/无边框/无外边距）；≥sm 恢复居中弹窗；
+               悬浮模式（仅桌面）：可拖拽/可缩放的固定定位小窗，几何由 el.style 命令式管理；
+               桌面置顶模式：面板 Teleport 进 Document PiP 窗口，占满整个 PiP 文档 -->
+          <Teleport :to="chatPipContainer ?? 'body'" :disabled="!chatPipActive">
+          <div
+            ref="chatPanelRef"
+            class="acrylic-modal shadow-xl flex flex-col overflow-hidden"
+            :class="chatPipActive
+              ? 'h-full w-full rounded-none !border-0'
+              : chatFloating
+                ? 'pointer-events-auto fixed rounded-2xl resize'
+                : 'rounded-none sm:rounded-2xl !border-0 sm:!border w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0'"
+            :style="chatFloating ? chatFloatConstraints : undefined"
+            @click.stop
+          >
+            <div
+              class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200/60 bg-white/40 px-2 py-2 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:px-3 sm:py-2.5"
+              :class="chatFloating ? 'cursor-move select-none' : ''"
+              @pointerdown="onChatHeaderPointerDown"
+            >
               <!-- 脱出按钮：左上角，返回上一页面 -->
               <button
                 class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
@@ -655,7 +824,7 @@ onUnmounted(() => {
                 <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</div>
                 <div class="truncate text-[11px] text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
               </div>
-              <div class="min-w-0 max-w-[55%] shrink-0">
+              <div class="min-w-0 max-w-[55%] shrink-0" data-chat-drag-ignore>
                 <TaskProgressPanel
                   :configId="chatTarget.aiConfigId"
                   :sessionId="chatCurrentSessionId"
@@ -663,6 +832,37 @@ onUnmounted(() => {
                   header
                 />
               </div>
+              <!-- 悬浮小窗切换：仅桌面端（移动端聊天固定全屏）；桌面置顶时隐藏 -->
+              <button
+                v-if="!chatPipActive"
+                class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                :title="chatFloating ? '还原为弹窗' : '缩小为页面内悬浮窗'"
+                @click="toggleChatFloating"
+              >
+                <svg v-if="!chatFloating" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 8V6a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h4" />
+                  <rect x="12" y="12" width="9" height="7" rx="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7" />
+                </svg>
+              </button>
+              <!-- 桌面置顶：Document PiP，系统级置顶小窗，跨应用悬浮（Chrome/Edge 且 https/localhost 才显示） -->
+              <button
+                v-if="chatPipSupported"
+                class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors active:scale-95"
+                :class="chatPipActive
+                  ? 'text-indigo-500 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50'
+                  : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+                :title="chatPipActive ? '退出桌面置顶，还原为弹窗' : '桌面置顶（跨应用悬浮小窗）'"
+                @click="chatPipActive ? closeChatPip() : openChatPip()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 17v4M8 21h8" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v5M9.5 8.5L12 11l2.5-2.5" />
+                </svg>
+              </button>
             </div>
             <div class="flex-1 min-h-0 p-2">
               <ChatInterface
@@ -685,7 +885,12 @@ onUnmounted(() => {
                 @refreshFiles="loadProjectContext"
               />
             </div>
+            <!-- 桌面置顶（PiP）时，App.vue 里的全局确认/提示框渲染在主窗口文档里，
+                 在 PiP 小窗内看不见；这里再挂一份实例（共享同一全局状态）让它
+                 同时出现在 PiP 文档内，点哪边都能响应 -->
+            <MessageDialog v-if="chatPipActive" />
           </div>
+          </Teleport>
         </div>
       </Transition>
     </Teleport>

@@ -14,6 +14,7 @@ import { getAuthToken } from '@/api/http'
 import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
 import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { formatDurationMs } from '@/utils/datetime'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const { alert, confirm, prompt } = useMessage()
 interface ChatMessage {
@@ -198,30 +199,19 @@ const frontPromptPreviewText = computed(() => {
   if (error) return `${frontPromptBodyText.value}\n\n（工具目录加载失败：${error}）`
   return frontPromptBodyText.value
 })
-const copyFrontPrompt = async () => {
+const copyFrontPrompt = async (event?: Event) => {
   const text = frontPromptPreviewText.value
   if (!text) return
-  try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.setAttribute('readonly', 'true')
-      textarea.style.position = 'fixed'
-      textarea.style.left = '-9999px'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-    }
-    frontPromptCopied.value = true
-    window.setTimeout(() => {
-      frontPromptCopied.value = false
-    }, 1200)
-  } catch (error) {
-    console.warn('copy front prompt failed', error)
+  // 传入触发按钮定位真实所在窗口：面板可能在 Document PiP 小窗里
+  const contextEl = (event?.currentTarget || event?.target) as Element | null
+  if (!(await copyTextToClipboard(text, contextEl))) {
+    console.warn('copy front prompt failed')
+    return
   }
+  frontPromptCopied.value = true
+  window.setTimeout(() => {
+    frontPromptCopied.value = false
+  }, 1200)
 }
 // Live elapsed of the CURRENT segment only, updated by timeTick every 200 ms.
 // The segment restarts on every phase change and on every MCP tool switch (see

@@ -4,6 +4,7 @@ import InlineContent from './InlineContent.vue'
 import type { InlineContent as InlineContentType } from '@/utils/chatParser'
 import { computed, ref } from 'vue'
 import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import { parseMcpToolBubbleDetails } from '@/utils/mcpFormat'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
@@ -105,30 +106,19 @@ const userMessageCopyText = computed(() => {
   return String(props.message.display_text || props.message.content || '')
 })
 
-const copyText = async (text: string, target: string) => {
+const copyText = async (text: string, target: string, event?: Event) => {
   const value = String(text || '')
   if (!value) return
-  try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value)
-    } else {
-      const textarea = document.createElement('textarea')
-      textarea.value = value
-      textarea.setAttribute('readonly', 'true')
-      textarea.style.position = 'fixed'
-      textarea.style.left = '-9999px'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-    }
-    copiedTarget.value = target
-    window.setTimeout(() => {
-      if (copiedTarget.value === target) copiedTarget.value = ''
-    }, 1200)
-  } catch (error) {
-    console.warn('copy failed', error)
+  // 传入触发按钮定位真实所在窗口：面板可能在 Document PiP 小窗里
+  const contextEl = (event?.currentTarget || event?.target) as Element | null
+  if (!(await copyTextToClipboard(value, contextEl))) {
+    console.warn('copy failed')
+    return
   }
+  copiedTarget.value = target
+  window.setTimeout(() => {
+    if (copiedTarget.value === target) copiedTarget.value = ''
+  }, 1200)
 }
 
 const normalizedInlineContent = computed<InlineContentType[]>(() => {
@@ -277,7 +267,7 @@ const attachedMcpToolCount = computed(() =>
         <div v-if="!props.readonly && props.message.role === 'user' && !isSystemNoticeMessage" class="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <!-- Copy Button -->
           <button
-            @click.stop="copyText(userMessageCopyText, `user-${props.idx}`)"
+            @click.stop="copyText(userMessageCopyText, `user-${props.idx}`, $event)"
             class="w-6 h-6 rounded-full bg-zinc-600 text-white flex items-center justify-center shadow-md hover:bg-zinc-700 transition-colors"
             :title="copiedTarget === `user-${props.idx}` ? '已复制' : '复制用户消息'"
           >
@@ -342,7 +332,7 @@ const attachedMcpToolCount = computed(() =>
               <button
                 class="absolute right-0 top-0 w-6 h-6 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 flex items-center justify-center transition-colors"
                 :title="copiedTarget === `mcp-${props.idx}` ? '已复制' : '复制全部 MCP 信息'"
-                @click.stop.prevent="copyText(mcpToolSections.copyText, `mcp-${props.idx}`)"
+                @click.stop.prevent="copyText(mcpToolSections.copyText, `mcp-${props.idx}`, $event)"
               >
                 <svg v-if="copiedTarget !== `mcp-${props.idx}`" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 8h10v10H8z" />
@@ -468,7 +458,7 @@ const attachedMcpToolCount = computed(() =>
             <button
               class="front-prompt-detail-action"
               :title="copiedTarget === `front-prompt-details-${props.idx}` ? '已复制' : '复制详情'"
-              @click.stop="copyText(frontPromptDetailsText, `front-prompt-details-${props.idx}`)"
+              @click.stop="copyText(frontPromptDetailsText, `front-prompt-details-${props.idx}`, $event)"
             >
               {{ copiedTarget === `front-prompt-details-${props.idx}` ? '已复制' : '复制' }}
             </button>
