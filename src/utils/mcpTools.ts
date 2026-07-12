@@ -120,7 +120,7 @@ const getEndpointCapabilityTag = (name: string) => {
 const getMcpToolFallbackTag = (name: string) => {
   const endpointCapabilityTag = getEndpointCapabilityTag(name)
   if (endpointCapabilityTag) return endpointCapabilityTag
-  // workspace.run_command（终端/文件操作）、workspace.search（联网搜索）同归「工作区」。
+  // workspace.run+command（终端/文件操作）、workspace.search（联网搜索）同归「工作区」。
   if (hasMcpPrefix(name, 'workspace')) return '工作区'
   if (hasMcpPrefix(name, 'librarian')) return '图书馆'
   if (hasMcpPrefix(name, 'knowledge')) return '知识总结'
@@ -152,19 +152,18 @@ const getMcpToolSource = (name: string): 'server' | 'desktop' | 'browser' => {
 }
 
 const MCP_TOOL_ZH_LABELS: Record<string, string> = {
-  'mcp.list_tools': '工具列表',
-  'mcp.describe_tool': '工具说明',
+  'mcp.describe+tool': '工具说明',
   'workspace.search': '联网搜索',
-  'workspace.run_command': '执行命令',
+  'workspace.run+command': '执行命令',
   'admin.manage': '系统总览',
   'task.manage': '任务管理',
-  'message.send_to_user': '发给用户',
-  'message.send_to_ai': '发给 AI',
+  'message.send+to+user': '发给用户',
+  'message.send+to+ai': '发给 AI',
   'conversation.manage': '会话管理',
   'prompt.manage': 'Prompt 管理',
   'mode.manage': '工作模式',
   'knowledge.manage': '知识库管理',
-  'device_mcp.manage': '管理设备 MCP',
+  'device+mcp.manage': '管理设备 MCP',
   'mcp.manage_dynamic_tool': '管理动态 MCP',
   'browser_mcp.manage_dynamic_tool': '管理动态 MCP',
   browser_observe: '页面观察',

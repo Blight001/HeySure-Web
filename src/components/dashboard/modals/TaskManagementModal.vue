@@ -442,7 +442,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                 :disabled="!taskCreateForm.schedule_enabled"
                 @change="onScheduleLoopEnabledChange"
               />
-              <span>循环运行（每次完成后自动创建下一次定时任务）</span>
+              <span>循环运行（每轮完成后原任务自动续期，仍可编辑或暂停）</span>
             </label>
             <label
               v-if="taskCreateForm.schedule_enabled && taskCreateForm.schedule_loop_enabled"

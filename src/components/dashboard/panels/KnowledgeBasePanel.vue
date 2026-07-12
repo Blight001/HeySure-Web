@@ -1439,7 +1439,7 @@ const closeDetail = () => {
                       class="border-t border-zinc-100 px-3 py-3 dark:border-zinc-800"
                     >
                       <div class="mb-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                        编辑服务端工具说明（保存后同步 mcp.list_tools / mcp.describe_tool）。工具箱与图书管理工具共享此编辑。
+                        编辑服务端工具说明（保存后同步工具目录与 mcp.describe+tool）。工具箱与图书管理工具共享此编辑。
                       </div>
                       <div class="space-y-2">
                         <details

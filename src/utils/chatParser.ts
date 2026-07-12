@@ -30,7 +30,7 @@ const parseMcpPayload = (raw: string): { tool: string; arguments: Record<string,
     return { tool, arguments: args };
   } catch {
     // fallback to XML-like payload:
-    // <tool>workspace.run_command</tool>
+    // <tool>workspace.run+command</tool>
     // <arguments>{"paths":["a.txt"]}</arguments>
   }
 

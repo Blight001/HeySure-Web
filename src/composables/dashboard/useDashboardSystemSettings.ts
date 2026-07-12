@@ -42,7 +42,7 @@ const clampMcpHistoryResultChars = (value: unknown) => {
 }
 
 const DEFAULT_MCP_NAMESPACE_HINTS = JSON.stringify({
-  mcp: 'MCP 自省入口。先用 mcp.list_tools 查看命名空间；需要参数时用 mcp.describe_tool。',
+  mcp: 'MCP 自省入口。使用 mcp.describe+tool 的 tool、tools 或 query 参数发现工具并查询参数。',
   task: '任务系统。用于查看、创建、更新、删除、传承和完成任务。',
   workspace: '工作区与命令执行。用于检查文件、运行只读诊断命令或执行用户明确要求的工作区操作。',
   admin: '系统与 Agent 总览。用于查看在线智能体、运行状态和系统概况。',
@@ -57,7 +57,7 @@ const DEFAULT_MCP_NAMESPACE_HINTS = JSON.stringify({
   project: '项目管理。用于查看或维护项目记录。',
 }, null, 2)
 
-const DEFAULT_MCP_DYNAMIC_RULE = `系统提示的[动态 MCP 说明]目录会一次性列出全部可调用工具的名称与简介，模型据此直接定位。需要参数时用 mcp.describe_tool（支持 tool 单个、tools 批量或 query 关键词搜索）取 schema；被加载的目标工具会在随后轮次直接可调用。
+const DEFAULT_MCP_DYNAMIC_RULE = `系统提示的[动态 MCP 说明]目录会一次性列出全部可调用工具的名称与简介，模型据此直接定位。需要参数时用 mcp.describe+tool（支持 tool 单个、tools 批量或 query 关键词搜索）取 schema；被加载的目标工具会在随后轮次直接可调用。
 
 browser_tab 仅 7 种动作：list 获取全部页面（id/url/title/active）及 activeTab；switch+tab_id 切换到已有页；replace+url 在当前页覆盖跳转；navigate+url 新标签打开；close 关闭；back/forward 历史导航。流程：先 list，已开则 switch，当前页改址用 replace，并行任务用 navigate。`
 
@@ -117,7 +117,7 @@ export const useDashboardSystemSettings = (options: UseDashboardSystemSettingsOp
   const mcpDynamicRule = ref(DEFAULT_MCP_DYNAMIC_RULE)
   const globalMcpCallMethod = ref(`When you want to call a tool, output one or more blocks using EXACTLY this format and do not wrap them in markdown code fences:
 <mcp-call>
-{"tool":"workspace.run_command","arguments":{"command":"dir"}}
+{"tool":"workspace.run+command","arguments":{"command":"dir"}}
 </mcp-call>
 
 可用的 MCP namespace：
@@ -125,8 +125,8 @@ export const useDashboardSystemSettings = (options: UseDashboardSystemSettingsOp
 
 Rules:
 - Explain your intent in normal text first when helpful, then emit the MCP call block.
-- Do not assume tool arguments. Use mcp.list_tools first when you need capabilities, then use mcp.describe_tool before calling a target tool.
-- Use workspace.run_command for workspace inspection, file reads, file writes, edits, deletion, and command execution.
+- Do not assume tool arguments. Use mcp.describe+tool with a tool, tools, or query request to discover capabilities and load schemas before calling a target tool.
+- Use workspace.run+command for workspace inspection, file reads, file writes, edits, deletion, and command execution.
 - Use admin.* tools when managing connected agents.
 - Only fall back to legacy File/Create File/Delete File/Run Command formats if MCP is unavailable.`)
   const globalMcpFormatErrorHint = ref(`[系统提示] 检测到你正在尝试调用 MCP，但调用格式未通过校验，因此本次没有执行任何工具。
@@ -134,12 +134,12 @@ Rules:
 请改用以下标准格式（任选其一）：
 1) JSON 方式（推荐）
 <mcp-call>
-{"tool":"workspace.run_command","arguments":{"command":"dir"}}
+{"tool":"workspace.run+command","arguments":{"command":"dir"}}
 </mcp-call>
 
 2) XML-like 方式
 <mcp-call>
-<tool>workspace.run_command</tool>
+<tool>workspace.run+command</tool>
 <arguments>{"command":"dir"}</arguments>
 </mcp-call>
 
@@ -247,7 +247,7 @@ Rules:
 - 消息内容:
 {content}
 
-如果消息内容要求你回话、确认或补充状态，请调用 MCP 工具 \`message.send_to_ai\` 回发消息给发送方：
+如果消息内容要求你回话、确认或补充状态，请调用 MCP 工具 \`message.send+to+ai\` 回发消息给发送方：
   arguments: {{"to_ai_config_id": {from_ai_config_id}, "content": "<你的回复>", "require_reply": false}}
 这样发送方会作为新收件方被系统唤醒处理你的回信。`)
   const promptAiMessageInquiry = ref(`[AI 间通信 · 询问]
@@ -259,10 +259,10 @@ Rules:
 - 询问内容:
 {content}
 
-回复方式：调用 MCP 工具 \`message.send_to_ai\`，参数如下：
+回复方式：调用 MCP 工具 \`message.send+to+ai\`，参数如下：
   {{"to_ai_config_id": {from_ai_config_id}, "content": "<你的答复>", "message_type": "reply", "require_reply": false, "reply_to_message_id": "{message_id}", "current_session_id": "{current_session_id}"}}
 
-回复后如仍需沟通，可以继续使用 \`message.send_to_ai\`。`)
+回复后如仍需沟通，可以继续使用 \`message.send+to+ai\`。`)
   const aiMessageInquiryReminderSeconds = ref(3)
   const promptAiMessageInquiryReminder = ref(`[系统提示 · AI 间询问待回复]
 你仍有一条来自 {from_ai_name} 的询问尚未回复，系统正在等待这个闭环。
@@ -273,7 +273,7 @@ Rules:
 - 询问内容:
 {content}
 
-请立即先答复这条询问。回复方式：调用 MCP 工具 \`message.send_to_ai\`，参数必须包含：
+请立即先答复这条询问。回复方式：调用 MCP 工具 \`message.send+to+ai\`，参数必须包含：
 {{"to_ai_config_id": {from_ai_config_id}, "content": "<你的答复>", "message_type": "reply", "require_reply": false, "reply_to_message_id": "{message_id}", "current_session_id": "{current_session_id}"}}`)
   const promptAiMessageReply = ref(`[AI 间通信 · 收到答复]
 你之前的询问已收到对方答复。

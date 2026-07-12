@@ -509,7 +509,7 @@ const buildMcpCatalogSection = (groups: McpCatalogToolGroup[]) => {
   return [
     `[${CLIENT_MCP_CATALOG_TITLE}]`,
     '以下是本轮对话勾选携带的 MCP 工具目录（名称 + 简介，`!` 表示有副作用）。',
-    '需要调用时，先用一次 mcp.describe_tool（tool / tools / query）获取参数 schema，再发起调用。',
+    '需要调用时，先用一次 mcp.describe+tool（tool / tools / query）获取参数 schema，再发起调用。',
     '',
     renderGroupedMcpToolCatalog(groups),
   ].join('\n')
@@ -604,7 +604,7 @@ const buildAttachedPathSection = (paths: string[]) => {
   const lines = normalized.map(path => `- ${path.endsWith('/') ? '文件夹' : '文件'}: \`${path}\``)
   return [
     '[本轮附加工作区路径]',
-    '用户勾选了以下工作区路径。路径均按当前 AI 工作目录视角给出。不要假设内容已被直接提供；如需查看，请使用 workspace.run_command 执行 shell 命令（如 type/cat 读取、dir/ls 列目录）自行读取、列目录或检索。',
+    '用户勾选了以下工作区路径。路径均按当前 AI 工作目录视角给出。不要假设内容已被直接提供；如需查看，请使用 workspace.run+command 执行 shell 命令（如 type/cat 读取、dir/ls 列目录）自行读取、列目录或检索。',
     ...lines,
   ].join('\n')
 }
@@ -1008,7 +1008,7 @@ const handleWheel = () => {
 // think or after a tool call is committed ("sent") into the visible history
 // without waiting for the entire multi-step AI process to finish.
 let lastFinishedRunId = ''
-const STREAM_PLAN_TOOLS = ['plan.create', 'plan.phase_complete', 'plan.finish']
+const STREAM_PLAN_TOOLS = ['plan.create', 'plan.phase+complete', 'plan.finish']
 
 const handleStreamLive = (payload: RunLivePayload) => {
   const runId = String(payload?.run_id || '')
@@ -1797,7 +1797,7 @@ const pollRunLive = async (epoch: number) => {
     const incomingTool = String(run.current_tool || '')
     // Refresh the task header progress exactly when the flow advances.
     if (incomingTool !== currentMcpTool.value
-      && ['plan.create', 'plan.phase_complete', 'plan.finish'].includes(incomingTool)) {
+      && ['plan.create', 'plan.phase+complete', 'plan.finish'].includes(incomingTool)) {
       bumpTaskPlan()
     }
     if (incomingTool && incomingTool !== currentMcpTool.value

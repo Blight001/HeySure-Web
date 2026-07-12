@@ -4,17 +4,16 @@
  * is empty.
  */
 export const DEFAULT_MCP_TOOLS = [
-  'mcp.list_tools',
-  'mcp.describe_tool',
+  'mcp.describe+tool',
   'workspace.search',
-  'workspace.run_command',
+  'workspace.run+command',
   'admin.manage',
-  'device_mcp.manage',
+  'device+mcp.manage',
   'task.manage',
   'prompt.manage',
   'mode.manage',
   'knowledge.manage',
-  'message.send_to_user',
-  'message.send_to_ai',
+  'message.send+to+user',
+  'message.send+to+ai',
   'conversation.manage',
 ] as const
