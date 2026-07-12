@@ -2,12 +2,18 @@ type ThemeMode = 'light' | 'dark'
 type FontSize = 'sm' | 'md' | 'lg'
 export type BrainViewMode = 'sections' | 'all'
 
+export type ModelPresetProvider = 'api' | 'cli'
+
 export interface ModelPreset {
   id: string
   name: string
   api_key: string
   base_url: string
   model: string
+  /** 'api'（HTTP 接口，默认）或 'cli'（本机命令行程序，如 grok CLI） */
+  provider?: ModelPresetProvider
+  /** provider === 'cli' 时的命令名或可执行文件完整路径 */
+  cli_command?: string
 }
 
 export type UserRole = 'owner' | 'admin' | 'member'
@@ -24,6 +30,9 @@ export interface User {
   tavily_api_key?: string
   model_presets?: string
   mcp_max_steps?: number
+  mcp_history_compaction_enabled?: boolean
+  mcp_history_result_max_chars?: number
+  conversation_auto_compress_enabled?: boolean
   mcp_call_method?: string
   mcp_namespace_hints?: string
   mcp_dynamic_rule?: string

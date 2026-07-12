@@ -59,6 +59,8 @@ const normalizePresets = (raw: any) => {
   if (!Array.isArray(parsed)) return []
   return parsed
     .map((item: any) => {
+      // CLI 预设走本机命令行，无法用于 HTTP 直连的 AI 测试，直接排除。
+      if (String(item?.provider || 'api').trim().toLowerCase() === 'cli') return null
       const id = String(item?.id || item?.model || '').trim()
       const model = String(item?.model || '').trim()
       const apiKey = String(item?.api_key || '').trim()

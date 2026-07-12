@@ -84,6 +84,9 @@ const {
   tavilyApiKey,
   modelPresets,
   mcpMaxSteps,
+  mcpHistoryCompactionEnabled,
+  mcpHistoryResultMaxChars,
+  conversationAutoCompressEnabled,
   globalMcpCallMethod,
   mcpNamespaceHints,
   mcpDynamicRule,
@@ -935,6 +938,9 @@ onUnmounted(() => {
       v-model:tavilyApiKey="tavilyApiKey"
       v-model:modelPresets="modelPresets"
       v-model:mcpMaxSteps="mcpMaxSteps"
+      v-model:mcpHistoryCompactionEnabled="mcpHistoryCompactionEnabled"
+      v-model:mcpHistoryResultMaxChars="mcpHistoryResultMaxChars"
+      v-model:conversationAutoCompressEnabled="conversationAutoCompressEnabled"
       @save="saveSystemSettings"
     />
 

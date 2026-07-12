@@ -29,6 +29,9 @@ interface Props {
   tavilyApiKey: string
   modelPresets: ModelPreset[]
   mcpMaxSteps: number
+  mcpHistoryCompactionEnabled: boolean
+  mcpHistoryResultMaxChars: number
+  conversationAutoCompressEnabled: boolean
 }
 
 const props = defineProps<Props>()
@@ -58,6 +61,9 @@ const emit = defineEmits<{
   (e: 'update:tavilyApiKey', value: string): void
   (e: 'update:modelPresets', value: ModelPreset[]): void
   (e: 'update:mcpMaxSteps', value: number): void
+  (e: 'update:mcpHistoryCompactionEnabled', value: boolean): void
+  (e: 'update:mcpHistoryResultMaxChars', value: number): void
+  (e: 'update:conversationAutoCompressEnabled', value: boolean): void
   (e: 'save'): void
 }>()
 
@@ -82,11 +88,14 @@ const modelPresetsValue = computed({
 })
 
 const expandedModelPresetIds = ref<Set<string>>(new Set())
-const isModelPresetComplete = (preset: ModelPreset) =>
-  !!String(preset.name || '').trim()
-  && !!String(preset.model || '').trim()
-  && !!String(preset.api_key || '').trim()
-  && !!String(preset.base_url || '').trim()
+const isCliPreset = (preset: ModelPreset) => String(preset.provider || 'api') === 'cli'
+const isModelPresetComplete = (preset: ModelPreset) => {
+  const base = !!String(preset.name || '').trim() && !!String(preset.model || '').trim()
+  if (isCliPreset(preset)) return base && !!String(preset.cli_command || '').trim()
+  return base
+    && !!String(preset.api_key || '').trim()
+    && !!String(preset.base_url || '').trim()
+}
 const modelPresetKey = (preset: ModelPreset, index: number) => preset.id || `model_${index}`
 const isModelPresetExpanded = (preset: ModelPreset, index: number) =>
   expandedModelPresetIds.value.has(modelPresetKey(preset, index)) || !isModelPresetComplete(preset)
@@ -105,7 +114,7 @@ const addModelPreset = () => {
   expandedModelPresetIds.value = next
   modelPresetsValue.value = [
     ...modelPresetsValue.value,
-    { id, name: '新模型', api_key: '', base_url: '', model: '' },
+    { id, name: '新模型', api_key: '', base_url: '', model: '', provider: 'api', cli_command: '' },
   ]
 }
 
@@ -136,6 +145,21 @@ const removeModelPreset = (index: number) => {
 const mcpMaxStepsValue = computed({
   get: () => Number(props.mcpMaxSteps || 48),
   set: value => emit('update:mcpMaxSteps', Math.max(1, Math.min(999, Math.floor(Number(value) || 48))))
+})
+
+const mcpHistoryCompactionEnabledValue = computed({
+  get: () => props.mcpHistoryCompactionEnabled,
+  set: value => emit('update:mcpHistoryCompactionEnabled', value)
+})
+
+const mcpHistoryResultMaxCharsValue = computed({
+  get: () => Number(props.mcpHistoryResultMaxChars || 100),
+  set: value => emit('update:mcpHistoryResultMaxChars', Math.max(20, Math.min(10000, Math.floor(Number(value) || 100))))
+})
+
+const conversationAutoCompressEnabledValue = computed({
+  get: () => props.conversationAutoCompressEnabled,
+  set: value => emit('update:conversationAutoCompressEnabled', value)
 })
 
 type SettingsDialog = '' | 'models'
@@ -260,7 +284,37 @@ const openExtensionTestPage = () => {
               />
               <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 1-999。连续调用 MCP 工具时，每次模型生成和工具返回后的继续执行都会消耗一步。</p>
               </div>
+              <label class="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
+                <span>
+                  <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">自动缩减历史 MCP 返回</span>
+                  <span class="block mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">新一轮始终携带工具名和完整参数；开启后只缩短历史返回内容，关闭则保留完整返回。</span>
+                </span>
+                <input v-model="mcpHistoryCompactionEnabledValue" type="checkbox" class="h-4 w-4 accent-indigo-600" />
+              </label>
+              <div :class="{ 'opacity-50': !mcpHistoryCompactionEnabledValue }">
+                <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">每条历史 MCP 返回最多字符</div>
+                <input
+                  v-model.number="mcpHistoryResultMaxCharsValue"
+                  :disabled="!mcpHistoryCompactionEnabledValue"
+                  type="number"
+                  min="20"
+                  max="10000"
+                  class="w-full px-3 py-2 rounded-xl acrylic-input focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:text-zinc-100 transition-all text-xs disabled:cursor-not-allowed"
+                />
+                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 20-10000，默认 100。数据库和聊天界面的原始 MCP 记录不会被截断。</p>
+              </div>
             </div>
+          </div>
+
+          <div class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
+            <h4 class="text-sm font-semibold text-zinc-800 mb-3 dark:text-zinc-100 flex items-center gap-2">对话上下文</h4>
+            <label class="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
+              <span>
+                <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">达到 Token 阈值后自动摘要压缩</span>
+                <span class="block mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">关闭后不再自动压缩较早对话；AI 主动请求压缩仍可执行。</span>
+              </span>
+              <input v-model="conversationAutoCompressEnabledValue" type="checkbox" class="h-4 w-4 accent-indigo-600" />
+            </label>
           </div>
 
           <div class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
@@ -348,7 +402,7 @@ const openExtensionTestPage = () => {
                           {{ preset.name || preset.model || '未命名模型' }}
                         </span>
                         <span class="block mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-                          {{ preset.base_url || '未配置 Base URL' }}
+                          {{ isCliPreset(preset) ? `CLI：${preset.cli_command || '未配置命令'}` : (preset.base_url || '未配置 Base URL') }}
                         </span>
                         <span v-if="!isModelPresetComplete(preset)" class="block mt-0.5 text-[10px] text-amber-600 dark:text-amber-300">配置未完成</span>
                       </span>
@@ -359,21 +413,39 @@ const openExtensionTestPage = () => {
                     <div v-if="isModelPresetExpanded(preset, index)" class="px-3 pb-3 border-t border-zinc-100 dark:border-zinc-800">
                       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
                         <div>
+                          <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">接入方式</div>
+                          <select
+                            :value="preset.provider || 'api'"
+                            @change="updateModelPreset(index, { provider: ($event.target as HTMLSelectElement).value as 'api' | 'cli' })"
+                            class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs"
+                          >
+                            <option value="api">API 接口</option>
+                            <option value="cli">本机 CLI</option>
+                          </select>
+                        </div>
+                        <div>
                           <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">显示名称</div>
                           <input :value="preset.name" @input="updateModelPreset(index, { name: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" />
                         </div>
                         <div>
                           <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">模型名</div>
-                          <input :value="preset.model" @input="updateModelPreset(index, { model: ($event.target as HTMLInputElement).value, id: preset.id || ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" />
+                          <input :value="preset.model" @input="updateModelPreset(index, { model: ($event.target as HTMLInputElement).value, id: preset.id || ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" :placeholder="isCliPreset(preset) ? '如 grok-4.5' : ''" />
                         </div>
-                        <div>
-                          <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">API Key</div>
-                          <input :value="preset.api_key" type="password" autocomplete="off" @input="updateModelPreset(index, { api_key: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" />
+                        <div v-if="isCliPreset(preset)" class="md:col-span-2">
+                          <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">CLI 命令 / 可执行文件路径</div>
+                          <input :value="preset.cli_command" @input="updateModelPreset(index, { cli_command: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" placeholder="如 C:\Users\admin\.grok\bin\grok.exe" />
+                          <div class="mt-1 text-[10px] text-zinc-400 dark:text-zinc-500">CLI 需安装在运行 AI Runtime 的服务器上并已登录；对话走本机命令行订阅额度，不消耗 API Key。</div>
                         </div>
-                        <div>
-                          <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">Base URL</div>
-                          <input :value="preset.base_url" @input="updateModelPreset(index, { base_url: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" placeholder="https://.../chat/completions" />
-                        </div>
+                        <template v-else>
+                          <div>
+                            <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">API Key</div>
+                            <input :value="preset.api_key" type="password" autocomplete="off" @input="updateModelPreset(index, { api_key: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" />
+                          </div>
+                          <div>
+                            <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">Base URL</div>
+                            <input :value="preset.base_url" @input="updateModelPreset(index, { base_url: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" placeholder="https://.../chat/completions" />
+                          </div>
+                        </template>
                       </div>
                       <div class="mt-2 flex justify-end gap-2">
                         <button class="text-[11px] px-2 py-1 rounded border border-red-200 text-red-600 bg-red-50 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300" @click="removeModelPreset(index)">删除</button>

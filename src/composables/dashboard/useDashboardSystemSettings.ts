@@ -35,6 +35,12 @@ const clampMcpMaxSteps = (value: unknown) => {
   return Math.max(1, Math.min(999, Math.floor(parsed)))
 }
 
+const clampMcpHistoryResultChars = (value: unknown) => {
+  const parsed = Number(value ?? 100)
+  if (!Number.isFinite(parsed)) return 100
+  return Math.max(20, Math.min(10000, Math.floor(parsed)))
+}
+
 const DEFAULT_MCP_NAMESPACE_HINTS = JSON.stringify({
   mcp: 'MCP 自省入口。先用 mcp.list_tools 查看命名空间；需要参数时用 mcp.describe_tool。',
   task: '任务系统。用于查看、创建、更新、删除、传承和完成任务。',
@@ -67,7 +73,13 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
       const model = String(item?.model || '').trim()
       const apiKey = String(item?.api_key || '').trim()
       const baseUrl = String(item?.base_url || '').trim()
-      if (!model || !apiKey || !baseUrl) return null
+      const provider = String(item?.provider || 'api').trim().toLowerCase() === 'cli' ? 'cli' : 'api'
+      const cliCommand = String(item?.cli_command || '').trim()
+      if (provider === 'cli') {
+        if (!model || !cliCommand) return null
+      } else if (!model || !apiKey || !baseUrl) {
+        return null
+      }
       let id = String(item?.id || model || `model_${index + 1}`).trim()
       if (!id || seen.has(id)) id = `${model}_${index + 1}`
       seen.add(id)
@@ -77,6 +89,8 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
         api_key: apiKey,
         base_url: baseUrl,
         model,
+        provider,
+        cli_command: cliCommand,
       }
     })
     .filter(Boolean) as ModelPreset[]
@@ -96,6 +110,9 @@ export const useDashboardSystemSettings = (options: UseDashboardSystemSettingsOp
   const tavilyApiKey = ref('')
   const modelPresets = ref<ModelPreset[]>([])
   const mcpMaxSteps = ref(48)
+  const mcpHistoryCompactionEnabled = ref(true)
+  const mcpHistoryResultMaxChars = ref(100)
+  const conversationAutoCompressEnabled = ref(true)
   const mcpNamespaceHints = ref(DEFAULT_MCP_NAMESPACE_HINTS)
   const mcpDynamicRule = ref(DEFAULT_MCP_DYNAMIC_RULE)
   const globalMcpCallMethod = ref(`When you want to call a tool, output one or more blocks using EXACTLY this format and do not wrap them in markdown code fences:
@@ -311,6 +328,9 @@ Rules:
         tavily_api_key: tavilyApiKey.value,
         model_presets: JSON.stringify(normalizeModelPresets(modelPresets.value)),
         mcp_max_steps: clampMcpMaxSteps(mcpMaxSteps.value),
+        mcp_history_compaction_enabled: mcpHistoryCompactionEnabled.value,
+        mcp_history_result_max_chars: clampMcpHistoryResultChars(mcpHistoryResultMaxChars.value),
+        conversation_auto_compress_enabled: conversationAutoCompressEnabled.value,
         role_mcp_permissions: roleMcpPermissionsInitialized
           ? JSON.stringify(roleMcpPermissions.value)
           : (options.getCurrentUser()?.role_mcp_permissions ?? ''),
@@ -401,6 +421,15 @@ Rules:
       if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_max_steps')) {
         mcpMaxSteps.value = clampMcpMaxSteps(rawUser.mcp_max_steps)
       }
+      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_history_compaction_enabled')) {
+        mcpHistoryCompactionEnabled.value = rawUser.mcp_history_compaction_enabled !== false
+      }
+      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_history_result_max_chars')) {
+        mcpHistoryResultMaxChars.value = clampMcpHistoryResultChars(rawUser.mcp_history_result_max_chars)
+      }
+      if (Object.prototype.hasOwnProperty.call(rawUser, 'conversation_auto_compress_enabled')) {
+        conversationAutoCompressEnabled.value = rawUser.conversation_auto_compress_enabled !== false
+      }
       if (Object.prototype.hasOwnProperty.call(rawUser, 'default_start_task_prompt')) {
         defaultStartTaskPrompt.value = String(rawUser.default_start_task_prompt ?? '')
       }
@@ -466,6 +495,9 @@ Rules:
     mcpDynamicRule,
     globalMcpFormatErrorHint,
     mcpMaxSteps,
+    mcpHistoryCompactionEnabled,
+    mcpHistoryResultMaxChars,
+    conversationAutoCompressEnabled,
     defaultStartTaskPrompt,
     defaultResumeTaskPrompt,
     defaultSupervisionPrompt,
