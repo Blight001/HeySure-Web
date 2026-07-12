@@ -28,6 +28,7 @@ const props = defineProps<{
   actionResultsBySignature: Record<string, string>
   isTyping: boolean
   thinkingText?: string
+  statusText?: string
   collapseThinking?: boolean
   stripMarkdownSymbols?: boolean
   isEmpty: boolean
@@ -138,6 +139,7 @@ const emit = defineEmits<{
     <TypingIndicator
       :isTyping="isTyping"
       :thinkingText="thinkingText"
+      :statusText="statusText"
       :plainTextMode="stripMarkdownSymbols"
       :collapsed="collapseThinking"
     />

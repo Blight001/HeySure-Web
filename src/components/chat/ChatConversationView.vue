@@ -46,6 +46,7 @@ const props = withDefaults(defineProps<{
   liveTargetText?: string
   liveThinking?: string
   livePhase?: 'idle' | 'generating' | 'waiting_mcp'
+  typingStatusText?: string
   nowTimestamp?: number
   liveSegmentStartedAt?: number | null
   collapseLiveThinking?: boolean
@@ -71,6 +72,7 @@ const props = withDefaults(defineProps<{
   liveTargetText: '',
   liveThinking: '',
   livePhase: 'idle',
+  typingStatusText: '',
   nowTimestamp: 0,
   liveSegmentStartedAt: null,
   collapseLiveThinking: false,
@@ -604,6 +606,7 @@ const onRevert = (msgIdx: number, blockIdx: number) => {
     :actionResultsBySignature="mergedActionResultsBySignature"
   :isTyping="isTyping"
   :thinkingText="typingThinkingText"
+  :statusText="typingStatusText"
   :collapseThinking="collapseLiveThinking"
   :stripMarkdownSymbols="stripMarkdownSymbols"
   :isEmpty="renderMessages.length === 0"

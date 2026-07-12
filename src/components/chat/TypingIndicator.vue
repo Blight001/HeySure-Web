@@ -6,6 +6,7 @@ import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
 const props = defineProps<{
   isTyping: boolean
   thinkingText?: string
+  statusText?: string
   plainTextMode?: boolean
   collapsed?: boolean
 }>()
@@ -22,7 +23,7 @@ const renderedThinkingText = computed(() => {
     <div class="w-full max-w-[92%] min-w-0 text-sm text-zinc-500 dark:text-zinc-400">
       <div class="flex items-center gap-1.5 text-[12px] font-medium text-zinc-400 dark:text-zinc-500">
         <span class="thinking-dot h-1.5 w-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500"></span>
-        <span>深度思考中</span>
+        <span>{{ statusText || '深度思考中' }}</span>
       </div>
       <ChatCollapsible
         v-if="renderedThinkingText && collapsed"

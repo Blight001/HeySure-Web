@@ -225,7 +225,9 @@ const liveSegmentMs = computed(() => {
 const runTimingText = computed(() => {
   if (isRunActive.value) {
     if (currentRunPhase.value === 'waiting_mcp') {
-      const label = currentMcpTool.value ? `MCP: ${currentMcpTool.value}` : 'MCP 等待中'
+      const label = currentMcpTool.value
+        ? `正在执行 MCP：${currentMcpTool.value}`
+        : '正在执行 MCP'
       return `${label} · ${formatDurationMs(liveSegmentMs.value)}`
     }
     return `AI 思考中 · ${formatDurationMs(liveSegmentMs.value)}`
@@ -2475,6 +2477,7 @@ onBeforeUnmount(() => {
           :liveTargetText="liveTargetText"
           :liveThinking="liveThinkingText"
           :livePhase="currentRunPhase"
+          :typingStatusText="isRunActive ? runTimingText : ''"
           :nowTimestamp="isRunActive ? timeTick : undefined"
           :liveSegmentStartedAt="currentRunPhase === 'generating' ? phaseEnterTs ?? undefined : undefined"
           :appliedEdits="appliedEditsArray"
