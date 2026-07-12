@@ -43,7 +43,8 @@ const clampMcpHistoryResultChars = (value: unknown) => {
 
 const DEFAULT_MCP_NAMESPACE_HINTS = JSON.stringify({
   mcp: 'MCP 自省入口。使用 mcp.describe+tool 的 tool、tools 或 query 参数发现工具并查询参数。',
-  task: '任务系统。用于查看、创建、更新、删除、传承和完成任务。',
+  task: '后台任务系统。task.manage 用于查看、创建、更新和删除定时/无人值守任务，需要绑定图书馆。',
+  todo: '统一计划管理。todo.manage 用 create/get/edit/delete 创建、查看、推进或删除计划；阶段完成用 edit，最后阶段更新后系统自动收尾。',
   workspace: '工作区与命令执行。用于检查文件、运行只读诊断命令或执行用户明确要求的工作区操作。',
   admin: '系统与 Agent 总览。用于查看在线智能体、运行状态和系统概况。',
   prompt: 'Prompt 管理。用于读取或按权限修改 AI / 系统 prompt。',
@@ -232,7 +233,7 @@ Rules:
 
   const defaultStartTaskPrompt = ref('你将收到一个任务，请先理解目标、约束与优先级，然后开始执行。')
   const defaultResumeTaskPrompt = ref('请继续执行刚才被暂停的任务，先简要回顾当前进度，再继续推进直到可交付。')
-  const defaultSupervisionPrompt = ref('系统监督提醒：请确认当前任务是否已完成。若已完成可自然结束；若未完成请给出剩余步骤并继续执行。复杂任务请使用 plan.create 拆分阶段。')
+  const defaultSupervisionPrompt = ref('系统监督提醒：请确认当前任务是否已完成。若已完成可自然结束；若未完成请给出剩余步骤并继续执行。复杂任务请使用 todo.manage(action=create) 拆分阶段，阶段完成后用 action=edit 更新状态。')
   const defaultSupervisionIdleSeconds = ref(25)
   const defaultCompressionPrompt = ref(`你正在把一段较长的对话历史压缩成摘要，以便在不超出上下文上限的情况下继续同一段对话。请阅读下面的对话历史，输出一段简洁但信息完整的中文摘要，必须保留：用户的核心目标与约束、已完成的工作与关键产出、尚未完成的事项与已知风险、重要的事实/数据/结论，以及接下来应继续推进的下一步。请省略寒暄与重复内容，只输出摘要正文，不要添加额外说明或前后缀。
 

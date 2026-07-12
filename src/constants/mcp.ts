@@ -10,6 +10,7 @@ export const DEFAULT_MCP_TOOLS = [
   'admin.manage',
   'device+mcp.manage',
   'task.manage',
+  'todo.manage',
   'prompt.manage',
   'mode.manage',
   'knowledge.manage',

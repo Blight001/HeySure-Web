@@ -127,6 +127,7 @@ const getMcpToolFallbackTag = (name: string) => {
   if (hasMcpPrefix(name, 'admin')) return '概览'
   if (hasMcpPrefix(name, 'desktop')) return '桌面能力'
   if (hasMcpPrefix(name, 'task')) return '任务'
+  if (hasMcpPrefix(name, 'todo')) return '任务'
   if (hasMcpPrefix(name, 'prompt')) return 'Prompt'
   if (hasMcpPrefix(name, 'mode')) return '工作模式'
   // 发消息：发给用户 / 发给其他 AI，单独成栏，不再混入「会话管理」。
@@ -157,6 +158,7 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   'workspace.run+command': '执行命令',
   'admin.manage': '系统总览',
   'task.manage': '任务管理',
+  'todo.manage': '计划管理',
   'message.send+to+user': '发给用户',
   'message.send+to+ai': '发给 AI',
   'conversation.manage': '会话管理',
@@ -212,6 +214,7 @@ const MCP_NAMESPACE_ZH: Record<string, string> = {
   workspace: '工作区',
   admin: '管理',
   task: '任务',
+  todo: '计划',
   message: '消息',
   conversation: '会话',
   prompt: 'Prompt',
@@ -300,6 +303,7 @@ const getMcpToolZhTag = (name: string) => getMcpToolFallbackTag(name)
 const MEMORY_PREFIX_ORDER = ['memory']
 const TASK_TOOL_ORDER = [
   'task.manage',
+  'todo.manage',
 ]
 
 const getTaskToolRank = (name: string) => {

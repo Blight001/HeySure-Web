@@ -44,7 +44,7 @@ export interface ConnectedDevice {
   /** 用户覆盖图标；存在时 icon 已按该值生效。 */
   iconOverride?: string
   capabilities: string[]
-  /** 图书馆治理类 MCP（prompt/admin/device/knowledge.manage）。 */
+  /** 图书馆任务管理与治理类 MCP（task/prompt/admin/device/knowledge.manage）。 */
   libraryGovernanceTools?: string[]
   /** 完整图书馆 MCP 目录（治理类），现并入传承技能作为独立设备。 */
   libraryMcpCatalog?: LibraryMcpFullView | null

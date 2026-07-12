@@ -339,8 +339,8 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                   <input type="checkbox" v-model="form.mcp_auto_approve" />
                 </label>
                 <p class="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  系统自带 MCP（knowledge.search、workspace.*、plan.*、task.* 等）默认直接可用，无需工具箱选择/显示。
-                  工具箱/图书馆绑定主要用于治理类工具与分组展示。端侧设备 MCP 仍需各 Agent 范围单独授予。
+                  系统自带 MCP（knowledge.search、workspace.*、todo.manage 等）默认直接可用，无需工具箱选择/显示。
+                  task.manage 属于图书馆 MCP，仅向已绑定图书馆的 AI 开放；端侧设备 MCP 仍需各 Agent 范围单独授予。
                 </p>
 
                 <!-- Endpoint agents bound to this AI: per-agent MCP permission.
@@ -369,7 +369,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                     >刷新</button>
                   </div>
                   <p class="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                    工具箱：绑定后提供系统固定工具集（支持多绑，可在此或「作坊」面板管理绑定与 MCP 范围）。图书馆：治理类工具，1:1 只绑一个 AI 数字成员。
+                    工具箱：绑定后提供系统固定工具集（支持多绑，可在此或「作坊」面板管理绑定与 MCP 范围）。图书馆：任务管理与治理类工具，1:1 只绑一个 AI 数字成员。
                   </p>
                   <div v-if="workshopLoading" class="mt-2 text-[11px] text-zinc-400">加载中…</div>
                   <div v-else-if="workshopError" class="mt-2 text-[11px] text-rose-500">{{ workshopError }}</div>
@@ -397,7 +397,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                 </div>
 
                 <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  系统自带 MCP 工具现在直接调用（不受工具箱绑定硬限制）。工具箱绑定仍用于展示分组与治理工具；端侧工具由各设备范围控制。
+                  系统自带非图书馆 MCP 可直接调用；task.manage 与治理类工具要求绑定图书馆。工具箱绑定用于展示分组，端侧工具由各设备范围控制。
                 </div>
               </div>
 

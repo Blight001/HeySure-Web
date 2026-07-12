@@ -1008,7 +1008,7 @@ const handleWheel = () => {
 // think or after a tool call is committed ("sent") into the visible history
 // without waiting for the entire multi-step AI process to finish.
 let lastFinishedRunId = ''
-const STREAM_PLAN_TOOLS = ['plan.create', 'plan.phase+complete', 'plan.finish']
+const STREAM_PLAN_TOOLS = ['todo.manage']
 
 const handleStreamLive = (payload: RunLivePayload) => {
   const runId = String(payload?.run_id || '')
@@ -1797,7 +1797,7 @@ const pollRunLive = async (epoch: number) => {
     const incomingTool = String(run.current_tool || '')
     // Refresh the task header progress exactly when the flow advances.
     if (incomingTool !== currentMcpTool.value
-      && ['plan.create', 'plan.phase+complete', 'plan.finish'].includes(incomingTool)) {
+      && incomingTool === 'todo.manage') {
       bumpTaskPlan()
     }
     if (incomingTool && incomingTool !== currentMcpTool.value

@@ -44,7 +44,7 @@ export const workshopTooltipData = (
   const workshop = view.data
   if (workshop.type === 'workshop') {
     return {
-      title: '图书馆',
+      title: workshopDisplayName(workshop),
       badge: workshop.lifecycle === 'waiting' ? '等待连接' : view.offlineSince !== null ? '离线' : '在线',
       rows: [
         { label: '形态', value: '服务端内置 · 自动上线' },
@@ -55,16 +55,8 @@ export const workshopTooltipData = (
       ],
     }
   }
-  const title =
-    workshop.type === 'desktop'
-      ? '机械坊（桌面 Agent）'
-      : workshop.type === 'android'
-        ? '移动工坊（安卓端）'
-        : workshop.type === 'custom'
-          ? '自定义设备'
-          : '瞭望塔（浏览器 Agent）'
   return {
-    title,
+    title: workshopDisplayName(workshop),
     badge: workshop.lifecycle === 'waiting' ? '等待连接' : view.offlineSince !== null ? '离线' : workshop.lifecycle === 'dispatching' ? '执行中' : '在线',
     rows: [
       { label: '设备', value: `${workshopDisplayName(workshop)}（${workshop.platform || 'unknown'}）` },

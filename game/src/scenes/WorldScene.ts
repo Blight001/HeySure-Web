@@ -71,6 +71,8 @@ const deviceIconLoadUrl = (url: string): string => {
 
 const CUSTOM_WORKSHOP_ICON_SIZE = 138
 const CUSTOM_LIBRARY_ICON_SIZE = 168
+// 作坊插槽坐标表示建筑落地的基线；所有贴图都以底边锚定，避免不同高度的图片按中心对齐后根基错位。
+const WORKSHOP_BASE_ORIGIN_Y = 1
 const WORKSHOP_LABEL_GAP = 8
 const WORKSHOP_LABEL_WRAP_WIDTH = 170
 
@@ -1547,7 +1549,7 @@ export class WorldScene extends Phaser.Scene {
       view.sprite.setData('tooltip', () => this.workshopTooltip(view))
       view.sprite.setData('deviceId', view.data.deviceId)
     }
-    view.sprite.setOrigin(0.5, customIconLoaded ? 0.5 : 0.6)
+    view.sprite.setOrigin(0.5, WORKSHOP_BASE_ORIGIN_Y)
     if (customIconLoaded) {
       const size = view.data.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
       setSpriteMaxDisplaySize(view.sprite, size)
@@ -1596,7 +1598,7 @@ export class WorldScene extends Phaser.Scene {
         taskGlow.setDepth(155100)
         taskGlow.setAlpha(0)
         const sprite = this.add.sprite(pos.x, pos.y, textureKey, 0)
-        sprite.setOrigin(0.5, customIconLoaded ? 0.5 : 0.6)
+        sprite.setOrigin(0.5, WORKSHOP_BASE_ORIGIN_Y)
         if (customIconLoaded) {
           const size = w.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
           setSpriteMaxDisplaySize(sprite, size)
