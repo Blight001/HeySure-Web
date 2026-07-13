@@ -45,22 +45,40 @@ const planningDone = computed(() => !!data.value?.has_plan)
 const finished = computed(() => stage.value === 'finished')
 const outcome = computed(() => data.value?.outcome ?? '')
 
+// 轮询结果与上次一致时跳过赋值，避免每 2s 重渲染 + 重复触发自动居中造成流程条抖动
+let lastPayloadJson = ''
+
 const refresh = async () => {
   const token = getAuthToken()
   const sid = String(props.sessionId || '').trim()
   if (!token || props.configId === undefined || props.configId === null || !sid) {
     data.value = null
+    lastPayloadJson = ''
     return
   }
   loading.value = true
   try {
-    data.value = await fetchTaskPlan(props.configId, sid, token)
-    // After data update (esp. from polling or signal), try to center active if user idle
-    if (props.header) {
-      nextTick(() => requestAutoCenterIfIdle())
+    const next = await fetchTaskPlan(props.configId, sid, token)
+    const json = JSON.stringify(next)
+    if (json !== lastPayloadJson) {
+      lastPayloadJson = json
+      data.value = next
+      // 悬停详情卡片打开时，把 phase 换成最新对象，保持内容实时
+      if (hovered.value?.kind === 'phase' && hovered.value.phase) {
+        const seq = hovered.value.phase.seq
+        const fresh = (next.plan?.phases ?? []).find(p => p.seq === seq)
+        if (fresh) hovered.value = { kind: 'phase', phase: fresh }
+      }
+      if (props.header) {
+        nextTick(() => {
+          updateEdgeState()
+          requestAutoCenterIfIdle()
+        })
+      }
     }
   } catch {
     data.value = null
+    lastPayloadJson = ''
   } finally {
     loading.value = false
   }
@@ -134,13 +152,29 @@ const flowRunning = computed(() => ['planning', 'executing', 'finishing'].includ
 
 // Hover details state (for header mode tooltips)
 const hovered = ref<null | { kind: 'arrange' | 'phase' | 'finish'; phase?: TaskPlanPhase }>(null)
+let hoverClearTimer: ReturnType<typeof setTimeout> | null = null
+const cancelHoverClear = () => {
+  if (hoverClearTimer != null) {
+    clearTimeout(hoverClearTimer)
+    hoverClearTimer = null
+  }
+}
 const showHover = (kind: 'arrange' | 'phase' | 'finish', phase?: TaskPlanPhase) => {
+  cancelHoverClear()
   hovered.value = { kind, phase }
 }
 const clearHover = () => {
+  cancelHoverClear()
   hovered.value = null
 }
-const keepTooltipOpen = () => { /* prevent clearHover when mouse moves into the tooltip */ }
+// 延迟关闭：鼠标从标题移向详情卡片会跨过间隙，立即关闭会导致卡片闪烁
+const scheduleHoverClear = () => {
+  cancelHoverClear()
+  hoverClearTimer = setTimeout(() => {
+    hoverClearTimer = null
+    hovered.value = null
+  }, 160)
+}
 
 // 触屏无 hover：点按切换详情卡片（再次点同一项则关闭），点击页面其它位置关闭
 const toggleHover = (kind: 'arrange' | 'phase' | 'finish', phase?: TaskPlanPhase) => {
@@ -157,6 +191,10 @@ const flowScrollRef = ref<HTMLDivElement | null>(null)
 const phaseEls = ref<Record<number, HTMLElement>>({})
 
 const lastUserScroll = ref(0)
+const pointerInFlow = ref(false)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+
 const setPhaseEl = (seq: number, el: any) => {
   if (el) {
     phaseEls.value[seq] = el as HTMLElement
@@ -169,23 +207,117 @@ const markUserInteraction = () => {
   lastUserScroll.value = Date.now()
 }
 
+const updateEdgeState = () => {
+  const c = flowScrollRef.value
+  if (!c) {
+    canScrollLeft.value = false
+    canScrollRight.value = false
+    return
+  }
+  canScrollLeft.value = c.scrollLeft > 2
+  canScrollRight.value = c.scrollLeft < c.scrollWidth - c.clientWidth - 2
+}
+
+const onStripScroll = () => updateEdgeState()
+
+// 垂直滚轮转为横向滚动，方便在流程条上直接滚动定位
+const onStripWheel = (e: WheelEvent) => {
+  markUserInteraction()
+  const c = flowScrollRef.value
+  if (!c) return
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) c.scrollLeft += e.deltaY
+}
+
 const scrollActiveToCenter = () => {
   const container = flowScrollRef.value
   if (!container) return
   const active = phases.value.find(p => p.status === 'active')
-  if (!active) return
-  const el = phaseEls.value[active.seq]
-  if (!el) return
-  const elCenter = el.offsetLeft + el.offsetWidth / 2
-  const target = elCenter - container.clientWidth / 2
-  container.scrollTo({ left: Math.max(0, target), behavior: 'smooth' })
+  const el = active ? phaseEls.value[active.seq] : undefined
+  let target: number
+  if (el) {
+    target = Math.max(0, el.offsetLeft + el.offsetWidth / 2 - container.clientWidth / 2)
+  } else if (finished.value || stage.value === 'finishing') {
+    target = container.scrollWidth
+  } else {
+    target = 0
+  }
+  // 已经基本就位就不再滚动，避免轮询期间反复重启 smooth 滚动造成抖动
+  if (Math.abs(container.scrollLeft - Math.min(target, container.scrollWidth - container.clientWidth)) < 8) return
+  container.scrollTo({ left: target, behavior: 'smooth' })
 }
 
 const requestAutoCenterIfIdle = () => {
-  if (Date.now() - lastUserScroll.value > 3000) {
-    nextTick(() => nextTick(scrollActiveToCenter))
+  if (pointerInFlow.value) return
+  if (Date.now() - lastUserScroll.value <= 3000) return
+  nextTick(() => nextTick(scrollActiveToCenter))
+}
+
+// 悬浮左右边缘时连续滚动（快速定位），点按则整页翻动
+let edgeScrollRaf: number | null = null
+let edgeScrollDir = 0
+const edgeScrollStep = () => {
+  const c = flowScrollRef.value
+  if (!c || edgeScrollDir === 0) {
+    edgeScrollRaf = null
+    return
+  }
+  const before = c.scrollLeft
+  c.scrollLeft = before + edgeScrollDir * 3.5
+  updateEdgeState()
+  if (c.scrollLeft === before) {
+    edgeScrollDir = 0
+    edgeScrollRaf = null
+    return
+  }
+  edgeScrollRaf = requestAnimationFrame(edgeScrollStep)
+}
+const startEdgeScroll = (dir: number) => {
+  markUserInteraction()
+  edgeScrollDir = dir
+  if (edgeScrollRaf == null) edgeScrollRaf = requestAnimationFrame(edgeScrollStep)
+}
+const stopEdgeScroll = () => {
+  edgeScrollDir = 0
+}
+const jumpScroll = (dir: number) => {
+  markUserInteraction()
+  const c = flowScrollRef.value
+  if (!c) return
+  c.scrollBy({ left: dir * c.clientWidth * 0.6, behavior: 'smooth' })
+}
+
+// 鼠标在流程条上时暂停自动居中；移开后自动回到当前任务阶段
+let returnTimer: ReturnType<typeof setTimeout> | null = null
+const onFlowMouseEnter = () => {
+  pointerInFlow.value = true
+  if (returnTimer != null) {
+    clearTimeout(returnTimer)
+    returnTimer = null
   }
 }
+const onFlowMouseLeave = () => {
+  pointerInFlow.value = false
+  stopEdgeScroll()
+  scheduleHoverClear()
+  if (returnTimer != null) clearTimeout(returnTimer)
+  returnTimer = setTimeout(() => {
+    returnTimer = null
+    lastUserScroll.value = 0
+    scrollActiveToCenter()
+  }, 500)
+}
+
+// 流程条尺寸变化（弹窗缩放 / 悬浮窗拖拽调整）时刷新边缘渐隐状态
+let stripResizeObserver: ResizeObserver | null = null
+watch(flowScrollRef, (el) => {
+  stripResizeObserver?.disconnect()
+  stripResizeObserver = null
+  if (el && typeof ResizeObserver !== 'undefined') {
+    stripResizeObserver = new ResizeObserver(() => updateEdgeState())
+    stripResizeObserver.observe(el)
+    nextTick(updateEdgeState)
+  }
+})
 
 // Polling for real-time plan status when displayed as header (top of chat)
 let headerPollInterval: ReturnType<typeof setInterval> | null = null
@@ -193,6 +325,7 @@ const startPolling = () => {
   stopPolling()
   if (!props.header || props.configId == null || !props.sessionId) return
   headerPollInterval = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return
     void refresh()
   }, 2000)
 }
@@ -211,20 +344,11 @@ watch(() => [props.header, props.configId, props.sessionId] as const, () => {
   }
 }, { immediate: true })
 
-// Auto center active phase to middle of scroll view if user has not interacted in 3s
-const activePhaseSeq = computed(() => {
-  const act = phases.value.find(p => p.status === 'active')
-  return act ? act.seq : -1
-})
-
-watch(activePhaseSeq, (seq) => {
-  if (seq < 0) return
+// 仅在阶段状态真正变化（而非每次轮询）时尝试自动居中
+const flowSignature = computed(() => `${stage.value}|${phases.value.map(p => `${p.seq}:${p.status}`).join(',')}`)
+watch(flowSignature, () => {
   requestAutoCenterIfIdle()
 })
-
-watch(phases, () => {
-  requestAutoCenterIfIdle()
-}, { deep: true })
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocPointerDown)
@@ -233,6 +357,18 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopPolling()
   document.removeEventListener('pointerdown', onDocPointerDown)
+  stripResizeObserver?.disconnect()
+  stripResizeObserver = null
+  if (edgeScrollRaf != null) {
+    cancelAnimationFrame(edgeScrollRaf)
+    edgeScrollRaf = null
+  }
+  edgeScrollDir = 0
+  cancelHoverClear()
+  if (returnTimer != null) {
+    clearTimeout(returnTimer)
+    returnTimer = null
+  }
 })
 </script>
 
@@ -242,58 +378,86 @@ onBeforeUnmount(() => {
        Hover any item (安排 / 阶段 / 结束) to see details. -->
   <div
     v-if="visible && props.header"
-    class="relative flex w-full justify-center"
+    class="relative flex w-full min-w-0 justify-center"
     :class="{ 'task-flow-running': flowRunning }"
+    @mouseenter="onFlowMouseEnter"
+    @mouseleave="onFlowMouseLeave"
   >
-    <div
-      ref="flowScrollRef"
-      class="task-flow-strip flex w-fit max-w-[320px] items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 sm:max-w-[680px] sm:text-xs"
-      @wheel.passive="markUserInteraction"
-      @mousedown="markUserInteraction"
-    >
-      <!-- 安排（蓝色） -->
-      <span
-        class="font-medium text-blue-600 dark:text-blue-400 cursor-help hover:underline decoration-dotted"
-        @mouseenter="showHover('arrange')"
-        @mouseleave="clearHover"
-        @pointerdown.stop
-        @click.stop="toggleHover('arrange')"
-      >安排</span>
-      <span class="task-flow-arrow text-zinc-400">→</span>
+    <div class="relative flex min-w-0 max-w-full">
+      <div
+        ref="flowScrollRef"
+        class="task-flow-strip flex w-fit min-w-0 max-w-[320px] items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 sm:max-w-[680px] sm:text-xs"
+        :class="{ 'task-flow-fade-l': canScrollLeft, 'task-flow-fade-r': canScrollRight }"
+        @scroll.passive="onStripScroll"
+        @wheel.passive="onStripWheel"
+        @mousedown="markUserInteraction"
+        @touchstart.passive="markUserInteraction"
+      >
+        <!-- 安排（蓝色） -->
+        <span
+          class="font-medium text-blue-600 dark:text-blue-400 cursor-help hover:underline decoration-dotted"
+          @mouseenter="showHover('arrange')"
+          @mouseleave="scheduleHoverClear"
+          @pointerdown.stop
+          @click.stop="toggleHover('arrange')"
+        >安排</span>
+        <span class="task-flow-arrow text-zinc-400">→</span>
 
-      <!-- 各阶段（颜色即状态） -->
-      <template v-for="phase in phases" :key="phase.seq">
+        <!-- 各阶段（颜色即状态） -->
+        <template v-for="phase in phases" :key="phase.seq">
+          <span
+            class="font-medium cursor-help hover:underline decoration-dotted"
+            :class="phaseTitleClass(phase)"
+            :ref="el => setPhaseEl(phase.seq, el)"
+            @mouseenter="showHover('phase', phase)"
+            @mouseleave="scheduleHoverClear"
+            @pointerdown.stop
+            @click.stop="toggleHover('phase', phase)"
+          >{{ phase.title }}</span>
+          <span class="task-flow-arrow text-zinc-400">→</span>
+        </template>
+
+        <!-- 结束（成功绿 / 失败红） -->
         <span
           class="font-medium cursor-help hover:underline decoration-dotted"
-          :class="phaseTitleClass(phase)"
-          :ref="el => setPhaseEl(phase.seq, el)"
-          @mouseenter="showHover('phase', phase)"
-          @mouseleave="clearHover"
+          :class="endTitleClass"
+          @mouseenter="showHover('finish')"
+          @mouseleave="scheduleHoverClear"
           @pointerdown.stop
-          @click.stop="toggleHover('phase', phase)"
-        >{{ phase.title }}</span>
-        <span class="task-flow-arrow text-zinc-400">→</span>
-      </template>
+          @click.stop="toggleHover('finish')"
+        >结束</span>
+      </div>
 
-      <!-- 结束（成功绿 / 失败红） -->
-      <span
-        class="font-medium cursor-help hover:underline decoration-dotted"
-        :class="endTitleClass"
-        @mouseenter="showHover('finish')"
-        @mouseleave="clearHover"
+      <!-- 左右边缘快速定位：悬浮连续滚动，点按翻页；配合渐隐遮罩提示还有更多内容 -->
+      <button
+        v-show="canScrollLeft"
+        type="button"
+        class="task-flow-edge task-flow-edge-l"
+        title="查看前面的阶段"
+        @mouseenter="startEdgeScroll(-1)"
+        @mouseleave="stopEdgeScroll"
         @pointerdown.stop
-        @click.stop="toggleHover('finish')"
-      >结束</span>
-    </div>
+        @click.stop="jumpScroll(-1)"
+      >‹</button>
+      <button
+        v-show="canScrollRight"
+        type="button"
+        class="task-flow-edge task-flow-edge-r"
+        title="查看后面的阶段"
+        @mouseenter="startEdgeScroll(1)"
+        @mouseleave="stopEdgeScroll"
+        @pointerdown.stop
+        @click.stop="jumpScroll(1)"
+      >›</button>
 
-    <!-- 共享悬停详情卡片（鼠标移到阶段上显示） -->
-    <div
-      v-if="hovered"
-      class="absolute left-0 top-full mt-1 z-[90] rounded-lg acrylic-modal shadow-xl p-2 text-[11px] leading-snug text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-200 min-w-[210px] max-w-[280px] max-h-[60vh] overflow-y-auto overscroll-contain max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh]"
-      @mouseenter="keepTooltipOpen"
-      @mouseleave="clearHover"
-      @pointerdown.stop
-    >
+      <!-- 共享悬停详情卡片（鼠标移到阶段上显示）：实底背景保证可读 -->
+      <div
+        v-if="hovered"
+        class="absolute left-1/2 top-full z-[90] mt-1.5 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white shadow-xl p-2 text-[11px] leading-snug text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 min-w-[210px] max-w-[280px] max-h-[60vh] overflow-y-auto overscroll-contain max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh] max-sm:translate-x-0"
+        @mouseenter="cancelHoverClear"
+        @mouseleave="scheduleHoverClear"
+        @pointerdown.stop
+      >
       <!-- 安排详情 -->
       <template v-if="hovered.kind === 'arrange'">
         <div class="font-semibold text-blue-700 dark:text-blue-400 mb-1">安排</div>
@@ -343,6 +507,7 @@ onBeforeUnmount(() => {
         <div v-else-if="stage === 'finishing'">所有阶段完成，正在总结收尾…</div>
         <div v-else>待所有阶段完成后总结</div>
       </template>
+      </div>
     </div>
   </div>
 
@@ -461,6 +626,62 @@ onBeforeUnmount(() => {
 
 .task-flow-strip::-webkit-scrollbar {
   display: none;
+}
+
+/* 溢出方向的边缘渐隐（虚化），提示被裁切的文字不完整、避免误读 */
+.task-flow-strip.task-flow-fade-l {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 30px);
+  mask-image: linear-gradient(90deg, transparent 0, #000 30px);
+}
+
+.task-flow-strip.task-flow-fade-r {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent 100%);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent 100%);
+}
+
+.task-flow-strip.task-flow-fade-l.task-flow-fade-r {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 30px, #000 calc(100% - 30px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 30px, #000 calc(100% - 30px), transparent 100%);
+}
+
+/* 左右边缘悬浮快速定位按钮 */
+.task-flow-edge {
+  align-items: center;
+  background: transparent;
+  border: none;
+  bottom: 4px;
+  color: rgb(37 99 235 / 0.7);
+  cursor: pointer;
+  display: flex;
+  font-size: 15px;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  width: 18px;
+  z-index: 5;
+}
+
+.task-flow-edge:hover {
+  color: rgb(37 99 235);
+}
+
+.dark .task-flow-edge {
+  color: rgb(96 165 250 / 0.8);
+}
+
+.dark .task-flow-edge:hover {
+  color: rgb(147 197 253);
+}
+
+.task-flow-edge-l {
+  left: -2px;
+}
+
+.task-flow-edge-r {
+  right: -2px;
 }
 
 .task-flow-running .task-flow-strip {

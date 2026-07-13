@@ -817,21 +817,24 @@ onUnmounted(() => {
               :class="chatFloating ? 'cursor-move select-none' : ''"
               @pointerdown="onChatHeaderPointerDown"
             >
-              <!-- 脱出按钮：左上角，返回上一页面 -->
-              <button
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                title="退出对话"
-                @click="closeAgentChat"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </button>
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</div>
-                <div class="truncate text-[11px] text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
+              <!-- 左侧组：脱出按钮 + 标题（与右侧按钮组等宽，保证任务流程条居中） -->
+              <div class="flex min-w-0 flex-1 basis-0 items-center gap-2 sm:gap-3">
+                <!-- 脱出按钮：左上角，返回上一页面 -->
+                <button
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  title="退出对话"
+                  @click="closeAgentChat"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</div>
+                  <div class="truncate text-[11px] text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
+                </div>
               </div>
-              <div class="min-w-0 max-w-[55%] shrink-0" data-chat-drag-ignore>
+              <div class="min-w-0 max-w-[55%]" data-chat-drag-ignore>
                 <TaskProgressPanel
                   :configId="chatTarget.aiConfigId"
                   :sessionId="chatCurrentSessionId"
@@ -839,37 +842,40 @@ onUnmounted(() => {
                   header
                 />
               </div>
-              <!-- 悬浮小窗切换：仅桌面端（移动端聊天固定全屏）；桌面置顶时隐藏 -->
-              <button
-                v-if="!chatPipActive"
-                class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                :title="chatFloating ? '还原为弹窗' : '缩小为页面内悬浮窗'"
-                @click="toggleChatFloating"
-              >
-                <svg v-if="!chatFloating" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 8V6a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h4" />
-                  <rect x="12" y="12" width="9" height="7" rx="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7" />
-                </svg>
-              </button>
-              <!-- 桌面置顶：Document PiP，系统级置顶小窗，跨应用悬浮（Chrome/Edge 且 https/localhost 才显示） -->
-              <button
-                v-if="chatPipSupported"
-                class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors active:scale-95"
-                :class="chatPipActive
-                  ? 'text-indigo-500 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50'
-                  : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
-                :title="chatPipActive ? '退出桌面置顶，还原为弹窗' : '桌面置顶（跨应用悬浮小窗）'"
-                @click="chatPipActive ? closeChatPip() : openChatPip()"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 17v4M8 21h8" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v5M9.5 8.5L12 11l2.5-2.5" />
-                </svg>
-              </button>
+              <!-- 右侧组：与左侧组等宽，保证任务流程条居中 -->
+              <div class="flex flex-1 basis-0 items-center justify-end gap-2 sm:gap-3">
+                <!-- 悬浮小窗切换：仅桌面端（移动端聊天固定全屏）；桌面置顶时隐藏 -->
+                <button
+                  v-if="!chatPipActive"
+                  class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  :title="chatFloating ? '还原为弹窗' : '缩小为页面内悬浮窗'"
+                  @click="toggleChatFloating"
+                >
+                  <svg v-if="!chatFloating" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 8V6a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h4" />
+                    <rect x="12" y="12" width="9" height="7" rx="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7" />
+                  </svg>
+                </button>
+                <!-- 桌面置顶：Document PiP，系统级置顶小窗，跨应用悬浮（Chrome/Edge 且 https/localhost 才显示） -->
+                <button
+                  v-if="chatPipSupported"
+                  class="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors active:scale-95"
+                  :class="chatPipActive
+                    ? 'text-indigo-500 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50'
+                    : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+                  :title="chatPipActive ? '退出桌面置顶，还原为弹窗' : '桌面置顶（跨应用悬浮小窗）'"
+                  @click="chatPipActive ? closeChatPip() : openChatPip()"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 17v4M8 21h8" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V5z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v5M9.5 8.5L12 11l2.5-2.5" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="flex-1 min-h-0 p-2">
               <ChatInterface
