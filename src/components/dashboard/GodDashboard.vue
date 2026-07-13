@@ -212,12 +212,14 @@ const {
   taskListLoading,
   taskCreatePanelOpen,
   taskCreateSubmitting,
+  taskEditingJobId,
   taskCreateForm,
   fetchAgentTaskList,
   openAgentTaskList,
   closeAgentTaskList,
   toggleTaskCreatePanel,
   openTaskCreatePanelFromJob,
+  openTaskEditPanel,
   closeTaskCreatePanel,
   onTaskCreateToolChange,
   submitTaskForAgent,
@@ -766,6 +768,7 @@ onUnmounted(() => {
       :task-list-loading="taskListLoading"
       :task-create-panel-open="taskCreatePanelOpen"
       :task-create-submitting="taskCreateSubmitting"
+      :task-editing-job-id="taskEditingJobId"
       :task-create-form="taskCreateForm"
       :available-mcp-tools="availableMcpTools"
       :default-mcp-tools="defaultMcpTools"
@@ -776,6 +779,7 @@ onUnmounted(() => {
       :on-submit-task="() => submitTaskForAgent(taskListTarget)"
       :on-task-create-tool-change="onTaskCreateToolChange"
       :on-reuse-task-template="(job) => taskListTarget && openTaskCreatePanelFromJob(taskListTarget, job)"
+      :on-edit-task-job="(job) => taskListTarget && openTaskEditPanel(taskListTarget, job)"
       :on-show-task-detail="(job) => openAgentTaskDetailFromTaskJob(job, taskListTarget)"
       :on-pause-task-job="(job) => taskListTarget && pauseTaskJob(taskListTarget, job)"
       :on-resume-task-job="(job) => taskListTarget && resumeTaskJob(taskListTarget, job)"

@@ -153,6 +153,14 @@ export const canResumeTaskJob = (job: Pick<AITaskJobItem, 'status' | 'effective_
   return st === 'paused'
 }
 
+export const canEditScheduledTaskJob = (job: AITaskJobItem) => {
+  const st = String(job.effective_status || job.status || '').toLowerCase()
+  if (['completed', 'done', 'finished', 'cancelled', 'stopped', 'error'].includes(st)) return false
+  const payload = (job.task_payload && typeof job.task_payload === 'object') ? job.task_payload : {}
+  const schedule = (payload as any).schedule
+  return !!(schedule && typeof schedule === 'object' && schedule.enabled)
+}
+
 export const getTaskJobRuntimeState = (job: AITaskJobItem): TaskRuntimeState => {
   const st = String(job.effective_status || job.status || '').toLowerCase()
   if (st === 'running') return 'running'

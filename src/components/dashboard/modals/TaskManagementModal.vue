@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { formatDateTime } from '@/utils/datetime'
 import {
   WEEKDAY_OPTIONS,
+  canEditScheduledTaskJob,
   canPauseTaskJob,
   canResumeTaskJob,
   getTaskJobRuntimeState,
@@ -29,6 +30,7 @@ interface Props {
   taskListLoading: boolean
   taskCreatePanelOpen: boolean
   taskCreateSubmitting: boolean
+  taskEditingJobId: string
   taskCreateForm: TaskCreateForm
   availableMcpTools: string[]
   defaultMcpTools: string[]
@@ -39,6 +41,7 @@ interface Props {
   onSubmitTask: () => void
   onTaskCreateToolChange: (tool: string, event: Event) => void
   onReuseTaskTemplate: (job: AITaskJobItem) => void
+  onEditTaskJob: (job: AITaskJobItem) => void
   onShowTaskDetail: (job: AITaskJobItem) => void
   onPauseTaskJob: (job: AITaskJobItem) => void
   onResumeTaskJob: (job: AITaskJobItem) => void
@@ -113,6 +116,12 @@ const allTaskJobsSelected = computed(() => {
 })
 
 const formatTs = (value?: number) => formatDateTime(value, '--')
+
+const editingJob = computed(() => props.taskJobs.find(job => job.job_id === props.taskEditingJobId) || null)
+const editingRunningTask = computed(() => {
+  const job = editingJob.value
+  return !!job && String(job.effective_status || job.status || '').toLowerCase() === 'running'
+})
 
 const onScheduleEnabledChange = (event: Event) => {
   const target = event.target as HTMLInputElement | null
@@ -307,7 +316,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                         </span>
                       </div>
                     </div>
-                    <div class="flex items-center gap-1 shrink-0">
+                    <div class="flex flex-wrap items-center justify-end gap-1 shrink-0">
                       <button
                         class="text-[11px] px-2 py-1 rounded border border-sky-200 text-sky-700 dark:border-sky-500/40 dark:text-sky-300"
                         @click="onShowTaskDetail(job)"
@@ -320,6 +329,13 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                         @click="onReuseTaskTemplate(job)"
                       >
                         使用模板新建
+                      </button>
+                      <button
+                        v-if="canEditScheduledTaskJob(job)"
+                        class="text-[11px] px-2 py-1 rounded border border-indigo-200 text-indigo-600 dark:border-indigo-500/40 dark:text-indigo-300"
+                        @click="onEditTaskJob(job)"
+                      >
+                        编辑
                       </button>
                       <button
                         v-if="canPauseTaskJob(job)"
@@ -386,8 +402,10 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
       <div class="acrylic-modal rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl w-full max-w-3xl max-h-[86vh] overflow-y-auto p-5" @click.stop>
         <div class="flex items-start justify-between gap-3 mb-4">
           <div>
-            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">新建任务</div>
-            <div class="text-xs text-zinc-500 dark:text-zinc-400">为 {{ target.name }} 创建任务并立即加入执行队列</div>
+            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ taskEditingJobId ? '编辑定时任务' : '新建任务' }}</div>
+            <div class="text-xs text-zinc-500 dark:text-zinc-400">
+              {{ taskEditingJobId ? `修改 ${target.name} 的任务规则` : `为 ${target.name} 创建任务并立即加入执行队列` }}
+            </div>
           </div>
           <button class="text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300" @click="onCloseTaskCreatePanel">关闭</button>
         </div>
@@ -400,7 +418,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
               class="w-full px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
               placeholder="例如：整理今日迭代计划"
             />
-            <div class="text-[10px] text-zinc-400 mt-1">入库时会自动追加时间后缀，避免名称重复。</div>
+            <div v-if="!taskEditingJobId" class="text-[10px] text-zinc-400 mt-1">入库时会自动追加时间后缀，避免名称重复。</div>
           </div>
           <div>
             <label class="block text-[11px] text-zinc-500 mb-1">优先级</label>
@@ -421,6 +439,13 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
               placeholder="描述目标、验收标准、约束条件"
             />
           </div>
+        </div>
+
+        <div
+          v-if="editingRunningTask"
+          class="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-[11px] text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200"
+        >
+          当前轮次已经开始，标题、内容及调度规则的修改从下一次调度生效。
         </div>
 
         <div class="mt-3 rounded-lg border border-zinc-200 dark:border-zinc-700 p-3">
@@ -593,7 +618,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
                 <label class="block text-[11px] text-zinc-500 mb-1">定时日期</label>
                 <input
                   v-model="taskCreateForm.schedule_at"
-                  type="date"
+                  type="datetime-local"
                   class="w-full md:w-72 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
                   :disabled="!taskCreateForm.schedule_enabled"
                   @keydown.prevent
@@ -708,7 +733,7 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
             :disabled="taskCreateSubmitting"
             @click="onSubmitTask"
           >
-            {{ taskCreateSubmitting ? '创建中...' : '提交任务' }}
+            {{ taskCreateSubmitting ? (taskEditingJobId ? '保存中...' : '创建中...') : (taskEditingJobId ? '保存修改' : '提交任务') }}
           </button>
         </div>
       </div>

@@ -13,6 +13,8 @@ import {
   FIXED_BUILDINGS,
   LIBRARY_DEVICE_POS,
   LIBRARY_DEVICE_SCALE,
+  MINIGAME_BUILDINGS,
+  MINIGAME_SCALE,
   TILE,
   WORKSHOP_COLS,
   WORKSHOP_SCALE,
@@ -25,6 +27,8 @@ import {
   workshopSlotPos,
   workshopZone,
   workshopBenchSeat,
+  type MinigameBuildingDef,
+  type MinigameId,
   type Point,
   type Rect,
 } from '../world/layout'
@@ -47,7 +51,7 @@ import {
   type ButterflyHome,
 } from '../world/map'
 import { skinFor } from '../world/skins'
-import { WorldStore, type WorldEvent, type WorldMember, type WorldSnapshot } from '../world/store'
+import { WorldStore, type WorldEvent, type WorldMember, type WorldSnapshot, type WorldWorkshop } from '../world/store'
 import { clockLabel, nightnessForHour, resolveWorldHour } from '../world/time'
 import { applyMemberDropBinding, type DropTarget } from '../world/bindings'
 import {
@@ -59,6 +63,7 @@ import {
 } from '../world/workshops'
 import { Drawer } from '../ui/drawer'
 import { createDrawerActions } from '../ui/drawer/actions'
+import { MINIGAME_DEFS, MinigameModal, minigameBestScore } from '../ui/minigames'
 import type { Overlay, TooltipData } from '../ui/overlay'
 import { buildingTooltipData, hudHtml, memberTooltipData, workshopDisplayName, workshopTooltipData } from '../ui/worldText'
 
@@ -96,6 +101,8 @@ export class WorldScene extends Phaser.Scene {
   private store!: WorldStore
   private overlay!: Overlay
   private drawer!: Drawer
+  /** 小游戏弹窗（点击池塘右侧游乐角建筑打开） */
+  private minigameModal = new MinigameModal()
   private actors = new Map<number, MemberActor>()
   private workshops = new Map<string, WorkshopView>()
   private deviceIconLoads = new Set<string>()
@@ -196,6 +203,7 @@ export class WorldScene extends Phaser.Scene {
     this.createGround()
     this.createDecor()
     this.createBuildings()
+    this.createMinigameBuildings()
     this.createCamera()
     this.createGovernor()
     this.createDrawer()
@@ -977,6 +985,61 @@ export class WorldScene extends Phaser.Scene {
     this.buildings.get('spawn')?.play('building_spawn.png:loop')
   }
 
+  /** 池塘右侧游乐角：三座小游戏建筑，点击打开对应小游戏弹窗 */
+  private createMinigameBuildings() {
+    for (const def of MINIGAME_BUILDINGS) {
+      const sprite = this.add.sprite(def.pos.x, def.pos.y, def.sheet, 0)
+      sprite.setOrigin(0.5, WORKSHOP_BASE_ORIGIN_Y)
+      sprite.setScale(MINIGAME_SCALE)
+      sprite.setDepth(def.pos.y)
+      sprite.setInteractive({ pixelPerfect: true })
+      sprite.setData('tooltip', () => this.minigameTooltip(def))
+      sprite.setData('buildingKey', def.key)
+      sprite.setData('minigameId', def.game)
+      sprite.play(`${def.sheet}:loop`)
+      this.buildings.set(def.key, sprite)
+
+      const label = this.add.text(def.pos.x, def.pos.y - sprite.displayHeight - WORKSHOP_LABEL_GAP, `🕹 ${def.label}`, {
+        fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
+        fontSize: '12px',
+        color: '#fff4d2',
+        backgroundColor: '#14100dcc',
+        padding: { x: 5, y: 2 },
+        align: 'center',
+      })
+      label.setOrigin(0.5, 1)
+      label.setDepth(def.pos.y + 12)
+    }
+  }
+
+  private minigameTooltip(def: MinigameBuildingDef): TooltipData {
+    const game = MINIGAME_DEFS[def.game]
+    return {
+      title: def.label,
+      badge: '小游戏',
+      rows: [
+        { label: '玩法', value: game.hint },
+        { label: '最高分', value: String(minigameBestScore(def.game)) },
+        { label: '入口', value: '点击建筑开始游戏' },
+      ],
+    }
+  }
+
+  private openMinigame(id: MinigameId) {
+    if (this.minigameModal.isOpen) return
+    this.playSfx('chime', 0.4)
+    this.drawer.close()
+    // 弹窗期间停用场景键盘（WASD 操控 / G / F / M 快捷键），避免小游戏按键穿透世界
+    const kb = this.input.keyboard
+    if (kb) kb.enabled = false
+    this.minigameModal.open(id, () => {
+      if (kb) {
+        kb.resetKeys()
+        kb.enabled = true
+      }
+    })
+  }
+
   private createCamera() {
     const cam = this.cameras.main
     cam.setBounds(0, 0, WORLD_W, WORLD_H)
@@ -1265,7 +1328,9 @@ export class WorldScene extends Phaser.Scene {
           return
         }
         const key = obj.getData?.('buildingKey') as string | undefined
-        if (key === 'library') this.drawer.openLibrary(this.snap, this.portraitForBuilding('building_library.png'))
+        const minigameId = obj.getData?.('minigameId') as MinigameId | undefined
+        if (minigameId) this.openMinigame(minigameId)
+        else if (key === 'library') this.drawer.openLibrary(this.snap, this.portraitForBuilding('building_library.png'))
         else if (key === 'spawn') this.drawer.openSpawn(this.snap, this.portraitForBuilding('building_spawn.png'))
         if (key) {
           const bSprite = this.buildings.get(key)

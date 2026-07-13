@@ -1,5 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue'
-import { formatDate } from '@/utils/datetime'
+import { formatDate, formatDateMinute } from '@/utils/datetime'
 import {
   batchDeleteTaskJobsById,
   deleteTaskJobById,
@@ -7,6 +7,7 @@ import {
   pauseTaskJobById,
   resumeTaskJobById,
   triggerTaskForAgent,
+  updateTaskJobById,
 } from '@/api/task'
 import {
   canPauseTaskJob,
@@ -51,6 +52,8 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
   const taskListLoading = ref(false)
   const taskCreatePanelOpen = ref(false)
   const taskCreateSubmitting = ref(false)
+  const taskEditingJob = ref<AITaskJobItem | null>(null)
+  const taskEditingJobId = computed(() => taskEditingJob.value?.job_id || '')
 
   const completedTaskJobs = computed(() => {
     return taskJobs.value.filter(isCompletedTaskJob)
@@ -88,6 +91,7 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
     taskListModalOpen.value = false
     taskCreatePanelOpen.value = false
     taskCreateSubmitting.value = false
+    taskEditingJob.value = null
     selectedTaskJobIds.value = []
   }
 
@@ -127,6 +131,11 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
   const formatDateLocal = (unixSeconds?: number) => {
     const ts = Number(unixSeconds || 0)
     return Number.isFinite(ts) && ts > 0 ? formatDate(ts, '') : ''
+  }
+
+  const formatDateTimeLocal = (unixSeconds?: number) => {
+    const ts = Number(unixSeconds || 0)
+    return Number.isFinite(ts) && ts > 0 ? formatDateMinute(ts, '').replace(' ', 'T') : ''
   }
 
   const buildTaskCreateFormFromJob = (agent?: Agent | null, job?: AITaskJobItem | null): TaskCreateForm => {
@@ -180,7 +189,7 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
         : [],
       schedule_max_runs: Math.max(0, Number(schedule.max_runs) || 0),
       schedule_end_at: formatDateLocal(Number(schedule.end_at) || 0),
-      schedule_at: scheduleTimeMode === 'datetime' ? formatDateLocal(parsedScheduleAt) : '',
+      schedule_at: scheduleTimeMode === 'datetime' ? formatDateTimeLocal(parsedScheduleAt) : '',
       override_token_limit_enabled: !!overrideToken.enabled,
       token_limit_override: Math.max(1, Number(overrideToken.value) || base.token_limit_override),
       override_mcp_tools_enabled: !!overrideMcp.enabled,
@@ -192,12 +201,21 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
 
   const openTaskCreatePanel = (agent?: Agent | null) => {
     if (!agent?.aiConfigId) return
+    taskEditingJob.value = null
     taskCreateForm.value = buildTaskCreateForm(agent)
     taskCreatePanelOpen.value = true
   }
 
   const openTaskCreatePanelFromJob = (agent?: Agent | null, job?: AITaskJobItem | null) => {
     if (!agent?.aiConfigId || !job?.job_id) return
+    taskEditingJob.value = null
+    taskCreateForm.value = buildTaskCreateFormFromJob(agent, job)
+    taskCreatePanelOpen.value = true
+  }
+
+  const openTaskEditPanel = (agent?: Agent | null, job?: AITaskJobItem | null) => {
+    if (!agent?.aiConfigId || !job?.job_id) return
+    taskEditingJob.value = job
     taskCreateForm.value = buildTaskCreateFormFromJob(agent, job)
     taskCreatePanelOpen.value = true
   }
@@ -213,6 +231,7 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
   const closeTaskCreatePanel = () => {
     taskCreatePanelOpen.value = false
     taskCreateSubmitting.value = false
+    taskEditingJob.value = null
   }
 
   const toggleTaskCreateTool = (tool: string, checked: boolean) => {
@@ -229,9 +248,14 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
 
   const submitTaskForAgent = async (agent?: Agent | null) => {
     if (!agent?.aiConfigId || taskCreateSubmitting.value) return
+    const editingJob = taskEditingJob.value
     const title = taskCreateForm.value.title.trim()
     if (!title) {
       void alert({ message: '请填写任务名称', type: 'warning' })
+      return
+    }
+    if (!taskCreateForm.value.instruction.trim()) {
+      void alert({ message: '请填写任务具体内容', type: 'warning' })
       return
     }
     if (taskCreateForm.value.override_mcp_tools_enabled && taskCreateForm.value.mcp_tools_override.length === 0) {
@@ -244,8 +268,9 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
     const selectedTools = [...taskCreateForm.value.mcp_tools_override].map(v => String(v || '').trim()).filter(Boolean)
     const sameToolCount = selectedTools.length === defaultTools.length
     const sameTools = sameToolCount && selectedTools.every(tool => defaultTools.includes(tool))
-    const autoEnableMcpOverride = !sameTools
-    const autoEnableTokenOverride = Number(taskCreateForm.value.token_limit_override) !== Math.max(1, Number(agent.tokenLimit) || 10000)
+    const autoEnableMcpOverride = !editingJob && !sameTools
+    const autoEnableTokenOverride = !editingJob
+      && Number(taskCreateForm.value.token_limit_override) !== Math.max(1, Number(agent.tokenLimit) || 10000)
     const useScheduleDatetime = !!taskCreateForm.value.schedule_enabled
       && !taskCreateForm.value.schedule_loop_enabled
       && taskCreateForm.value.schedule_time_mode === 'datetime'
@@ -280,7 +305,7 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
     }
     taskCreateSubmitting.value = true
     try {
-      const data = await triggerTaskForAgent(agent.aiConfigId, {
+      const payload = {
         title,
         instruction: taskCreateForm.value.instruction.trim(),
         priority: Math.max(1, Math.min(10, Number(taskCreateForm.value.priority) || 5)),
@@ -300,13 +325,21 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
         token_limit_override: Math.max(1, Number(taskCreateForm.value.token_limit_override) || 10000),
         override_mcp_tools_enabled: !!taskCreateForm.value.override_mcp_tools_enabled || autoEnableMcpOverride,
         mcp_tools_override: selectedTools,
-      }, token)
-      void alert({ message: `任务「${data.title || title}」已创建并入队`, type: 'success' })
+      }
+      const data = editingJob
+        ? await updateTaskJobById(agent.aiConfigId, editingJob.job_id, payload, token)
+        : await triggerTaskForAgent(agent.aiConfigId, payload, token)
+      void alert({
+        message: editingJob
+          ? `任务「${data.title || title}」已更新${String(editingJob.effective_status || editingJob.status).toLowerCase() === 'running' ? '，新规则将在下一次调度生效' : ''}`
+          : `任务「${data.title || title}」已创建并入队`,
+        type: 'success',
+      })
       closeTaskCreatePanel()
       await fetchAgentTaskList(agent)
       await onReloadAgents()
     } catch (err: any) {
-      void alert({ message: err?.message || '创建任务失败', type: 'error' })
+      void alert({ message: err?.message || (taskEditingJob.value ? '更新任务失败' : '创建任务失败'), type: 'error' })
     } finally {
       taskCreateSubmitting.value = false
     }
@@ -427,12 +460,14 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
     taskListLoading,
     taskCreatePanelOpen,
     taskCreateSubmitting,
+    taskEditingJobId,
     taskCreateForm,
     fetchAgentTaskList,
     openAgentTaskList,
     closeAgentTaskList,
     toggleTaskCreatePanel,
     openTaskCreatePanelFromJob,
+    openTaskEditPanel,
     closeTaskCreatePanel,
     onTaskCreateToolChange,
     submitTaskForAgent,

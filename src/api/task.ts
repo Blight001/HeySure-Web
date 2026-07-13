@@ -1,4 +1,4 @@
-import { del, get, post } from './http'
+import { del, get, patch, post } from './http'
 import type {
   AITaskJobItem,
   AITaskListItem,
@@ -52,6 +52,19 @@ export const triggerTaskForAgent = (configId: number, payload: TriggerTaskPayloa
     payload,
     { token, fallbackError: '创建任务失败' },
   )
+
+export type UpdateTaskJobPayload = TriggerTaskPayload
+
+export const updateTaskJobById = (
+  configId: number,
+  jobId: string,
+  payload: UpdateTaskJobPayload,
+  token: string,
+) => patch<{ job_id?: string; title?: string }>(
+  `/api/ai/configs/${configId}/task-jobs/${jobId}`,
+  payload,
+  { token, fallbackError: '更新任务失败' },
+)
 
 export const pauseTaskJobById = (configId: number, jobId: string, token: string) =>
   post(`/api/ai/configs/${configId}/task-jobs/${jobId}/pause`, undefined, {

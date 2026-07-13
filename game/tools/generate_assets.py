@@ -12,6 +12,9 @@
   building_workshop_browser.png 32x40@1x -> 64x80 x4 帧（浏览器 agent 作坊·瞭望塔）
   building_workshop_knowledge.png 32x40@1x -> 64x80 x4 帧（知识工坊·学者书斋，悬浮魔典脉冲）
   building_workshop_android.png 32x40@1x -> 64x80 x4 帧（安卓 agent 作坊·移动信号坊，天线信号波脉冲）
+  building_arcade_snake.png   32x40@1x -> 64x80   x4 帧（小游戏·贪吃蛇街机屋，屏内小蛇绕行）
+  building_arcade_2048.png    32x40@1x -> 64x80   x4 帧（小游戏·2048 数字馆，数字砖合并脉冲）
+  building_arcade_tetris.png  32x40@1x -> 64x80   x4 帧（小游戏·方块塔，塔顶方块下落归位）
   char_*.png                  16x24@1x -> 32x48，4 列 x 5 行：
                               行 0-3 = 走路 下/左/右/上（第 0 帧兼站立），
                               行 4 = [闭眼 idle, 坐下, 跪倒, 躺倒]
@@ -760,6 +763,160 @@ def gen_workshop_android():
     save_strip(frames, "building_workshop_android.png")
 
 
+def gen_arcade_snake():
+    """小游戏建筑·贪吃蛇街机屋：墨绿街机柜，屏幕里小蛇绕行追果子，顶棚跑马灯轮转。"""
+    CAB = (56, 96, 74, 255)
+    CAB_D = (40, 72, 56, 255)
+    CAB_L = (86, 132, 100, 255)
+    SCREEN = (18, 30, 24, 255)
+    SNAKE = (128, 220, 110, 255)
+    SNAKE_D = (86, 176, 78, 255)
+    APPLE = (232, 92, 74, 255)
+    frames = []
+    for f in range(4):
+        c = C(32, 40)
+        # 顶棚 + 跑马灯（按帧轮转）
+        c.rect(4, 8, 24, 5, CAB_D)
+        c.hline(4, 8, 24, CAB_L)
+        for i in range(6):
+            col = FLAME_Y if (i + f) % 3 == 0 else GOLD_D
+            c.px(6 + i * 4, 10, col)
+        # 机柜墙体（右侧背光压暗）
+        c.rect(5, 13, 22, 26, CAB)
+        c.rect(23, 13, 4, 26, CAB_D)
+        c.outline(5, 13, 22, 26, OUT)
+        # 大屏幕：小蛇绕屏一圈追果子
+        c.rect(8, 16, 16, 12, SCREEN)
+        c.outline(8, 16, 16, 12, CAB_L)
+        # 屏内蛇：沿边框内圈跑动的 6 节身体
+        ring = []
+        for x in range(10, 22):
+            ring.append((x, 18))
+        for y in range(19, 26):
+            ring.append((21, y))
+        for x in range(20, 9, -1):
+            ring.append((x, 25))
+        for y in range(24, 18, -1):
+            ring.append((10, y))
+        head = (f * 5) % len(ring)
+        for k in range(6):
+            x, y = ring[(head - k) % len(ring)]
+            c.px(x, y, SNAKE if k == 0 else SNAKE_D)
+        # 果子（屏幕中央偏右闪烁）
+        c.px(16, 21, APPLE if f % 2 == 0 else (180, 62, 52, 255))
+        c.px(17, 22, APPLE)
+        # 摇杆与按钮台
+        c.rect(9, 29, 14, 3, CAB_D)
+        c.hline(9, 29, 14, CAB_L)
+        c.px(12, 28, STONE_L)
+        c.vline(12, 29, 1, STONE_D)
+        c.px(18, 30, APPLE)
+        c.px(20, 30, GOLD)
+        # 门
+        c.rect(13, 33, 6, 6, WOOD_D)
+        c.px(17, 36, GOLD)
+        c.add_silhouette_outline()
+        frames.append(c)
+    save_strip(frames, "building_arcade_snake.png")
+
+
+def gen_arcade_2048():
+    """小游戏建筑·2048 数字馆：暖沙墙体 + 金顶，外墙 2x2 发光数字砖轮流"合并"脉冲。"""
+    TILE_A = (238, 228, 218, 255)   # 2048 经典浅砖
+    TILE_B = (237, 224, 200, 255)
+    TILE_ORANGE = (245, 149, 99, 255)
+    TILE_RED = (246, 124, 95, 255)
+    GLOW = (255, 220, 130, 255)
+    frames = []
+    for f in range(4):
+        c = C(32, 40)
+        # 金字塔式金顶
+        for i, y in enumerate(range(9, 16)):
+            half = 2 + i * 1.6
+            c.hline(16 - half, y, half * 2, GOLD if i % 2 else GOLD_D)
+        c.px(16, 7, FLAME_W)
+        c.vline(16, 8, 1, GOLD)
+        # 墙体（暖沙 + 右侧压暗）
+        c.rect(5, 16, 22, 23, WALL)
+        c.rect(22, 16, 5, 23, WALL_SH)
+        c.outline(5, 16, 22, 23, WOOD_D)
+        # 外墙 2x2 数字砖（轮流高亮 = 合并脉冲）
+        tiles = [(8, 19, TILE_A), (16, 19, TILE_ORANGE), (8, 26, TILE_B), (16, 26, TILE_RED)]
+        for i, (tx, ty, col) in enumerate(tiles):
+            bright = (f + i) % 4 == 0
+            c.rect(tx, ty, 7, 6, GLOW if bright else col)
+            c.outline(tx, ty, 7, 6, WOOD_D)
+            # 砖面刻痕代替数字（2/4/8/16 的抽象点位）
+            for d in range(i + 1):
+                c.px(tx + 2 + (d % 3) * 2, ty + 2 + (d // 3) * 2, WOOD_D)
+        # 合并火花：高亮砖角上冒金星
+        hi = (4 - f) % 4
+        hx, hy, _ = tiles[hi]
+        c.px(hx + 7, hy - 1, GOLD)
+        c.px(hx - 1, hy + 6, FLAME_Y)
+        # 门
+        c.rect(13, 34, 6, 5, WOOD_D)
+        c.px(17, 36, GOLD)
+        c.add_silhouette_outline()
+        frames.append(c)
+    save_strip(frames, "building_arcade_2048.png")
+
+
+def gen_arcade_tetris():
+    """小游戏建筑·方块塔：彩色四格骨牌垒成的高塔，塔顶一枚 L 形方块按帧下落归位。"""
+    CYAN = (92, 200, 220, 255)
+    YELLOW = (238, 208, 92, 255)
+    PURPLE = (166, 118, 216, 255)
+    GREEN = (128, 200, 100, 255)
+    RED = (226, 106, 96, 255)
+    BLUE = (98, 132, 214, 255)
+    BASE = (74, 80, 98, 255)
+    BASE_D = (56, 60, 76, 255)
+    frames = []
+    for f in range(4):
+        c = C(32, 40)
+        # 塔基
+        c.rect(6, 34, 20, 5, BASE)
+        c.rect(22, 34, 4, 5, BASE_D)
+        c.outline(6, 34, 20, 5, OUT)
+        # 门
+        c.rect(13, 35, 6, 4, WOOD_D)
+        # 砌好的方块层（每格 4x4，错缝彩砖）
+        rows = [
+            (30, [CYAN, YELLOW, PURPLE, GREEN, RED]),
+            (26, [BLUE, RED, CYAN, YELLOW, PURPLE]),
+            (22, [GREEN, PURPLE, BLUE, RED, CYAN]),
+            (18, [YELLOW, CYAN, GREEN, BLUE, RED]),
+        ]
+        for y, cols in rows:
+            for i, col in enumerate(cols):
+                x = 6 + i * 4
+                c.rect(x, y, 4, 4, col)
+                c.px(x + 1, y + 1, (255, 255, 255, 90))
+                c.outline(x, y, 4, 4, darken(col, 0.6))
+        # 塔顶缺口（最上层留一个 L 形空位）
+        c.rect(14, 14, 4, 4, BASE_D)
+        c.rect(18, 14, 4, 4, YELLOW)
+        c.outline(18, 14, 4, 4, darken(YELLOW, 0.6))
+        c.rect(6, 14, 4, 4, RED)
+        c.outline(6, 14, 4, 4, darken(RED, 0.6))
+        c.rect(10, 14, 4, 4, BLUE)
+        c.outline(10, 14, 4, 4, darken(BLUE, 0.6))
+        # 下落中的方块：按帧从塔顶上空落向缺口
+        drop_y = 2 + f * 3
+        c.rect(14, drop_y, 4, 4, PURPLE)
+        c.px(15, drop_y + 1, (255, 255, 255, 120))
+        c.outline(14, drop_y, 4, 4, darken(PURPLE, 0.6))
+        # 落位瞬间火花
+        if f == 3:
+            c.px(13, 13, FLAME_Y)
+            c.px(19, 13, FLAME_Y)
+            c.px(16, 12, FLAME_W)
+        c.add_silhouette_outline()
+        frames.append(c)
+    save_strip(frames, "building_arcade_tetris.png")
+
+
 # ================================================================ 角色
 LOOKS = {
     # 核心管理员（数字社会管理员）：紫袍金冠（深棕发，避免与金冠混色）
@@ -1339,6 +1496,9 @@ def main():
     gen_workshop_browser()
     gen_workshop_knowledge()
     gen_workshop_android()
+    gen_arcade_snake()
+    gen_arcade_2048()
+    gen_arcade_tetris()
     gen_characters()
     gen_emotes()
     gen_envelope()

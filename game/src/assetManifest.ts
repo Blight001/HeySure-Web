@@ -105,6 +105,11 @@ export const SHEETS: SheetDef[] = [
   strip('building_workshop_knowledge.png', '作坊·知识与进化', 'building', 64, 80, 4),
   strip('building_workshop_android.png', '作坊·移动信号坊（安卓 agent）', 'building', 64, 80, 4),
 
+  // ---- 小游戏建筑（池塘右侧游乐角） ----
+  strip('building_arcade_snake.png', '小游戏·贪吃蛇街机屋', 'building', 64, 80, 4),
+  strip('building_arcade_2048.png', '小游戏·2048 数字馆', 'building', 64, 80, 4, 2),
+  strip('building_arcade_tetris.png', '小游戏·方块塔', 'building', 64, 80, 4),
+
   // ---- 角色 ----
   character('char_admin.png', '核心管理员（紫袍金冠）'),
   character('char_assistant.png', '辅助管理员（青衣提灯）'),

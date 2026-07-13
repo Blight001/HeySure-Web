@@ -19,11 +19,11 @@ const TINT_PRESETS = ['#ff9aa2', '#ffd166', '#9be564', '#6ec5ff', '#c69aff', '#f
 const AURA_PRESETS = ['#ffd700', '#7fd8ff', '#c69aff', '#9bff8a', '#ff8ad8']
 
 const workshopTypeLabel = (type: WorldSnapshot['workshops'][number]['type'] | undefined): string => {
-  if (type === 'browser') return '瞭望塔'
-  if (type === 'android') return '移动工坊'
+  if (type === 'browser') return '浏览器端'
+  if (type === 'android') return '安卓端'
   if (type === 'workshop') return '图书馆'
   if (type === 'custom') return '自定义设备'
-  return '机械坊'
+  return '桌面端'
 }
 
 const workshopDisplayName = (w: WorldSnapshot['workshops'][number] | undefined, fallback: string): string => {

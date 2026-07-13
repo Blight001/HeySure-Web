@@ -39,6 +39,28 @@ export const FIXED_BUILDINGS: FixedBuildingDef[] = [
 /** 在线图书馆设备：固定放在出生地上方原知识库地块。 */
 export const LIBRARY_DEVICE_POS: Point = { x: 290, y: 410 }
 
+/** 小游戏建筑：池塘右侧的游乐角，点击建筑打开对应小游戏弹窗。 */
+export type MinigameId = 'snake' | 'g2048' | 'tetris'
+
+export interface MinigameBuildingDef {
+  key: string
+  sheet: string
+  label: string
+  game: MinigameId
+  /** 建筑底边基线（世界像素，origin 0.5/1 底部锚定，同作坊） */
+  pos: Point
+}
+
+export const MINIGAME_SCALE = 1.45
+
+// 池塘瓦片区 x3-11 / y4-10（像素 96-384 / 128-352），游乐角排在其右侧一行，
+// 位于北部草原上、作坊街（y≥320, x≥512）之外。
+export const MINIGAME_BUILDINGS: MinigameBuildingDef[] = [
+  { key: 'arcade_snake', sheet: 'building_arcade_snake.png', label: '贪吃蛇街机屋', game: 'snake', pos: { x: 480, y: 244 } },
+  { key: 'arcade_2048', sheet: 'building_arcade_2048.png', label: '2048 数字馆', game: 'g2048', pos: { x: 624, y: 244 } },
+  { key: 'arcade_tetris', sheet: 'building_arcade_tetris.png', label: '方块塔', game: 'tetris', pos: { x: 768, y: 244 } },
+]
+
 /** 动态作坊（机械坊 / 瞭望塔 / 图书馆设备）的世界显示放大倍数 */
 export const WORKSHOP_SCALE = 1.45
 export const LIBRARY_DEVICE_SCALE = 1.7

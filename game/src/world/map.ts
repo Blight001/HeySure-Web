@@ -4,6 +4,7 @@ import {
   MAP_H,
   MAP_W,
   LIBRARY_DEVICE_POS,
+  MINIGAME_BUILDINGS,
   TILE,
   WORKSHOP_COLS,
   WORKSHOP_SLOTS,
@@ -184,6 +185,7 @@ export const generateGroundMap = (): GroundMap => {
 
   paveLibraryPlaza(grid, rnd)
   paveWorkshopPads(grid, rnd)
+  paveMinigamePads(grid, rnd)
   paveRoads(path)
   decorateSpawnGround(grid, rnd)
 
@@ -320,6 +322,21 @@ const paveWorkshopPads = (grid: number[][], rnd: () => number) => {
   }
 }
 
+/** 小游戏建筑（池塘右侧游乐角）：每座建筑脚下铺一小块石板地坪 */
+const paveMinigamePads = (grid: number[][], rnd: () => number) => {
+  for (const def of MINIGAME_BUILDINGS) {
+    const tx = Math.floor(def.pos.x / TILE)
+    const ty = Math.floor(def.pos.y / TILE)
+    for (let y = ty - 2; y <= ty; y++) {
+      for (let x = tx - 1; x <= tx + 1; x++) {
+        if (y >= 0 && y < MAP_H && x >= 0 && x < MAP_W) {
+          grid[y][x] = rnd() > 0.5 ? TILES.plazaA : TILES.plazaB
+        }
+      }
+    }
+  }
+}
+
 const decorateSpawnGround = (grid: number[][], rnd: () => number) => {
   const cx = 6
   const cy = 23
@@ -354,6 +371,7 @@ const PLANT_BLOCKED: Rect[] = [
   { x: 100, y: 330, w: 400, h: 470 }, // 图书馆与出生地一带
   { x: 400, y: 250, w: 860, h: 540 }, // 作坊街区与主街
   { x: 60, y: 90, w: 360, h: 300 }, // 池塘
+  { x: 420, y: 100, w: 420, h: 180 }, // 池塘右侧小游戏游乐角
 ]
 
 const inPlantBlocked = (px: number, py: number) =>
