@@ -120,14 +120,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative isolate min-h-screen overflow-x-hidden bg-zinc-950 text-zinc-100">
-    <div class="app-background-glow pointer-events-none absolute inset-0"></div>
-    <div class="pointer-events-none absolute inset-0 opacity-60">
-      <div class="app-background-orb app-background-orb-left drift-organic"></div>
-      <div class="app-background-orb app-background-orb-right drift-organic" style="animation-delay: -4.5s"></div>
+  <div class="space-backdrop relative isolate min-h-screen overflow-x-hidden text-zinc-100">
+    <!-- 深空星云：多团彩色辉光缓慢漂移，screen 混合叠亮，替代纯黑的扁平感 -->
+    <div class="pointer-events-none absolute inset-0 overflow-hidden">
+      <div class="space-nebula space-nebula-indigo"></div>
+      <div class="space-nebula space-nebula-violet"></div>
+      <div class="space-nebula space-nebula-cyan"></div>
     </div>
-    <!-- 粒子星座 + 鼠标光晕：必须在本页不透明背景之上、内容之下 -->
-    <AmbientBackground />
+    <div class="space-vignette pointer-events-none absolute inset-0"></div>
+    <!-- 星野 + 鼠标光晕：必须在本页不透明背景之上、内容之下；首页始终深色 -->
+    <AmbientBackground variant="dark" />
 
     <!-- 渐变图标共享 defs -->
     <svg class="absolute h-0 w-0" aria-hidden="true">

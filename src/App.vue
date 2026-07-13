@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative min-h-screen overflow-hidden bg-gradient-to-br from-zinc-50 via-white to-indigo-50 text-zinc-900 antialiased dark:from-zinc-950 dark:via-zinc-900 dark:to-slate-900 dark:text-zinc-100">
+  <div class="relative min-h-screen overflow-hidden bg-gradient-to-br from-zinc-50 via-white to-indigo-50 text-zinc-900 antialiased dark:from-[#07080f] dark:via-[#0a0c1a] dark:to-[#0c0f22] dark:text-zinc-100">
     <div class="app-background-glow pointer-events-none absolute inset-0"></div>
     <div class="pointer-events-none absolute inset-0 opacity-60">
       <div class="app-background-orb app-background-orb-left"></div>
@@ -181,7 +181,7 @@ onBeforeUnmount(() => {
         v-if="showStartupOverlay"
         class="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
         :class="isDarkStartup
-          ? 'bg-zinc-950 text-zinc-100'
+          ? 'space-backdrop text-zinc-100'
           : 'bg-gradient-to-br from-zinc-50 via-white to-indigo-50 text-zinc-900'"
       >
         <div class="startup-orb startup-orb-left pointer-events-none"></div>
