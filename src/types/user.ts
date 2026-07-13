@@ -2,18 +2,12 @@ type ThemeMode = 'light' | 'dark'
 type FontSize = 'sm' | 'md' | 'lg'
 export type BrainViewMode = 'sections' | 'all'
 
-export type ModelPresetProvider = 'api' | 'cli'
-
 export interface ModelPreset {
   id: string
   name: string
   api_key: string
   base_url: string
   model: string
-  /** 'api'（HTTP 接口，默认）或 'cli'（本机命令行程序，如 grok CLI） */
-  provider?: ModelPresetProvider
-  /** provider === 'cli' 时的命令名或可执行文件完整路径 */
-  cli_command?: string
 }
 
 export type UserRole = 'owner' | 'admin' | 'member'

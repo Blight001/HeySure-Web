@@ -74,13 +74,7 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
       const model = String(item?.model || '').trim()
       const apiKey = String(item?.api_key || '').trim()
       const baseUrl = String(item?.base_url || '').trim()
-      const provider = String(item?.provider || 'api').trim().toLowerCase() === 'cli' ? 'cli' : 'api'
-      const cliCommand = String(item?.cli_command || '').trim()
-      if (provider === 'cli') {
-        if (!model || !cliCommand) return null
-      } else if (!model || !apiKey || !baseUrl) {
-        return null
-      }
+      if (!model || !apiKey || !baseUrl) return null
       let id = String(item?.id || model || `model_${index + 1}`).trim()
       if (!id || seen.has(id)) id = `${model}_${index + 1}`
       seen.add(id)
@@ -90,8 +84,6 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
         api_key: apiKey,
         base_url: baseUrl,
         model,
-        provider,
-        cli_command: cliCommand,
       }
     })
     .filter(Boolean) as ModelPreset[]

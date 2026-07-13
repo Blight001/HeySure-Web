@@ -330,8 +330,6 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
   const seen = new Set<string>()
   return parsed
     .map((item: any, index) => {
-      // CLI 预设走本机命令行，无法用于 HTTP 直连的工具测试，直接排除。
-      if (String(item?.provider || 'api').trim().toLowerCase() === 'cli') return null
       const model = String(item?.model || '').trim()
       const apiKey = String(item?.api_key || '').trim()
       const baseUrl = String(item?.base_url || '').trim()
