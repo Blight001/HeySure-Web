@@ -276,7 +276,7 @@ const startTestTool = (tool: string) => {
               v-model:show="aiTestModalOpen"
               :tool-name="aiTestModalToolName"
               :device-id="deviceId"
-              :device-type="scope?.deviceType"
+              :device-type="scope?.deviceType ?? undefined"
               :description="aiTestModalDescription"
               :input-schema="aiTestModalInputSchema"
               @close="aiTestModalOpen = false"

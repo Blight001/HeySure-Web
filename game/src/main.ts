@@ -47,10 +47,27 @@ const boot = async () => {
   // 调试/测试句柄：冒烟脚本断言相机状态
   ;(window as unknown as Record<string, unknown>).__worldGame = game
 
-  // iframe 不可见时暂停渲染循环，避免后台烧 CPU
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) game.loop.sleep()
+  // 不可见时暂停渲染循环，避免后台烧 CPU。两个来源：
+  //  - 标签页隐藏：本文档自身的 visibilitychange；
+  //  - 移动端父页面用 display:none 收起面板：iframe 内 visibility 不变，
+  //    由父页面（WorldArenaPanel）postMessage world:set-visible 通知。
+  let pageHidden = document.hidden
+  let frameHidden = false
+  const syncLoop = () => {
+    if (pageHidden || frameHidden) game.loop.sleep()
     else game.loop.wake()
+  }
+  document.addEventListener('visibilitychange', () => {
+    pageHidden = document.hidden
+    syncLoop()
+  })
+  window.addEventListener('message', (event) => {
+    if (event.origin !== window.location.origin) return
+    const data = event.data as { type?: string; visible?: boolean } | null
+    if (data?.type === 'world:set-visible' && typeof data.visible === 'boolean') {
+      frameHidden = !data.visible
+      syncLoop()
+    }
   })
 
   document.getElementById('loading')?.remove()

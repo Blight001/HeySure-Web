@@ -14,7 +14,6 @@ export const DEFAULT_MCP_TOOLS = [
   'prompt.manage',
   'mode.manage',
   'knowledge.manage',
-  'message.send+to+user',
-  'message.send+to+ai',
+  'message.send+to',
   'conversation.manage',
 ] as const

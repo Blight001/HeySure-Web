@@ -204,6 +204,19 @@
         0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
         50% { transform: translate3d(0, -18px, 0) scale(1.05); }
       }
+
+      /* 触屏设备：模糊光斑动画与磨砂在移动 GPU 上开销大，启动阶段即降级，
+         避免首屏加载就出现发热/掉帧（进度条为加载反馈，保留动画） */
+      @media (hover: none) and (pointer: coarse) {
+        .startup-preload-orb {
+          animation: none;
+        }
+
+        .startup-preload-card {
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+        }
+      }
     </style>
     <script>
       (function () {

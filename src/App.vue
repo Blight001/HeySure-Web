@@ -23,6 +23,17 @@ const revealContent = ref(false)
 const dashboardLoading = ref(false)
 
 const showStartupOverlay = computed(() => showSplash.value || dashboardLoading.value)
+
+// 内容揭示分三段：未揭示（模糊下移隐藏）→ 揭示过渡中 → 完成。
+// 完成后必须移除 transform/filter/transition 类：blur(0)/translate(0) 也会让
+// 整个应用长期驻留在独立合成层，移动端白白占用 GPU 内存与合成开销。
+const revealClass = computed(() => {
+  if (!revealContent.value)
+    return 'pointer-events-none select-none opacity-0 translate-y-2 blur-[2px] transition-[opacity,transform,filter] duration-700 ease-out'
+  if (showSplash.value)
+    return 'opacity-100 translate-y-0 blur-0 transition-[opacity,transform,filter] duration-700 ease-out'
+  return ''
+})
 const startupHint = computed(() =>
   dashboardLoading.value && !showSplash.value ? '正在载入控制台与成员数据' : '正在初始化界面与资源',
 )
@@ -133,7 +144,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative min-h-screen overflow-hidden bg-gradient-to-br from-zinc-50 via-white to-indigo-50 text-zinc-900 antialiased dark:from-[#07080f] dark:via-[#0a0c1a] dark:to-[#0c0f22] dark:text-zinc-100">
+  <div class="relative min-h-app-viewport overflow-hidden bg-gradient-to-br from-zinc-50 via-white to-indigo-50 text-zinc-900 antialiased dark:from-[#07080f] dark:via-[#0a0c1a] dark:to-[#0c0f22] dark:text-zinc-100">
     <div class="app-background-glow pointer-events-none absolute inset-0"></div>
     <div class="pointer-events-none absolute inset-0 opacity-60">
       <div class="app-background-orb app-background-orb-left"></div>
@@ -141,8 +152,8 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      class="relative z-[1] min-h-screen transition-[opacity,transform,filter] duration-700 ease-out"
-      :class="revealContent ? 'opacity-100 translate-y-0 blur-0' : 'pointer-events-none select-none opacity-0 translate-y-2 blur-[2px]'"
+      class="relative z-[1] min-h-app-viewport"
+      :class="revealClass"
     >
       <HomePage
         v-if="!user"

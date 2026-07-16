@@ -116,3 +116,5 @@ npm run build    # vue-tsc 类型检查 + vite build → web/dist（gitignored�
 - **改接口契约时**，前端 `src/api/` 与后端 `gateway/routers/` 要同步。
 - **`web/dist`、`node_modules`、`package-lock.json`** 已 gitignore，不要提交。
 - **游戏世界**相关代码在 `game/` 目录下，资产生成约定见 [`game/README.md`](game/README.md)。
+- **移动端性能约定**：触屏设备（`hover: none` + `pointer: coarse`）自动降级——`main.css` 末尾的媒体查询会停掉无限装饰动画并关闭全部 backdrop-filter（磨砂用不透明底色补偿）；`AmbientBackground` 只画静态星野不跑动画循环。新增常驻动画/磨砂效果时必须纳入该门控。固定视口高度用 `.h-app-viewport` / `.min-h-app-viewport`（vh 回退 + dvh），**不要**用 `h-screen`/`100vh`，否则移动端地址栏会裁掉底部内容。
+- **重依赖组件必须懒加载**：`@xterm`（RemoteControl/RemoteTerminalModal）、大体量面板（KnowledgeBasePanel/WorkshopPanel）均用 `defineAsyncComponent` 按需拆包，新增大依赖时同样处理。

@@ -17,6 +17,7 @@ const emit = defineEmits<{
 
 const GAME_URL = '/game/'
 const gameFrame = ref<HTMLIFrameElement | null>(null)
+const rootEl = ref<HTMLElement | null>(null)
 
 const syncChatState = () => {
   gameFrame.value?.contentWindow?.postMessage(
@@ -27,6 +28,24 @@ const syncChatState = () => {
 
 watch(() => props.chatAiConfigId, syncChatState)
 
+// 移动端底部 Tab 用 v-show 收起本面板时，iframe 内部的 visibilitychange 不会
+// 触发（display:none 不改变文档可见性），Phaser 会在后台整帧空跑烧 CPU。
+// 用 IntersectionObserver 观察自身可见性，postMessage 通知游戏暂停/恢复渲染循环。
+let panelVisible = true
+let visibilityObserver: IntersectionObserver | null = null
+
+const postVisibility = () => {
+  gameFrame.value?.contentWindow?.postMessage(
+    { type: 'world:set-visible', visible: panelVisible },
+    window.location.origin,
+  )
+}
+
+const onFrameLoad = () => {
+  syncChatState()
+  postVisibility()
+}
+
 const onMessage = (event: MessageEvent) => {
   if (event.origin !== window.location.origin) return
   const data = event.data as { type?: string; aiConfigId?: number } | null
@@ -35,12 +54,27 @@ const onMessage = (event: MessageEvent) => {
   }
 }
 
-onMounted(() => window.addEventListener('message', onMessage))
-onUnmounted(() => window.removeEventListener('message', onMessage))
+onMounted(() => {
+  window.addEventListener('message', onMessage)
+  if (typeof IntersectionObserver !== 'undefined' && rootEl.value) {
+    visibilityObserver = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1]
+      if (!entry) return
+      panelVisible = entry.isIntersecting
+      postVisibility()
+    })
+    visibilityObserver.observe(rootEl.value)
+  }
+})
+onUnmounted(() => {
+  window.removeEventListener('message', onMessage)
+  visibilityObserver?.disconnect()
+  visibilityObserver = null
+})
 </script>
 
 <template>
-  <section class="flex-1 rounded-2xl border-2 border-zinc-200 flex flex-col overflow-hidden relative dark:border-zinc-700 transition-colors duration-500 bg-[#23262e]">
+  <section ref="rootEl" class="flex-1 rounded-2xl border-2 border-zinc-200 flex flex-col overflow-hidden relative dark:border-zinc-700 transition-colors duration-500 bg-[#23262e]">
     <div class="absolute top-0 left-0 bg-zinc-100/60 text-zinc-500 text-xs px-3 py-1 rounded-br-lg font-medium z-10 border-b border-r border-zinc-200 dark:bg-zinc-900/60 dark:text-zinc-400 dark:border-zinc-700 shadow-sm">
       <span class="flex items-center gap-1.5"><AppIcon name="globe" class="w-3.5 h-3.5" /> 社会显示</span>
     </div>
@@ -49,7 +83,7 @@ onUnmounted(() => window.removeEventListener('message', onMessage))
       :src="GAME_URL"
       class="flex-1 w-full border-0"
       title="社会显示"
-      @load="syncChatState"
+      @load="onFrameLoad"
     />
   </section>
 </template>

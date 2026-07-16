@@ -158,6 +158,8 @@ onBeforeUnmount(() => {
   inset: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
+  /* 移动端地址栏伸缩时 100vh 超出可视高度，dvh 跟随动态视口（旧浏览器回退上一行） */
+  height: 100dvh !important;
   max-width: none !important;
   max-height: none !important;
   border-radius: 0 !important;

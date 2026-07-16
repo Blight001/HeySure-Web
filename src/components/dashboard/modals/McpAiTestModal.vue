@@ -117,7 +117,6 @@ const runAiTest = async () => {
       description: desc,
       parameters,
       input_schema: schema,
-      implementation: null,
       user_hint: aiTestUserHint.value.trim(),
     })
     aiTestResult.value = result

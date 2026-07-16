@@ -200,11 +200,6 @@ const startTest = (name: string) => {
   aiTestModalOpen.value = true
 }
 
-const cancelTestLib = () => {
-  aiTestModalOpen.value = false
-}
-
-
 </script>
 
 <template>

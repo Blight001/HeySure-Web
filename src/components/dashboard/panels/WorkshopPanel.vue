@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, reactive, ref } from 'vue'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import type { McpRoleMeta } from '@/types'
 import { assignDeviceAi, deleteDeviceRecord, updateDeviceDisplay } from '@/api/devices'
@@ -7,9 +7,11 @@ import { setWorkshopBinding } from '@/api/workshop'
 import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
 import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
 import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
-import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
-import RemoteTerminalModal from '@/components/dashboard/RemoteTerminalModal.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
+
+// 远程画面/终端弹窗依赖 @xterm（约 300KB），懒加载避免拖进作坊面板首屏
+const RemoteControlModal = defineAsyncComponent(() => import('@/components/dashboard/RemoteControlModal.vue'))
+const RemoteTerminalModal = defineAsyncComponent(() => import('@/components/dashboard/RemoteTerminalModal.vue'))
 import { resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
 interface Agent {

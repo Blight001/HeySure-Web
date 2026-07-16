@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import type { AppIconName } from '@/components/common/AppIcon.vue'
-import RemoteControlModal from '@/components/dashboard/RemoteControlModal.vue'
-import RemoteTerminalModal from '@/components/dashboard/RemoteTerminalModal.vue'
 import { resolveAiAvatarUrl } from '@/utils/aiAvatar'
+
+// 远程画面/终端弹窗依赖 @xterm（约 300KB），懒加载避免拖进侧栏首屏
+const RemoteControlModal = defineAsyncComponent(() => import('@/components/dashboard/RemoteControlModal.vue'))
+const RemoteTerminalModal = defineAsyncComponent(() => import('@/components/dashboard/RemoteTerminalModal.vue'))
 
 interface AgentTaskSnapshot {
   jobId: string

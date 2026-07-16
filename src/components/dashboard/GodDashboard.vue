@@ -578,7 +578,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative isolate h-screen flex flex-col bg-zinc-50/60 text-zinc-900 overflow-hidden overflow-x-hidden font-sans dark:bg-zinc-950/60 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
+  <div class="relative isolate h-app-viewport flex flex-col bg-zinc-50/60 text-zinc-900 overflow-hidden overflow-x-hidden font-sans dark:bg-zinc-950/60 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
     <div class="app-background-glow pointer-events-none absolute inset-0"></div>
     <div class="pointer-events-none absolute inset-0 opacity-60">
       <div class="app-background-orb app-background-orb-left"></div>

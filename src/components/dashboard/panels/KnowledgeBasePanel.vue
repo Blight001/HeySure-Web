@@ -22,7 +22,7 @@ import { getAuthToken } from '@/api/http'
 import { updateAgentMode } from '@/api/agentModes'
 import { updateAiConfigFields } from '@/api/ai'
 import { me } from '@/api/auth'
-import { runInheritanceMcpTest, type InheritanceMcpTestResult, callMcpTool } from '@/api/mcp'
+import type { InheritanceMcpTestResult } from '@/api/mcp'
 import McpAiTestModal from '@/components/dashboard/modals/McpAiTestModal.vue'
 import { useMessage } from '@/composables/useMessage'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
@@ -350,13 +350,17 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
 
 const mcpTestModalOpen = ref(false)
 const mcpTestTarget = ref<McpTestTarget | null>(null)
+// 类型上只有 inputSchema，但部分接口返回仍是 snake_case，运行时兜底一层
+const mcpTestInputSchema = computed(() => {
+  const tool = mcpTestTarget.value?.tool as Record<string, any> | undefined
+  return tool?.inputSchema || tool?.input_schema || {}
+})
 
 // 弹窗自动置顶：每个 overlay 各领一个自增 z-index，后开者居上
 const detailZIndex = usePopupZIndex(detailOpen)
 const personaDetailZIndex = usePopupZIndex(() => !!detailAgent.value)
 const clawhubZIndex = usePopupZIndex(clawhubModalOpen)
 const installedClawhubZIndex = usePopupZIndex(installedClawhubModalOpen)
-const mcpTestZIndex = usePopupZIndex(() => mcpTestModalOpen.value && !!mcpTestTarget.value)
 const inheritanceHoverZIndex = usePopupZIndex(() => !!inheritanceHoverPopover.value)
 const mcpTestPresetLoading = ref(false)
 const mcpTestSubmitting = ref(false)
@@ -372,14 +376,6 @@ const mcpTestDirectArgs = ref('{}')
 const mcpTestDirectResult = ref<any>(null)
 const mcpTestDirectLoading = ref(false)
 const mcpTestDirectError = ref('')
-
-const formatMcpTestJson = (value: unknown) => {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value ?? '')
-  }
-}
 
 const loadMcpTestPresetOptions = async () => {
   mcpTestPresetLoading.value = true
@@ -430,72 +426,7 @@ const closeMcpTestModal = () => {
   mcpTestDirectError.value = ''
 }
 
-const submitMcpModelTest = async () => {
-  if (!mcpTestTarget.value) return
-  const presetId = String(mcpTestSelectedPresetId.value || '').trim()
-  if (!presetId) {
-    mcpTestError.value = '请先选择一个模型'
-    return
-  }
-
-  const { device, tool } = mcpTestTarget.value
-  mcpTestSubmitting.value = true
-  mcpTestError.value = ''
-  mcpTestNotice.value = ''
-  mcpTestResult.value = null
-  try {
-    const result = await runInheritanceMcpTest({
-      model_preset_id: presetId,
-      tool: String(tool.name || ''),
-      device_id: String(device.device_id || ''),
-      device_type: String(device.device_type || 'desktop'),
-      description: String(tool.description || ''),
-      parameters: toolParameters(tool),
-      input_schema: tool.inputSchema,
-      implementation: tool.implementation,
-      user_hint: mcpTestUserHint.value.trim(),
-    })
-    mcpTestResult.value = result
-    if (result.ok) {
-      mcpTestNotice.value = result.detail || '测试完成'
-    } else {
-      mcpTestError.value = result.detail || '测试未成功'
-    }
-  } catch (err) {
-    mcpTestError.value = (err as Error).message || '发起测试失败'
-  } finally {
-    mcpTestSubmitting.value = false
-  }
-}
-
-const runDirectMcpTest = async () => {
-  if (!mcpTestTarget.value) return
-  mcpTestDirectLoading.value = true
-  mcpTestDirectError.value = ''
-  mcpTestDirectResult.value = null
-  try {
-    let args: Record<string, unknown> = {}
-    try {
-      args = JSON.parse(mcpTestDirectArgs.value || '{}')
-    } catch (e: any) {
-      mcpTestDirectError.value = '参数 JSON 格式错误：' + (e.message || e)
-      return
-    }
-    const res = await callMcpTool({
-      tool: mcpTestTarget.value.tool.name,
-      arguments: args
-    })
-    mcpTestDirectResult.value = res
-  } catch (err: any) {
-    mcpTestDirectError.value = err?.message || '直接调用失败'
-  } finally {
-    mcpTestDirectLoading.value = false
-  }
-}
-
-const selectedMcpTestPreset = computed(() =>
-  mcpTestPresetOptions.value.find(preset => preset.id === mcpTestSelectedPresetId.value) || null,
-)
+// 具体的模型测试 / 直接调用逻辑已迁入 McpAiTestModal 组件，本文件只负责开关弹窗
 
 type IntrinsicPersonaAgent = NonNullable<KnowledgeEntryItem['intrinsic_personas']>['agents'][number]
 type InheritanceServerCategory = NonNullable<NonNullable<KnowledgeEntryItem['inheritance_skills']>['server_categories']>[number]
@@ -1947,7 +1878,7 @@ const closeDetail = () => {
       :device-id="mcpTestTarget?.device?.device_id || ''"
       :device-type="mcpTestTarget?.device?.device_type || 'desktop'"
       :description="mcpTestTarget?.tool?.description || ''"
-      :input-schema="mcpTestTarget?.tool?.inputSchema || mcpTestTarget?.tool?.input_schema || {}"
+      :input-schema="mcpTestInputSchema"
       @close="closeMcpTestModal"
     />
     <div

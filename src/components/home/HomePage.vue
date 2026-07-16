@@ -120,7 +120,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="space-backdrop relative isolate min-h-screen overflow-x-hidden text-zinc-100">
+  <div class="space-backdrop relative isolate min-h-app-viewport overflow-x-hidden text-zinc-100">
     <!-- 深空星云：多团彩色辉光缓慢漂移，screen 混合叠亮，替代纯黑的扁平感 -->
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
       <div class="space-nebula space-nebula-indigo"></div>

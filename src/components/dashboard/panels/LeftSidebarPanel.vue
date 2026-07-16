@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { defineAsyncComponent, ref } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import BrainCorePanel from './BrainCorePanel.vue'
-import KnowledgeBasePanel from './KnowledgeBasePanel.vue'
-import WorkshopPanel from './WorkshopPanel.vue'
+
+// 知识库/作坊体量大（合计 ~140KB 源码）且藏在非默认 Tab 后，懒加载切走，
+// 避免拖慢首屏（移动端"控制台"Tab 默认只需要数字生命面板）
+const KnowledgeBasePanel = defineAsyncComponent(() => import('./KnowledgeBasePanel.vue'))
+const WorkshopPanel = defineAsyncComponent(() => import('./WorkshopPanel.vue'))
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import type { KnowledgeItem, McpRoleMeta, User } from '@/types'
 

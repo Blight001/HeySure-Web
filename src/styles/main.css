@@ -15,7 +15,21 @@ body {
 }
 
 #app {
-  @apply min-h-screen;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* 视口高度工具类：移动端浏览器地址栏伸缩时 100vh 大于实际可视高度，
+   会把底部 Tab 栏/内容顶出屏幕（"画面显示不全"）。dvh 跟随可视视口动态
+   变化，不支持 dvh 的旧浏览器自动回退到上一行的 vh。 */
+.h-app-viewport {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.min-h-app-viewport {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ---------------------------------------------------------------------------
@@ -624,5 +638,93 @@ select:focus {
 
   .tilt-card {
     transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 触屏设备（手机/平板）性能降级
+ *  - 无限装饰动画（全屏渐变流动 / 模糊光斑漂浮 / 星云漂移 / 标题流光 / logo
+ *    呼吸光晕）在移动 GPU 上导致整页逐帧重绘 → 发烫、掉帧，全部改为静态首帧；
+ *    加载进度条 / 打字指示点等"反馈型"小动画保留。
+ *  - backdrop-filter 磨砂在滚动与内容变化时逐帧重算模糊，是移动端卡顿主因；
+ *    触屏端整体关闭，并提高底色不透明度补偿可读性。
+ * ------------------------------------------------------------------------- */
+@media (hover: none) and (pointer: coarse) {
+  .animate-gradient,
+  .app-background-orb,
+  .startup-orb,
+  .space-nebula,
+  .headline-shimmer,
+  .drift-organic,
+  .logo-glow {
+    animation: none;
+  }
+
+  .space-nebula {
+    will-change: auto;
+  }
+
+  /* Tailwind backdrop-blur-* 工具类（顶栏/导航等处直接使用） */
+  [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .acrylic-panel,
+  .acrylic-modal,
+  .acrylic-inset,
+  .acrylic-input,
+  .glass,
+  .modal-overlay {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .acrylic-panel {
+    background-color: rgba(255, 255, 255, 0.93);
+  }
+
+  .dark .acrylic-panel {
+    background-color: rgba(24, 24, 27, 0.93);
+  }
+
+  .acrylic-modal {
+    background-color: rgba(255, 255, 255, 0.97);
+  }
+
+  .dark .acrylic-modal {
+    background-color: rgba(24, 24, 27, 0.97);
+  }
+
+  .acrylic-inset {
+    background-color: rgba(255, 255, 255, 0.88);
+  }
+
+  .dark .acrylic-inset {
+    background-color: rgba(39, 39, 42, 0.88);
+  }
+
+  .acrylic-input {
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+
+  .dark .acrylic-input {
+    background-color: rgba(39, 39, 42, 0.92);
+  }
+
+  .glass {
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+
+  .dark .glass {
+    background-color: rgba(24, 24, 27, 0.92);
+  }
+
+  .modal-overlay {
+    background-color: rgba(9, 9, 11, 0.55);
+  }
+
+  .dark .modal-overlay {
+    background-color: rgba(0, 0, 0, 0.62);
   }
 }

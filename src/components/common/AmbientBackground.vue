@@ -13,11 +13,12 @@
  * - 星野/星座/流星受 useUiEffects 的 particles 偏好控制，光晕与视差受
  *   mouseGlow 控制，可在设置 → 界面偏好中实时切换。
  * - variant="dark" 用于始终深色的页面（如首页），忽略 html 上的主题类。
- * - 颜色随亮/暗主题自适应；prefers-reduced-motion 时整体禁用；
- *   标签页隐藏时暂停渲染。
+ * - 颜色随亮/暗主题自适应；标签页隐藏时暂停渲染。
  * - 移动端：缓冲区尺寸取 canvas 自身盒子（而非 window.innerWidth/Height），
- *   避免地址栏/软键盘导致宽高比错位被拉伸；触屏通过 pointer 事件互动，
- *   抬手后光晕淡出；小屏降低各层密度与连线距离以保证性能。
+ *   避免地址栏/软键盘导致宽高比错位被拉伸。
+ * - 静态模式（触屏设备 / prefers-reduced-motion）：60fps 动画循环在手机 GPU 上
+ *   会持续满载导致发烫掉帧，因此只渲染一帧静态星野（尺寸/主题/偏好变化时重绘），
+ *   不挂动画循环与指针互动。
  */
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUiEffects } from '@/composables/useUiEffects'
@@ -31,6 +32,11 @@ const glowEl = ref<HTMLElement | null>(null)
 
 const reduceMotion =
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// 触屏设备（手机/平板，hover:none + pointer:coarse）不跑动画循环，改为静态单帧
+const isCoarseTouch =
+  typeof window !== 'undefined' && window.matchMedia('(hover: none) and (pointer: coarse)').matches
+const staticMode = reduceMotion || isCoarseTouch
 
 const TAU = Math.PI * 2
 
@@ -75,6 +81,7 @@ let raf = 0
 let running = false
 let lastTime = 0
 let resizeObserver: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
 const mouse = { x: -9999, y: -9999, active: false }
 const glowPos = { x: -9999, y: -9999 }
 // 视差偏移量（-0.5..0.5 的屏幕相对坐标，lerp 平滑）
@@ -165,6 +172,8 @@ const resize = () => {
     small ? clampCount(area / 26000, 14, 46) : clampCount(area / 20000, 24, 90),
     () => makeStar('mid'),
   )
+  // 静态模式没有动画循环兜底重绘，尺寸变化（移动端地址栏伸缩、转屏）后立即补一帧
+  if (staticMode) renderStaticFrame()
 }
 
 /** 绘制一层星野：漂移 + 闪烁 + 柔光，spike 星附加十字衍射光芒 */
@@ -213,6 +222,54 @@ const drawStarLayer = (
       ctx.lineTo(x, y + len)
       ctx.stroke()
     }
+  }
+}
+
+/** 静态单帧渲染（触屏/减少动效设备）：星野 + 星座连线一次画完，不进动画循环 */
+const renderStaticFrame = () => {
+  const canvas = canvasEl.value
+  const ctx = canvas?.getContext('2d')
+  if (!canvas || !ctx) return
+  ctx.clearRect(0, 0, width, height)
+  if (!effects.particles) return
+
+  const dark = isDark()
+  const dotAlpha = dark ? 0.65 : 0.5
+  const lineBase = dark ? 0.22 : 0.15
+  const dotColor = dark ? '165, 180, 252' : '99, 102, 241'
+  const lineColor = dark ? '129, 140, 248' : '99, 102, 241'
+  const starPalette = dark ? DARK_STAR_COLORS : LIGHT_STAR_COLORS
+
+  // 固定 time=0：各星点相位随机，亮度仍呈自然分布
+  drawStarLayer(ctx, farStars, starPalette, 0, 0, 0)
+  drawStarLayer(ctx, midStars, starPalette, 0, 0, 0)
+
+  ctx.lineWidth = 1
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const dx = nodes[i].x - nodes[j].x
+      const dy = nodes[i].y - nodes[j].y
+      const dist = Math.hypot(dx, dy)
+      if (dist >= linkDist) continue
+      ctx.strokeStyle = `rgba(${lineColor}, ${((1 - dist / linkDist) * lineBase).toFixed(3)})`
+      ctx.beginPath()
+      ctx.moveTo(nodes[i].x, nodes[i].y)
+      ctx.lineTo(nodes[j].x, nodes[j].y)
+      ctx.stroke()
+    }
+  }
+
+  ctx.fillStyle = `rgba(${dotColor}, ${(dotAlpha * 0.14).toFixed(3)})`
+  for (const n of nodes) {
+    ctx.beginPath()
+    ctx.arc(n.x, n.y, n.r * 2.8, 0, TAU)
+    ctx.fill()
+  }
+  ctx.fillStyle = `rgba(${dotColor}, ${dotAlpha})`
+  for (const n of nodes) {
+    ctx.beginPath()
+    ctx.arc(n.x, n.y, n.r, 0, TAU)
+    ctx.fill()
   }
 }
 
@@ -371,7 +428,7 @@ const step = (now = performance.now()) => {
 }
 
 const start = () => {
-  if (running || reduceMotion) return
+  if (running || staticMode) return
   running = true
   lastTime = 0
   nextMeteorAt = performance.now() / 1000 + 2 + Math.random() * 4
@@ -416,10 +473,15 @@ const onVisibility = () => {
   }
 }
 
-// 任一效果开启就保持渲染循环；都关闭时停止并清空画布
+// 任一效果开启就保持渲染循环；都关闭时停止并清空画布。
+// 静态模式下重绘/清空单帧即可（renderStaticFrame 内部按 particles 偏好处理）。
 watch(
   () => [effects.particles, effects.mouseGlow],
   ([particles, mouseGlow]) => {
+    if (staticMode) {
+      renderStaticFrame()
+      return
+    }
     if (particles || mouseGlow) start()
     else stop()
   },
@@ -435,6 +497,12 @@ onMounted(() => {
   } else {
     window.addEventListener('resize', resize)
   }
+  if (staticMode) {
+    // 静态模式：无动画可暂停、无指针互动，只需在主题类变化时用新配色重绘
+    themeObserver = new MutationObserver(() => renderStaticFrame())
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return
+  }
   window.addEventListener('pointerdown', onPointerMove, { passive: true })
   window.addEventListener('pointermove', onPointerMove, { passive: true })
   window.addEventListener('pointerup', onPointerEnd, { passive: true })
@@ -448,6 +516,8 @@ onBeforeUnmount(() => {
   stop()
   resizeObserver?.disconnect()
   resizeObserver = null
+  themeObserver?.disconnect()
+  themeObserver = null
   window.removeEventListener('resize', resize)
   window.removeEventListener('pointerdown', onPointerMove)
   window.removeEventListener('pointermove', onPointerMove)
