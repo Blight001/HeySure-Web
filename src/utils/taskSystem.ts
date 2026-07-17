@@ -49,8 +49,6 @@ export interface TaskCreateForm {
   schedule_max_runs: number
   schedule_end_at: string
   schedule_at: string
-  override_token_limit_enabled: boolean
-  token_limit_override: number
   override_mcp_tools_enabled: boolean
   mcp_tools_override: string[]
 }
@@ -224,8 +222,6 @@ export const getTaskPayloadTags = (payload?: Record<string, any>) => {
       if (at > 0) out.push(`定时日期: ${formatTs(at)}`)
     }
   }
-  const token = src.override_token_limit || {}
-  if (token.enabled) out.push(`Token覆盖: ${Number(token.value) || 0}`)
   const mcp = src.override_mcp_tools || {}
   if (mcp.enabled) out.push(`MCP覆盖: ${Array.isArray(mcp.tools) ? mcp.tools.length : 0}项`)
   return out

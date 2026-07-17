@@ -23,8 +23,6 @@ export interface TriggerTaskPayload {
   /** 循环截止时间（Unix 秒），null=不限 */
   schedule_end_at?: number | null
   schedule_at: number | string | null
-  override_token_limit_enabled: boolean
-  token_limit_override: number
   override_mcp_tools_enabled: boolean
   mcp_tools_override: string[]
 }

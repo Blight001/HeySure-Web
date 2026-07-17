@@ -22,8 +22,6 @@ const defaultTaskPayload = (title: string, instruction: string) => ({
   schedule_run_immediately: false,
   schedule_duration_minutes: 30,
   schedule_at: null,
-  override_token_limit_enabled: false,
-  token_limit_override: 10000,
   override_mcp_tools_enabled: false,
   mcp_tools_override: [],
 })

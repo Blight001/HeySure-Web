@@ -122,8 +122,6 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
     schedule_max_runs: 0,
     schedule_end_at: '',
     schedule_at: '',
-    override_token_limit_enabled: false,
-    token_limit_override: Math.max(1, Number(agent?.tokenLimit) || 10000),
     override_mcp_tools_enabled: false,
     mcp_tools_override: parseAgentMcpTools(agent),
   })
@@ -147,9 +145,6 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
       : {}
     const schedule = payload.schedule && typeof payload.schedule === 'object'
       ? payload.schedule
-      : {}
-    const overrideToken = payload.override_token_limit && typeof payload.override_token_limit === 'object'
-      ? payload.override_token_limit
       : {}
     const overrideMcp = payload.override_mcp_tools && typeof payload.override_mcp_tools === 'object'
       ? payload.override_mcp_tools
@@ -190,8 +185,6 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
       schedule_max_runs: Math.max(0, Number(schedule.max_runs) || 0),
       schedule_end_at: formatDateLocal(Number(schedule.end_at) || 0),
       schedule_at: scheduleTimeMode === 'datetime' ? formatDateTimeLocal(parsedScheduleAt) : '',
-      override_token_limit_enabled: !!overrideToken.enabled,
-      token_limit_override: Math.max(1, Number(overrideToken.value) || base.token_limit_override),
       override_mcp_tools_enabled: !!overrideMcp.enabled,
       mcp_tools_override: overrideMcpTools.length > 0 ? overrideMcpTools : base.mcp_tools_override,
     }
@@ -269,8 +262,6 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
     const sameToolCount = selectedTools.length === defaultTools.length
     const sameTools = sameToolCount && selectedTools.every(tool => defaultTools.includes(tool))
     const autoEnableMcpOverride = !editingJob && !sameTools
-    const autoEnableTokenOverride = !editingJob
-      && Number(taskCreateForm.value.token_limit_override) !== Math.max(1, Number(agent.tokenLimit) || 10000)
     const useScheduleDatetime = !!taskCreateForm.value.schedule_enabled
       && !taskCreateForm.value.schedule_loop_enabled
       && taskCreateForm.value.schedule_time_mode === 'datetime'
@@ -321,8 +312,6 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
         schedule_max_runs: loopEnabled ? Math.max(0, Number(taskCreateForm.value.schedule_max_runs) || 0) : 0,
         schedule_end_at: normalizedEndAt,
         schedule_at: normalizedScheduleAt,
-        override_token_limit_enabled: !!taskCreateForm.value.override_token_limit_enabled || autoEnableTokenOverride,
-        token_limit_override: Math.max(1, Number(taskCreateForm.value.token_limit_override) || 10000),
         override_mcp_tools_enabled: !!taskCreateForm.value.override_mcp_tools_enabled || autoEnableMcpOverride,
         mcp_tools_override: selectedTools,
       }

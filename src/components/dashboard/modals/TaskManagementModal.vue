@@ -634,20 +634,6 @@ const taskStateFilterButtonClass = (state: JobStateFilter) => {
         <div class="mt-3 grid grid-cols-1 gap-3">
           <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 p-3">
             <label class="text-xs text-zinc-600 dark:text-zinc-300 flex items-center gap-2 mb-2">
-              <input type="checkbox" v-model="taskCreateForm.override_token_limit_enabled" />
-              <span>修改默认 Token 范围</span>
-            </label>
-            <input
-              v-if="taskCreateForm.override_token_limit_enabled"
-              v-model.number="taskCreateForm.token_limit_override"
-              type="number"
-              min="1"
-              class="w-full md:w-56 px-2 py-1.5 text-xs rounded border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100"
-            />
-          </div>
-
-          <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 p-3">
-            <label class="text-xs text-zinc-600 dark:text-zinc-300 flex items-center gap-2 mb-2">
               <input type="checkbox" v-model="taskCreateForm.override_mcp_tools_enabled" />
               <span>修改默认 MCP 使用范围</span>
             </label>
