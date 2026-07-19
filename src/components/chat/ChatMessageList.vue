@@ -18,6 +18,7 @@ interface Message {
   id?: number
   tags?: string
   created_at?: number
+  latency?: number
 }
 
 const props = defineProps<{
@@ -69,7 +70,17 @@ const messageTimeLabels = computed<Record<number, string>>(() => {
       continue
     }
 
-    if (prevEnd != null && ts > prevEnd) {
+    // Prefer the server-measured, persisted duration when present: the
+    // assistant message carries its whole-turn model latency (deep thinking +
+    // generation) and each MCP bubble carries its own tool-execution time.
+    // These survive a reload and are precise, unlike the created_at gap below
+    // (which also folds in queue/overhead time). Fall back to the gap for
+    // legacy messages saved before latency was recorded.
+    const persisted = Number(current.latency || 0)
+    if (Number.isFinite(persisted) && persisted > 0) {
+      const duration = formatDurationMs(persisted * 1000)
+      if (duration) labels[idx] = duration
+    } else if (prevEnd != null && ts > prevEnd) {
       const duration = formatDurationMs(ts - prevEnd)
       if (duration) labels[idx] = duration
     }
