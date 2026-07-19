@@ -14,6 +14,11 @@ import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/co
 import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { formatDurationMs } from '@/utils/datetime'
 import { copyTextToClipboard } from '@/utils/clipboard'
+import heySureLogo from '@/assets/logo/HeySure.png'
+
+/** 新建空白对话的默认标题；首条消息发出后会自动改成摘要标题。 */
+const BLANK_SESSION_NAME = '新对话'
+const PLACEHOLDER_SESSION_NAMES = new Set(['新对话', '未命名会话', '默认会话', '选择对话'])
 
 const { alert, confirm, prompt } = useMessage()
 interface ChatMessage {
@@ -56,6 +61,10 @@ interface PersistedMessageActionState {
 
 interface Props {
   adminModel?: string
+  /** AI 配置的 token 上限（0 表示无上限）；空白对话页展示用。 */
+  tokenLimit?: number
+  /** AI 已使用 token；空白对话页展示用。 */
+  tokensUsed?: number
   aiConfigId?: number
   aiKind?: 'assistant' | 'core'
   /** Logged-in user id, used to join the `user_{id}` Socket.IO room for live runs. */
@@ -445,17 +454,47 @@ const toAiWorkspacePath = (path: string) => {
 }
 
 const isTaskSessionName = (name: string) => /^任务[:：]\s*/.test(String(name || '').trim())
+const isTaskSessionId = (id: string) => String(id || '').startsWith('session_task_')
+const isTaskSession = (item: SessionItem) => isTaskSessionId(item.id) || isTaskSessionName(item.name || '')
 
-const pickPreferredSessionId = (items: SessionItem[]) => {
-  if (!Array.isArray(items) || items.length === 0) return ''
-  const requested = preferredInitialSessionId.value
-  if (requested) {
-    const match = items.find(item => item.id === requested)
-    if (match) return match.id
-  }
-  const normal = items.find(item => !isTaskSessionName(item.name || ''))
-  return normal?.id || items[0].id
+const isPlaceholderSessionName = (name: string) => {
+  const n = String(name || '').trim()
+  return !n || PLACEHOLDER_SESSION_NAMES.has(n)
 }
+
+/** 用首条用户消息生成会话标题（可后续手动重命名）。 */
+const buildAutoSessionTitle = (content: string) => {
+  const text = String(content || '').replace(/\s+/g, ' ').trim()
+  if (!text) return BLANK_SESSION_NAME
+  return text.length > 28 ? `${text.slice(0, 28)}…` : text
+}
+
+/** 空白对话欢迎页：无消息且未在生成时展示 logo / 最近对话 / AI 配置。 */
+const isBlankConversation = computed(() => {
+  if (chatMessages.value.length > 0) return false
+  if (isTyping.value || isRunActive.value) return false
+  if (String(liveAssistantText.value || '').trim()) return false
+  return true
+})
+
+/** 最近普通对话（排除任务会话），供空白页快速跳转。 */
+const recentNormalSessions = computed(() =>
+  sessionList.value
+    .filter(item => !isTaskSession(item))
+    .slice(0, 8),
+)
+
+const displayModelLabel = computed(() => String(props.adminModel || '').trim() || '未设置')
+const displayTokenLimitLabel = computed(() => {
+  const limit = Number(props.tokenLimit)
+  if (!Number.isFinite(limit) || limit <= 0) return '无上限'
+  return String(Math.floor(limit))
+})
+const displayTokensUsedLabel = computed(() => {
+  const used = Number(props.tokensUsed)
+  if (!Number.isFinite(used) || used < 0) return '0'
+  return String(Math.floor(used))
+})
 
 const chatCtx = computed<chatApi.AiContext>(() => ({
   aiKind: aiKindValue.value,
@@ -1196,7 +1235,7 @@ const appendRunErrorNotice = async (runId: string, message: string) => {
 
   if (!getAuthToken() || !currentSessionId.value) return
   try {
-    const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话'
+    const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || BLANK_SESSION_NAME
     const saved = await chatApi.saveChatMessage({
       role: 'system',
       content,
@@ -1226,41 +1265,48 @@ const loadSessions = async () => {
   }
   sessionList.value = (Array.isArray(rows) ? rows : []).map((row: any) => ({
     id: String(row?.id || ''),
-    name: String(row?.name || '未命名会话'),
+    name: String(row?.name || BLANK_SESSION_NAME),
     totalTokens: Number(row?.total_tokens || 0),
     forwardToBot: !!row?.forward_to_bot,
   }))
-  if (preferredInitialSessionId.value) {
-    currentSessionId.value = preferredInitialSessionId.value
-    return
-  }
-  if (!currentSessionId.value && sessionList.value.length > 0) {
-    currentSessionId.value = pickPreferredSessionId(sessionList.value)
-  }
 }
 
+/** 创建空白对话（默认标题，首条消息后自动命名；nameInput 可覆盖）。 */
 const createSession = async (nameInput?: string) => {
-  let name = nameInput
-  if (!name) {
-    name = await prompt({ message: '输入新对话名称:', placeholder: '例如: 需求拆解' }) || ''
-  }
-  if (!name.trim()) return
-  if (!getAuthToken()) return
+  const name = String(nameInput ?? BLANK_SESSION_NAME).trim() || BLANK_SESSION_NAME
+  if (!getAuthToken()) return ''
   let session
   try {
     session = await chatApi.createChatSession(chatCtx.value, name)
   } catch {
-    return
+    return ''
   }
   await loadSessions()
   currentSessionId.value = session.id
   chatMessages.value = []
   // 新会话开场时刷新工具组，让端侧设备目录保持最新。
   void loadFrontPromptToolSchemas()
+  return session.id
 }
 
 const createSessionFromButton = async () => {
   await createSession()
+}
+
+/** 首条用户消息后，把占位标题自动改成摘要；用户仍可手动重命名。 */
+const maybeAutoTitleSession = async (sessionId: string, firstMessage: string) => {
+  const sid = String(sessionId || '').trim()
+  if (!sid || !getAuthToken()) return
+  const row = sessionList.value.find(item => item.id === sid)
+  if (row && !isPlaceholderSessionName(row.name)) return
+  const title = buildAutoSessionTitle(firstMessage)
+  if (!title || title === row?.name) return
+  try {
+    await chatApi.renameChatSession(chatCtx.value, sid, title)
+    await loadSessions()
+  } catch {
+    // 自动命名失败不影响发送主流程
+  }
 }
 
 const deleteSession = async (sid: string) => {
@@ -1273,9 +1319,9 @@ const deleteSession = async (sid: string) => {
   }
   await loadSessions()
   if (currentSessionId.value === sid) {
-    currentSessionId.value = pickPreferredSessionId(sessionList.value)
-    if (currentSessionId.value) await loadChatHistory(currentSessionId.value)
-    else chatMessages.value = []
+    // 删除当前对话后回到空白态，而不是强制跳到另一条旧会话。
+    currentSessionId.value = ''
+    chatMessages.value = []
   }
 }
 
@@ -1283,7 +1329,7 @@ const renameSession = async (sid: string) => {
   const current = sessionList.value.find(item => item.id === sid)
   const name = (await prompt({
     message: '输入新的对话名称:',
-    placeholder: current?.name || '未命名会话',
+    placeholder: current?.name || BLANK_SESSION_NAME,
     defaultValue: current?.name || '',
   }) || '').trim()
   if (!name) return
@@ -1554,9 +1600,8 @@ const deleteSessions = async (sessionIds: string[]) => {
   }
   await loadSessions()
   if (deleted.has(currentSessionId.value)) {
-    currentSessionId.value = pickPreferredSessionId(sessionList.value)
-    if (currentSessionId.value) await loadChatHistory(currentSessionId.value)
-    else chatMessages.value = []
+    currentSessionId.value = ''
+    chatMessages.value = []
   }
   if (deleted.size > 0) {
     alert({ message: `已删除 ${deleted.size} 个对话记录`, type: 'success' })
@@ -2019,8 +2064,14 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
   const content = (overrideContent ?? chatInput.value).trim()
   const silent = !!options.silent
   if (silent) return
-  if (!content || !currentSessionId.value) return
+  if (!content) return
   if (!getAuthToken()) return
+
+  // 空白对话：首条消息发出时再真正创建会话，避免每次点角色就刷一堆空会话。
+  if (!currentSessionId.value) {
+    const createdId = await createSession(BLANK_SESSION_NAME)
+    if (!createdId) return
+  }
 
   // 生成中不打断整轮，但也不再干等：把消息投递给正在跑的 run，由后端 worker
   // 在下一个步骤边界（一次深度思考 / 一次 MCP 调用之后）直接插入给 AI。
@@ -2031,7 +2082,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       const res = await chatApi.injectMessage({
         content,
         session_id: currentSessionId.value,
-        session_name: sessionList.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话',
+        session_name: sessionList.value.find(s => s.id === currentSessionId.value)?.name || BLANK_SESSION_NAME,
         ai_config_id: props.aiConfigId,
         ai_kind: aiKindValue.value,
       })
@@ -2060,7 +2111,8 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
   const mcpGroups = checkedToolGroups.value
   const mcpCatalogStr = buildMcpCatalogSection(mcpGroups)
 
-  const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || '未命名会话'
+  const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || BLANK_SESSION_NAME
+  const shouldAutoTitle = isPlaceholderSessionName(currentSessionName)
   const visibleUserContent = content
   const fullContentWithContext = [visibleUserContent, attachedPathStr, mcpCatalogStr]
     .filter(Boolean)
@@ -2082,13 +2134,17 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       model_content: fullContentWithContext,
       visible_tags: visibleTags,
       session_id: currentSessionId.value,
-      session_name: currentSessionName,
+      session_name: shouldAutoTitle ? buildAutoSessionTitle(visibleUserContent) : currentSessionName,
       ai_config_id: props.aiConfigId,
       ai_kind: aiKindValue.value,
     })
     currentRunId.value = started.run_id
     if (selectedReadableFiles.length > 0) {
       emit('update:selectedFiles', [])
+    }
+    // 占位标题会话：首条消息后自动生成标题（用户仍可手动改名）。
+    if (shouldAutoTitle) {
+      void maybeAutoTitleSession(currentSessionId.value, visibleUserContent)
     }
     // Pull just the freshly-persisted user message instead of reloading and
     // re-parsing the whole page right as the run begins.
@@ -2131,15 +2187,15 @@ const initializeSessions = async () => {
   void loadConfiguredFrontPrompt()
   void loadFrontPromptToolSchemas()
   await loadSessions()
-  if (sessionList.value.length === 0) {
-    await createSession('默认会话')
-  } else if (preferredInitialSessionId.value) {
-    currentSessionId.value = preferredInitialSessionId.value
-  } else if (!currentSessionId.value) {
-    currentSessionId.value = pickPreferredSessionId(sessionList.value)
-  }
-  if (currentSessionId.value) {
+  const requested = preferredInitialSessionId.value
+  if (requested && sessionList.value.some(item => item.id === requested)) {
+    // 有进行中的运行对话：直接跳到该会话。
+    currentSessionId.value = requested
     await loadChatHistory(currentSessionId.value)
+  } else {
+    // 无运行中对话：进入空白对话态（不自动选中历史会话；首条消息时再创建）。
+    currentSessionId.value = ''
+    chatMessages.value = []
   }
   // Setting currentSessionId above triggers the session-change watcher, which
   // loads the system-prompt preview — no separate call needed here.
@@ -2322,7 +2378,65 @@ onBeforeUnmount(() => {
     <!-- 聊天内容区：消息 + 输入（任务流程已移到顶部标题边上，水平显示） -->
     <div class="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
       <div ref="chatScrollRef" class="flex-1 overflow-y-auto">
+        <!-- 空白对话欢迎页：logo + 最近对话 + AI 基础配置 -->
+        <div
+          v-if="isBlankConversation"
+          class="flex min-h-[300px] h-full flex-col items-center justify-center gap-5 px-4 py-8"
+        >
+          <img
+            :src="heySureLogo"
+            alt="HeySure"
+            class="h-16 w-16 sm:h-20 sm:w-20 object-contain opacity-90 drop-shadow-sm"
+          />
+          <div class="text-center space-y-1">
+            <div class="text-sm font-medium text-zinc-600 dark:text-zinc-300">开始一场新对话</div>
+            <div class="text-xs text-zinc-400 dark:text-zinc-500">输入第一句话后会自动生成标题，也可稍后手动重命名</div>
+          </div>
+
+          <div v-if="recentNormalSessions.length > 0" class="w-full max-w-md space-y-2">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 px-1">
+              最近对话
+            </div>
+            <div class="rounded-xl border border-zinc-200/80 bg-white/50 dark:border-zinc-700/60 dark:bg-zinc-900/30 overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-800">
+              <button
+                v-for="session in recentNormalSessions"
+                :key="session.id"
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs text-zinc-700 hover:bg-emerald-50/70 dark:text-zinc-200 dark:hover:bg-emerald-900/20 transition-colors"
+                @click="loadChatHistory(session.id)"
+              >
+                <span class="min-w-0 flex-1 truncate">{{ session.name || BLANK_SESSION_NAME }}</span>
+                <span class="shrink-0 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                  Token {{ session.totalTokens || 0 }}
+                </span>
+              </button>
+            </div>
+          </div>
+          <div v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">
+            暂无历史对话
+          </div>
+
+          <div class="w-full max-w-md rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-3 dark:border-zinc-700/60 dark:bg-zinc-900/40">
+            <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-2">
+              当前 AI 配置
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+              <div class="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-2 dark:bg-zinc-800/50">
+                <span class="shrink-0 text-zinc-400 dark:text-zinc-500">AI 模型</span>
+                <span class="min-w-0 truncate font-medium text-right" :title="displayModelLabel">{{ displayModelLabel }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-2 dark:bg-zinc-800/50">
+                <span class="shrink-0 text-zinc-400 dark:text-zinc-500">Token 上限</span>
+                <span class="min-w-0 truncate font-medium text-right tabular-nums" :title="`${displayTokensUsedLabel} / ${displayTokenLimitLabel}`">
+                  {{ displayTokensUsedLabel }} / {{ displayTokenLimitLabel }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <ChatConversationView
+          v-else
           :baseMessages="chatMessages"
           :sessionActive="!!currentSessionId"
           :frontPromptText="configuredFrontPrompt"

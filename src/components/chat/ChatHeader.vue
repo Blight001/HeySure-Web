@@ -58,8 +58,9 @@ const normalSessionsTokenTotal = computed(() => sumTokens(normalSessions.value))
 const taskSessionsTokenTotal = computed(() => sumTokens(taskSessions.value))
 
 const currentSessionName = computed(() => {
+  if (!props.currentSessionId) return '新对话'
   const row = props.sessionList.find(item => item.id === props.currentSessionId)
-  return row?.name || '选择对话'
+  return row?.name || '新对话'
 })
 
 const sessionLineLabel = (session: SessionMeta) => {

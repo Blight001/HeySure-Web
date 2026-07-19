@@ -288,11 +288,21 @@ const closeDeviceToolsModal = () => {
   deviceToolsInitialType.value = undefined
 }
 
+const resolveActiveRunSessionId = (agent: Agent) => {
+  const sid = String(agent.activeRunSessionId || '').trim()
+  if (!sid) return ''
+  const runStatus = String(agent.activeRunStatus || '').toLowerCase()
+  // 有进行中的 run 时，打开角色直接跳到该对话；否则进入空白新对话。
+  if (runStatus === 'running' || runStatus === 'queued') return sid
+  if (String(agent.runtimeStatus || '').toLowerCase() === 'running') return sid
+  return ''
+}
+
 const openAgentChat = (agent: Agent) => {
   if (!agent.aiConfigId) return
   chatTarget.value = agent
   selectedFiles.value = []
-  chatInitialSessionId.value = ''
+  chatInitialSessionId.value = resolveActiveRunSessionId(agent)
   chatCurrentSessionId.value = ''
   chatTaskPlanRefreshSignal.value = 0
   chatModalOpen.value = true
@@ -878,8 +888,10 @@ onUnmounted(() => {
             </div>
             <div class="flex-1 min-h-0 p-2">
               <ChatInterface
-                :key="`unified-chat-${chatTarget.aiConfigId}-${chatInitialSessionId || 'default'}`"
+                :key="`unified-chat-${chatTarget.aiConfigId}-${chatInitialSessionId || 'blank'}`"
                 :adminModel="chatTarget.model || ''"
+                :tokenLimit="chatTarget.tokenLimit"
+                :tokensUsed="chatTarget.tokensUsed"
                 :aiConfigId="chatTarget.aiConfigId"
                 :aiKind="chatTargetAiKind"
                 :currentUserId="Number(currentUser?.id) || undefined"
