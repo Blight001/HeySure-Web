@@ -151,8 +151,8 @@ const mcpHistoryCompactionEnabledValue = computed({
 })
 
 const mcpHistoryResultMaxCharsValue = computed({
-  get: () => Number(props.mcpHistoryResultMaxChars || 100),
-  set: value => emit('update:mcpHistoryResultMaxChars', Math.max(20, Math.min(10000, Math.floor(Number(value) || 100))))
+  get: () => Number(props.mcpHistoryResultMaxChars || 8000),
+  set: value => emit('update:mcpHistoryResultMaxChars', Math.max(20, Math.min(10000, Math.floor(Number(value) || 8000))))
 })
 
 const conversationAutoCompressEnabledValue = computed({
@@ -299,7 +299,7 @@ const openExtensionTestPage = () => {
                   max="10000"
                   class="w-full px-3 py-2 rounded-xl acrylic-input focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:text-zinc-100 transition-all text-xs disabled:cursor-not-allowed"
                 />
-                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 20-10000，默认 100。数据库和聊天界面的原始 MCP 记录不会被截断。</p>
+                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 20-10000，默认 8000（全保真：普通工具返回跨轮完整保留，仅超大返回才会被缩短）。数据库和聊天界面的原始 MCP 记录不会被截断。</p>
               </div>
             </div>
           </div>
