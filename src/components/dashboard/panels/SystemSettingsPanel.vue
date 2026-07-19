@@ -426,6 +426,22 @@ const openExtensionTestPage = () => {
                           <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">Base URL</div>
                           <input :value="preset.base_url" @input="updateModelPreset(index, { base_url: ($event.target as HTMLInputElement).value })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs" placeholder="https://.../chat/completions" />
                         </div>
+                        <div>
+                          <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">接口协议</div>
+                          <select :value="preset.provider || 'auto'" @change="updateModelPreset(index, { provider: ($event.target as HTMLSelectElement).value as ModelPreset['provider'] })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs">
+                            <option value="auto">自动（按 Base URL 判断）</option>
+                            <option value="openai">OpenAI 兼容</option>
+                            <option value="anthropic">Anthropic</option>
+                          </select>
+                        </div>
+                        <div>
+                          <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">工具调用协议</div>
+                          <select :value="preset.tool_protocol || 'auto'" @change="updateModelPreset(index, { tool_protocol: ($event.target as HTMLSelectElement).value as ModelPreset['tool_protocol'] })" class="w-full px-3 py-2 rounded-xl acrylic-input dark:text-zinc-100 text-xs">
+                            <option value="auto">自动</option>
+                            <option value="native">原生 function calling</option>
+                            <option value="text">纯文本 mcp-call（CLI 网关等）</option>
+                          </select>
+                        </div>
                       </div>
                       <div class="mt-2 flex justify-end gap-2">
                         <button class="text-[11px] px-2 py-1 rounded border border-red-200 text-red-600 bg-red-50 dark:border-red-500/30 dark:bg-red-900/20 dark:text-red-300" @click="removeModelPreset(index)">删除</button>

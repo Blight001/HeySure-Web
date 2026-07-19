@@ -9,6 +9,12 @@ const createInvokeBlockPattern = () =>
 const createToolCallBlockPattern = () =>
   /<[^<>]*?\btool[_-]?call\b[^<>]*?>[\s\S]*?<\/[^<>]*?\btool[_-]?call\b[^<>]*?>/gi
 
+// Grok / xAI style: <xai:function_call name="tool">...</xai:function_call>.
+// Removing the complete block here (not just its tags) keeps the partial-tail
+// pattern from also swallowing legitimate prose after the block.
+const createFunctionCallBlockPattern = () =>
+  /<[^<>]*?\bfunction[_-]?call\b[^<>]*?\bname\s*=\s*["']?[^"'>\s]+["']?[^<>]*?>[\s\S]*?<\/[^<>]*?\bfunction[_-]?call\b[^<>]*?>/gi
+
 // Leftover wrapper tags, e.g. <mcp:tool_calls> … </function_calls>.
 const createWrapperTagPattern = () =>
   /<\/?[^<>]*?\b(?:tool[_-]?calls?|function[_-]?calls?)\b[^<>]*?>/gi
@@ -22,6 +28,7 @@ export const stripMcpCallBlocks = (raw?: string) => {
     .replace(createMcpCallBlockPattern(), '')
     .replace(createInvokeBlockPattern(), '')
     .replace(createToolCallBlockPattern(), '')
+    .replace(createFunctionCallBlockPattern(), '')
     .replace(createWrapperTagPattern(), '')
     .replace(createPartialTailPattern(), '')
     .replace(/\n{3,}/g, '\n\n')

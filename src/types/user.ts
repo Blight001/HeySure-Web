@@ -8,6 +8,10 @@ export interface ModelPreset {
   api_key: string
   base_url: string
   model: string
+  /** 接口协议：auto 按 base_url 判断；显式指定用于无法嗅探的网关 */
+  provider?: 'auto' | 'anthropic' | 'openai'
+  /** 工具调用协议：text 表示端点不支持原生 function calling（如 grok-cli 网关），仅用 <mcp-call> 文本协议 */
+  tool_protocol?: 'auto' | 'native' | 'text'
 }
 
 export type UserRole = 'owner' | 'admin' | 'member'

@@ -78,12 +78,16 @@ const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
       let id = String(item?.id || model || `model_${index + 1}`).trim()
       if (!id || seen.has(id)) id = `${model}_${index + 1}`
       seen.add(id)
+      const provider = String(item?.provider || '').trim().toLowerCase()
+      const toolProtocol = String(item?.tool_protocol || '').trim().toLowerCase()
       return {
         id,
         name: String(item?.name || model).trim() || model,
         api_key: apiKey,
         base_url: baseUrl,
         model,
+        provider: (['anthropic', 'openai'].includes(provider) ? provider : 'auto') as ModelPreset['provider'],
+        tool_protocol: (['native', 'text'].includes(toolProtocol) ? toolProtocol : 'auto') as ModelPreset['tool_protocol'],
       }
     })
     .filter(Boolean) as ModelPreset[]
