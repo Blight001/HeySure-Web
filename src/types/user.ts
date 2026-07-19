@@ -28,7 +28,6 @@ export interface User {
   tavily_api_key?: string
   model_presets?: string
   mcp_max_steps?: number
-  mcp_history_compaction_enabled?: boolean
   mcp_history_result_max_chars?: number
   conversation_auto_compress_enabled?: boolean
   mcp_call_method?: string

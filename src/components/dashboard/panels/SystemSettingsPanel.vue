@@ -29,7 +29,6 @@ interface Props {
   tavilyApiKey: string
   modelPresets: ModelPreset[]
   mcpMaxSteps: number
-  mcpHistoryCompactionEnabled: boolean
   mcpHistoryResultMaxChars: number
   conversationAutoCompressEnabled: boolean
 }
@@ -61,7 +60,6 @@ const emit = defineEmits<{
   (e: 'update:tavilyApiKey', value: string): void
   (e: 'update:modelPresets', value: ModelPreset[]): void
   (e: 'update:mcpMaxSteps', value: number): void
-  (e: 'update:mcpHistoryCompactionEnabled', value: boolean): void
   (e: 'update:mcpHistoryResultMaxChars', value: number): void
   (e: 'update:conversationAutoCompressEnabled', value: boolean): void
   (e: 'save'): void
@@ -143,11 +141,6 @@ const removeModelPreset = (index: number) => {
 const mcpMaxStepsValue = computed({
   get: () => Number(props.mcpMaxSteps || 48),
   set: value => emit('update:mcpMaxSteps', Math.max(1, Math.min(999, Math.floor(Number(value) || 48))))
-})
-
-const mcpHistoryCompactionEnabledValue = computed({
-  get: () => props.mcpHistoryCompactionEnabled,
-  set: value => emit('update:mcpHistoryCompactionEnabled', value)
 })
 
 const mcpHistoryResultMaxCharsValue = computed({
@@ -282,24 +275,16 @@ const openExtensionTestPage = () => {
               />
               <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 1-999。连续调用 MCP 工具时，每次模型生成和工具返回后的继续执行都会消耗一步。</p>
               </div>
-              <label class="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
-                <span>
-                  <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">自动缩减历史 MCP 返回</span>
-                  <span class="block mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">新一轮始终携带工具名和完整参数；开启后只缩短历史返回内容，关闭则保留完整返回。</span>
-                </span>
-                <input v-model="mcpHistoryCompactionEnabledValue" type="checkbox" class="h-4 w-4 accent-indigo-600" />
-              </label>
-              <div :class="{ 'opacity-50': !mcpHistoryCompactionEnabledValue }">
-                <div class="text-xs text-zinc-500 mb-1 dark:text-zinc-400">每条历史 MCP 返回最多字符</div>
+              <div>
+                <div class="text-xs font-medium text-zinc-700 mb-1 dark:text-zinc-200">超大历史返回保护（每条最多字符）</div>
                 <input
                   v-model.number="mcpHistoryResultMaxCharsValue"
-                  :disabled="!mcpHistoryCompactionEnabledValue"
                   type="number"
                   min="20"
                   max="10000"
-                  class="w-full px-3 py-2 rounded-xl acrylic-input focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:text-zinc-100 transition-all text-xs disabled:cursor-not-allowed"
+                  class="w-full px-3 py-2 rounded-xl acrylic-input focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:text-zinc-100 transition-all text-xs"
                 />
-                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 20-10000，默认 8000（全保真：普通工具返回跨轮完整保留，仅超大返回才会被缩短）。数据库和聊天界面的原始 MCP 记录不会被截断。</p>
+                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 20-10000，默认 8000。新一轮始终携带工具名和完整参数；普通工具返回跨轮完整保留，仅当单条历史返回超过此上限才会被缩短，防止超大返回撑爆上下文。数据库和聊天界面的原始 MCP 记录不会被截断。</p>
               </div>
             </div>
           </div>

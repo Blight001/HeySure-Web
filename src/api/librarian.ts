@@ -58,7 +58,6 @@ export interface KnowledgeEntryItem {
   intrinsic_personas?: {
     description: string
     total: number
-    available_modes?: Array<{ mode_key: string; name: string; prompt?: string; description?: string }>
     agents: Array<{
       id: number | null
       name: string
@@ -71,17 +70,6 @@ export interface KnowledgeEntryItem {
       platform: string
       generation: number
       prompt: string
-      current_mode_key?: string
-      current_mode_name?: string
-      // 该 AI 自己的工作模式清单（按 AI 隔离；固有人格详情模式栏目的数据源）
-      modes?: Array<{
-        mode_key: string
-        name: string
-        prompt?: string
-        description?: string
-        allow_device_mcp?: boolean
-        is_builtin?: boolean
-      }>
       updated_at: number
     }>
   }
@@ -320,15 +308,4 @@ export const deleteInstalledClawHubSkill = (token: string, slug: string) =>
   del<{ deleted: boolean; slug: string; entry: KnowledgeEntryItem }>(
     `/api/librarian/inheritance-tools/clawhub/installed/${encodeURIComponent(slug)}`,
     { token, fallbackError: '本地快照删除失败' },
-  )
-
-export const saveIntrinsicModePrompt = (
-  token: string,
-  modeKey: string,
-  prompt: string,
-) =>
-  post<KnowledgeEntryItem>(
-    '/api/librarian/mode-prompt',
-    { mode_key: modeKey, prompt },
-    { token, fallbackError: '模式 Prompt 保存失败' },
   )

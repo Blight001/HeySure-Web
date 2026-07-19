@@ -107,7 +107,6 @@ export const useDashboardSystemSettings = (options: UseDashboardSystemSettingsOp
   const tavilyApiKey = ref('')
   const modelPresets = ref<ModelPreset[]>([])
   const mcpMaxSteps = ref(48)
-  const mcpHistoryCompactionEnabled = ref(true)
   const mcpHistoryResultMaxChars = ref(8000)
   const conversationAutoCompressEnabled = ref(true)
   const mcpNamespaceHints = ref(DEFAULT_MCP_NAMESPACE_HINTS)
@@ -325,7 +324,6 @@ Rules:
         tavily_api_key: tavilyApiKey.value,
         model_presets: JSON.stringify(normalizeModelPresets(modelPresets.value)),
         mcp_max_steps: clampMcpMaxSteps(mcpMaxSteps.value),
-        mcp_history_compaction_enabled: mcpHistoryCompactionEnabled.value,
         mcp_history_result_max_chars: clampMcpHistoryResultChars(mcpHistoryResultMaxChars.value),
         conversation_auto_compress_enabled: conversationAutoCompressEnabled.value,
         role_mcp_permissions: roleMcpPermissionsInitialized
@@ -418,9 +416,6 @@ Rules:
       if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_max_steps')) {
         mcpMaxSteps.value = clampMcpMaxSteps(rawUser.mcp_max_steps)
       }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_history_compaction_enabled')) {
-        mcpHistoryCompactionEnabled.value = rawUser.mcp_history_compaction_enabled !== false
-      }
       if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_history_result_max_chars')) {
         mcpHistoryResultMaxChars.value = clampMcpHistoryResultChars(rawUser.mcp_history_result_max_chars)
       }
@@ -492,7 +487,6 @@ Rules:
     mcpDynamicRule,
     globalMcpFormatErrorHint,
     mcpMaxSteps,
-    mcpHistoryCompactionEnabled,
     mcpHistoryResultMaxChars,
     conversationAutoCompressEnabled,
     defaultStartTaskPrompt,

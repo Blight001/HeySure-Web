@@ -129,7 +129,6 @@ const getMcpToolFallbackTag = (name: string) => {
   if (hasMcpPrefix(name, 'task')) return '任务'
   if (hasMcpPrefix(name, 'todo')) return '任务'
   if (hasMcpPrefix(name, 'prompt')) return 'Prompt'
-  if (hasMcpPrefix(name, 'mode')) return '工作模式'
   // 发消息：message.send+to（to 参数选用户或其他 AI），单独成栏，不再混入「会话管理」。
   if (hasMcpPrefix(name, 'message')) return '发消息'
   if (hasMcpPrefix(name, 'feishu')) return '会话管理'
@@ -162,7 +161,6 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   'message.send+to': '发消息',
   'conversation.manage': '会话管理',
   'prompt.manage': 'Prompt 管理',
-  'mode.manage': '工作模式',
   'knowledge.manage': '知识库管理',
   'device+mcp.manage': '管理设备 MCP',
   'mcp.manage_dynamic_tool': '管理动态 MCP',

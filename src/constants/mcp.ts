@@ -12,7 +12,6 @@ export const DEFAULT_MCP_TOOLS = [
   'task.manage',
   'todo.manage',
   'prompt.manage',
-  'mode.manage',
   'knowledge.manage',
   'message.send+to',
   'conversation.manage',

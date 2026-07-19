@@ -23,10 +23,6 @@ export interface McpToolsResponse {
   promptToolsScope?: 'current_ai' | 'all_current'
   promptToolsAiConfigId?: number | null
   promptToolsMcpEnabled?: boolean
-  /** 当前 AI 的工作模式 key（无 aiConfigId 时为空串） */
-  promptToolsModeKey?: string
-  /** 当前工作模式类型是否允许调用设备端 MCP；false 时设备工具组应置灰禁选 */
-  promptToolsAllowDeviceMcp?: boolean
   roleOrder?: string[]
   roleLabels?: Record<string, string>
   roleDefaults?: Record<string, string[]>

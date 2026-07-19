@@ -194,7 +194,8 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     model_preset_id: modelPresets.value[0]?.id || '',
     model: modelPresets.value[0]?.model || '',
     prompt: '',
-    mcp_tools: [...defaultMcpTools],
+    // 新建 AI 默认勾选全部可用 MCP 工具（工具列表已加载时用全量，否则回退到基础默认集）。
+    mcp_tools: availableMcpTools.value.length ? [...availableMcpTools.value] : [...defaultMcpTools],
     mcp_auto_approve: false,
     bot_channel: 'feishu' as 'feishu' | 'qq',
     bot_configs: {
@@ -287,10 +288,14 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigSettingsSection.value = aiConfigSettingsSection.value === section ? '' : section
   }
 
-  const openCreateAiConfig = (role: 'assistant_admin' | 'worker' = 'worker') => {
+  const openCreateAiConfig = async (role: 'assistant_admin' | 'worker' = 'worker') => {
     aiConfigMode.value = 'create'
     aiConfigDeleteConfirm.value = false
     aiConfigSettingsSection.value = ''
+    // 新建默认勾选全部 MCP：确保工具列表已加载，buildAiForm 才能取到全量工具。
+    if (!availableMcpTools.value.length) {
+      try { await loadMcpTools() } catch { /* 加载失败时回退到基础默认集 */ }
+    }
     // 角色扁平化：创建入口统一按数字成员处理（辅助管理员不可新建）。
     aiConfigForm.value = buildAiForm(role === 'assistant_admin' ? 'worker' : role)
     aiConfigModalOpen.value = true

@@ -13,9 +13,6 @@ const props = defineProps<{
   selectableFileRoot?: string
   toolGroups?: McpCatalogToolGroup[]
   selectedToolGroups?: string[]
-  /** 工作模式列表（用于 + 面板的模式切换栏目） */
-  agentModes?: any[]
-  currentModeKey?: string
 }>()
 
 const emit = defineEmits<{
@@ -30,7 +27,6 @@ const emit = defineEmits<{
   (e: 'clearFiles'): void
   (e: 'refreshFiles'): void
   (e: 'toggleToolGroup', groupKey: string): void
-  (e: 'switchMode', modeKey: string): void
 }>()
 
 const inputValue = computed({
@@ -113,7 +109,7 @@ watch(() => props.modelValue, async () => {
         :class="isFileSelectorOpen
           ? 'rotate-45 bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
           : 'text-zinc-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-zinc-800 dark:hover:text-indigo-300'"
-        :title="isFileSelectorOpen ? '关闭附加面板' : '附加文件、工具调用与模式切换'"
+        :title="isFileSelectorOpen ? '关闭附加面板' : '附加文件与工具调用'"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -132,8 +128,6 @@ watch(() => props.modelValue, async () => {
         :selectable-file-root="selectableFileRoot"
         :toolGroups="toolGroups"
         :selectedToolGroups="selectedToolGroups"
-        :agentModes="agentModes"
-        :currentModeKey="currentModeKey"
         @close="emit('closeFileSelector')"
         @navigate="emit('navigateTo', $event)"
         @navigateBack="emit('navigateBack')"
@@ -141,7 +135,6 @@ watch(() => props.modelValue, async () => {
         @clear="emit('clearFiles')"
         @refresh="emit('refreshFiles')"
         @toggleToolGroup="emit('toggleToolGroup', $event)"
-        @switchMode="emit('switchMode', $event)"
       />
 
       <textarea

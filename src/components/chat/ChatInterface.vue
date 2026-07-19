@@ -9,7 +9,6 @@ import { isSameAssistantVisibleReply, normalizeAssistantReplyText } from '@/util
 import * as chatApi from '@/api/chat'
 import { listAiConfigs } from '@/api/ai'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
-import { listAgentModes, type AgentMode } from '@/api/agentModes'
 import { getAuthToken } from '@/api/http'
 import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
 import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
@@ -170,14 +169,9 @@ const frontPromptToolGroups = ref<McpCatalogToolGroup[]>([])
 const frontPromptToolScope = ref('')
 const frontPromptToolMcpEnabled = ref<boolean | null>(null)
 const frontPromptToolSchemaError = ref('')
-// 当前工作模式是否允许调用设备端 MCP：false 时加号面板里的设备工具组置灰禁选。
-const frontPromptAllowDeviceMcp = ref(true)
-const frontPromptModeKey = ref('')
-const agentModes = ref<AgentMode[]>([])
 const appliedEditsArray = computed(() => Array.from(appliedEdits.value))
 const appliedSignaturesArray = computed(() => Array.from(appliedSignatures.value))
 const isRunActive = computed(() => ['queued', 'running'].includes(currentRunStatus.value))
-const currentModeKey = computed(() => frontPromptModeKey.value || 'initial')
 const latestRecordedSystemPrompt = computed(() => {
   for (let i = chatMessages.value.length - 1; i >= 0; i -= 1) {
     const prompt = String(chatMessages.value[i]?.system_prompt || '').trim()
@@ -353,23 +347,10 @@ const CLIENT_MCP_CATALOG_TITLE = '本轮可用 MCP 工具'
 // 新上线的设备会自动进入默认勾选，而用户取消过的组跨消息保持取消状态。
 const uncheckedToolGroupKeys = ref<string[]>([])
 
-// 不允许设备端 MCP 的模式下，设备工具组仍展示但置灰：用户能看到有哪些工具，
-// 但无法勾选、也不会随消息附带（与后端 chat_runtime 的运行时门禁一致）。
-const withModeGating = (group: McpCatalogToolGroup): McpCatalogToolGroup => {
-  if (group.groupKind === 'device' && !frontPromptAllowDeviceMcp.value) {
-    return {
-      ...group,
-      disabled: true,
-      disabledReason: '当前工作模式不允许调用设备端 MCP，切换到允许设备端 MCP 的工作模式后可勾选',
-    }
-  }
-  return group
-}
-
 const attachableToolGroups = computed<McpCatalogToolGroup[]>(() => {
   if (frontPromptToolMcpEnabled.value === false) return []
   if (frontPromptToolGroups.value.length > 0) {
-    return frontPromptToolGroups.value.filter(group => group.tools.length > 0).map(withModeGating)
+    return frontPromptToolGroups.value.filter(group => group.tools.length > 0)
   }
   // 旧版后端没有分组数据时，退化为「工作区 / 端侧」两个组
   const serverTools = frontPromptAvailableTools.value.filter(tool => (tool.mcpSource || 'server') === 'server')
@@ -377,7 +358,7 @@ const attachableToolGroups = computed<McpCatalogToolGroup[]>(() => {
   const fallback: McpCatalogToolGroup[] = []
   if (serverTools.length > 0) fallback.push({ groupKey: 'workspace', groupLabel: '工作区 MCP', groupKind: 'workspace', tools: serverTools })
   if (deviceTools.length > 0) fallback.push({ groupKey: 'device:fallback', groupLabel: '端侧设备 MCP', groupKind: 'device', tools: deviceTools })
-  return fallback.map(withModeGating)
+  return fallback
 })
 
 const selectedToolGroupKeys = computed(() =>
@@ -402,108 +383,6 @@ const toggleToolGroup = (groupKey: string) => {
 const clearAttachments = () => {
   emit('update:selectedFiles', [])
   uncheckedToolGroupKeys.value = attachableToolGroups.value.map(group => group.groupKey)
-}
-
-// 模式切换：通过 MCP 方式（mode.manage use）主动触发，与新会话初始化一致。
-// 连续多次切换时，只保留最新的模式切换记录，删除所有旧的/重复的 mode.manage 记录，
-// 避免历史中出现多条重复的模式信息干扰 AI 理解当前模式。
-// 然后保存一条新的合成 mcp_tool_call 记录，最后刷新工具组与历史。
-const switchMode = async (modeKey: string) => {
-  const targetKey = String(modeKey || '').trim()
-  if (!targetKey || targetKey === currentModeKey.value) return
-  if (isRunActive.value) {
-    alert({ message: '生成中无法切换模式，请稍后再试', type: 'warning' })
-    return
-  }
-  if (!getAuthToken() || !currentSessionId.value) {
-    // 至少执行 MCP 切换（不依赖会话记录）
-    try {
-      await callMcpTool({
-        tool: 'mode.manage',
-        arguments: { action: 'use', mode_key: targetKey },
-        ai_config_id: props.aiConfigId,
-      })
-      frontPromptModeKey.value = targetKey
-      void loadFrontPromptToolSchemas()
-      isFileSelectorOpen.value = false
-    } catch (err: any) {
-      alert({ message: err?.message || '模式切换失败', type: 'error' })
-    }
-    return
-  }
-  try {
-    const res = await callMcpTool({
-      tool: 'mode.manage',
-      arguments: { action: 'use', mode_key: targetKey },
-      ai_config_id: props.aiConfigId,
-    })
-
-    // 连续切换模式时，删除所有旧的模式切换记录，只保留/添加最新的一条。
-    // 防止多条重复的 "mode.manage use" 信息干扰 AI 对当前模式的理解。
-    const isModeSwitchRecord = (msg: ChatMessage) => {
-      if (msg.role !== 'system') return false
-      const c = String(msg.content || '')
-      const t = String(msg.tags || '')
-      return t.includes('mcp_tool_call') && c.includes('mode.manage') && /["']?action["']?\s*[:=]\s*["']?use["']?/i.test(c)
-    }
-    const modeRecords = chatMessages.value
-      .filter(m => m.id && m.id > 0 && isModeSwitchRecord(m))
-      .sort((a, b) => (a.id || 0) - (b.id || 0))
-    if (modeRecords.length > 0) {
-      // 删除所有之前的切换记录（包括最早的 seed）
-      for (const rec of modeRecords) {
-        try {
-          await chatApi.deleteChatMessage(rec.id!)
-        } catch {}
-      }
-      // 同步本地列表
-      const toRemoveIds = new Set(modeRecords.map(m => m.id))
-      chatMessages.value = chatMessages.value.filter(m => !toRemoveIds.has(m.id))
-    }
-
-    // 构建并保存新的合成切换记录（记录本次用户主动切换）
-    const argumentsStr = JSON.stringify({ action: 'use', mode_key: targetKey }, null, 2)
-    const resultText = buildMcpDisplayResult({} as any, { result: res })
-    const switchContent = [
-      '[MCP工具]',
-      '工具: mode.manage',
-      '状态: 成功',
-      '',
-      '[参数]',
-      argumentsStr,
-      '',
-      '[结果]',
-      resultText,
-    ].join('\n')
-    try {
-      const sessionName = chatMessages.value.find(m => m.session_name)?.session_name || '未命名会话'
-      await chatApi.saveChatMessage({
-        role: 'system',
-        content: switchContent,
-        tags: 'mcp_tool_call',
-        ai_config_id: props.aiConfigId,
-        ai_kind: aiKindValue.value,
-        session_id: currentSessionId.value,
-        session_name: sessionName,
-        total_tokens: 0,
-      })
-    } catch (e) {
-      // 保存记录失败不影响切换本身
-      console.warn('save mode switch record failed', e)
-    }
-
-    frontPromptModeKey.value = targetKey
-    await loadFrontPromptToolSchemas()
-    // 刷新历史以同步删除+新增的记录
-    if (currentSessionId.value) {
-      try {
-        await loadChatHistory(currentSessionId.value)
-      } catch {}
-    }
-    isFileSelectorOpen.value = false
-  } catch (err: any) {
-    alert({ message: err?.message || '模式切换失败', type: 'error' })
-  }
 }
 
 const buildMcpCatalogSection = (groups: McpCatalogToolGroup[]) => {
@@ -1120,9 +999,7 @@ const finishRun = async (runId: string, status: string, errorMessage: string) =>
   await loadTotalTokens()
   stopTimeTicker()
   bumpTaskPlan()
-  // 本轮 AI 可能用 mode.manage 切换了工作模式（或设备上下线）：刷新工具组，
-  // 用户在 + 面板主动切换也会触发同类刷新。
-  // 让加号面板里设备 MCP 的置灰 / 可勾选状态立即跟上新模式。
+  // 设备可能在运行期间上下线，结束后刷新加号面板中的工具组。
   void loadFrontPromptToolSchemas()
   // 本轮结束，若有排队的续发消息，自动接上（Claude-Code 风格的不打断续发）。
   await drainPendingQueue()
@@ -1378,9 +1255,7 @@ const createSession = async (nameInput?: string) => {
   await loadSessions()
   currentSessionId.value = session.id
   chatMessages.value = []
-  // 新会话开场时沿用 AI 当前工作模式（用户上次在弹窗选择的模式）显示起始记录；
-  // 刷新工具组（用户主动切换模式也会调用 loadFrontPromptToolSchemas）。
-  // 让设备 MCP 的置灰状态立即对齐。
+  // 新会话开场时刷新工具组，让端侧设备目录保持最新。
   void loadFrontPromptToolSchemas()
 }
 
@@ -1519,8 +1394,6 @@ const loadFrontPromptToolSchemas = async () => {
   frontPromptToolScope.value = ''
   frontPromptToolMcpEnabled.value = null
   frontPromptToolSchemaError.value = ''
-  frontPromptAllowDeviceMcp.value = true
-  frontPromptModeKey.value = ''
   if (!getAuthToken()) return
   try {
     const response = await listMcpTools({ aiConfigId: props.aiConfigId })
@@ -1541,22 +1414,8 @@ const loadFrontPromptToolSchemas = async () => {
     frontPromptToolMcpEnabled.value = typeof response.promptToolsMcpEnabled === 'boolean'
       ? response.promptToolsMcpEnabled
       : null
-    frontPromptAllowDeviceMcp.value = response.promptToolsAllowDeviceMcp !== false
-    frontPromptModeKey.value = String(response.promptToolsModeKey || '')
-    void loadAgentModes()
   } catch (error: any) {
     frontPromptToolSchemaError.value = error?.message || 'MCP schema 加载失败'
-  }
-}
-
-const loadAgentModes = async () => {
-  agentModes.value = []
-  if (!getAuthToken()) return
-  try {
-    const res = await listAgentModes(props.aiConfigId)
-    agentModes.value = Array.isArray(res?.modes) ? res.modes : []
-  } catch {
-    // modes list is optional for the switcher UI; ignore errors
   }
 }
 
@@ -2503,8 +2362,6 @@ onBeforeUnmount(() => {
         :selectable-file-root="selectableFileRoot"
         :toolGroups="attachableToolGroups"
         :selectedToolGroups="selectedToolGroupKeys"
-        :agentModes="agentModes"
-        :currentModeKey="currentModeKey"
         @send="sendChat"
         @stop="stopCurrentRun"
         @toggleFileSelector="handleToggleFileSelector"
@@ -2515,7 +2372,6 @@ onBeforeUnmount(() => {
         @clearFiles="clearAttachments"
         @refreshFiles="handleRefreshFiles"
         @toggleToolGroup="toggleToolGroup"
-        @switchMode="switchMode"
       />
     </div>
   </div>
