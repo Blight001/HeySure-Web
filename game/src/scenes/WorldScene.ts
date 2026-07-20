@@ -4,11 +4,10 @@
  */
 import Phaser from 'phaser'
 import { TILES, TREE_VARIANTS } from '../assetManifest'
-import { bgmTracks, urlForAsset, type BgmTrack } from '../assets'
+import { bgmTracks, type BgmTrack } from '../assets'
 import { MemberActor } from '../actors/MemberActor'
 import { createWorldAnims, preloadWorldAssets } from './assetSetup'
 import type { WorkshopView } from './types'
-import { portraitSpecFor, type PortraitSpec } from '../ui/portrait'
 import {
   FIXED_BUILDINGS,
   LIBRARY_DEVICE_POS,
@@ -61,8 +60,6 @@ import {
   workshopIsActive,
   workshopSheetForType,
 } from '../world/workshops'
-import { Drawer } from '../ui/drawer'
-import { createDrawerActions } from '../ui/drawer/actions'
 import { MINIGAME_DEFS, MinigameModal, minigameBestScore } from '../ui/minigames'
 import type { Overlay, TooltipData } from '../ui/overlay'
 import { buildingTooltipData, hudHtml, memberTooltipData, workshopDisplayName, workshopTooltipData } from '../ui/worldText'
@@ -100,7 +97,6 @@ const positionWorkshopLabel = (view: WorkshopView) => {
 export class WorldScene extends Phaser.Scene {
   private store!: WorldStore
   private overlay!: Overlay
-  private drawer!: Drawer
   /** 小游戏弹窗（点击池塘右侧游乐角建筑打开） */
   private minigameModal = new MinigameModal()
   private actors = new Map<number, MemberActor>()
@@ -160,13 +156,9 @@ export class WorldScene extends Phaser.Scene {
   private camVx = 0
   private camVy = 0
   private camDragging = false
-  /** 成员双击计时（双击打开聊天） */
-  private lastMemberTapId: number | null = null
-  private lastMemberTapAt = 0
-  private readonly MEMBER_DOUBLE_TAP_MS = 300
   /**
    * 本次按下命中的可交互对象。只有 down 与 up 命中同一对象才算一次有效点击，
-   * 防止 iframe 在焦点/可见性变化时补发的“孤立 pointerup”落在悬停对象上误开抽屉。
+   * 防止 iframe 在焦点/可见性变化时补发的“孤立 pointerup”落在悬停对象上误触操作。
    */
   private pressedObj: Phaser.GameObjects.GameObject | null = null
   /** 拖拽落点高亮 */
@@ -206,7 +198,6 @@ export class WorldScene extends Phaser.Scene {
     this.createMinigameBuildings()
     this.createCamera()
     this.createGovernor()
-    this.createDrawer()
     this.createDayNight()
     this.createAudio()
     this.createCloudCurtain()
@@ -219,7 +210,6 @@ export class WorldScene extends Phaser.Scene {
     this.store.onEvent(ev => this.handleWorldEvent(ev))
     this.store.start()
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.resetMemberTap()
       window.removeEventListener('message', this.onParentMessage)
       this.store.stop()
     })
@@ -566,39 +556,16 @@ export class WorldScene extends Phaser.Scene {
     })
   }
 
-  private createDrawer() {
-    this.drawer = new Drawer(document.body, createDrawerActions({
-      refresh: () => this.store.refreshNow(),
-      reopenMember: id => this.reopenMember(id),
-      reopenLibrary: () => {
-        if (this.snap) this.drawer.openLibrary(this.snap, this.portraitForBuilding('building_library.png'))
-      },
-      previewAppearance: (id, meta) => this.previewAppearance(id, meta),
-      openChat: id => this.openMemberChat(id),
-      focusMember: id => this.focusMember(id),
-    }))
-  }
-
-  private previewAppearance(id: number, meta: { skin: string; tint: string; scale: number; aura: string }) {
-    // 仅本地预览，不落库；下次快照刷新会回到已保存外观
+  private focusMemberCard(id: number) {
     const actor = this.actors.get(id)
-    const member = this.snap?.members.find(item => item.id === id)
-    if (!actor || !member) return
-    actor.previewSkin(skinFor(member.role, id, meta.skin))
-    actor.previewAppearance(meta)
-  }
-
-  /** 操作后抽屉数据已过期：用新快照重开成员面板 */
-  private reopenMember(id: number) {
-    const m = this.snap?.members.find(x => x.id === id)
-    if (m && this.drawer.isOpen) this.drawer.openMember(m, this.snap!, this.portraitForMember(m))
-  }
-
-  private focusMember(id: number) {
-    const actor = this.actors.get(id)
-    const m = this.snap?.members.find(x => x.id === id)
     if (actor) this.cameras.main.pan(actor.x, actor.y, 400, 'Sine.easeInOut')
-    if (m && this.snap) this.drawer.openMember(m, this.snap, this.portraitForMember(m))
+    this.postToDashboard({ type: 'world:focus-agent', aiConfigId: id })
+  }
+
+  private postToDashboard(message: Record<string, unknown>) {
+    if (window.parent !== window) {
+      window.parent.postMessage(message, window.location.origin)
+    }
   }
 
   // ---------------------------------------------------------------- 初始化
@@ -1028,7 +995,6 @@ export class WorldScene extends Phaser.Scene {
   private openMinigame(id: MinigameId) {
     if (this.minigameModal.isOpen) return
     this.playSfx('chime', 0.4)
-    this.drawer.close()
     // 弹窗期间停用场景键盘（WASD 操控 / G / F / M 快捷键），避免小游戏按键穿透世界
     const kb = this.input.keyboard
     if (kb) kb.enabled = false
@@ -1050,7 +1016,6 @@ export class WorldScene extends Phaser.Scene {
     let lastX = 0
     let lastY = 0
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (this.drawer?.isOpen) return
       this.camDragging = true
       this.camVx = 0
       this.camVy = 0
@@ -1072,7 +1037,6 @@ export class WorldScene extends Phaser.Scene {
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       // 辅助管理员操控模式下相机跟随该角色，拖拽平移让位
       if (!this.camDragging || !p.isDown || this.draggingActor || this.governorMode) return
-      if (this.drawer?.isOpen) return
       const dx = (p.x - lastX) / cam.zoom
       const dy = (p.y - lastY) / cam.zoom
       cam.scrollX -= dx
@@ -1171,14 +1135,13 @@ export class WorldScene extends Phaser.Scene {
     this.overlay.setGovernorActive(this.governorMode)
   }
 
-  /** 按 F：与最近的其它 AI 成员交互——在底部面板打开其信息 */
+  /** 按 F：与最近的其它 AI 成员交互并定位控制台中的数字生命卡片。 */
   private tryInteract() {
     if (!this.governorMode || this.isTextInputFocused()) return
     if (this.nearestInteractId === null || !this.snap) return
     const m = this.snap.members.find(x => x.id === this.nearestInteractId)
     if (!m) return
-    this.resetMemberTap()
-    this.drawer.openMember(m, this.snap, this.portraitForMember(m))
+    this.focusMemberCard(m.id)
     this.playSfx('ui_click', 0.4)
   }
 
@@ -1228,21 +1191,10 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** 角色头像规格（上半身）：从成员皮肤纹理裁取 */
-  private portraitForMember(m: WorldMember): PortraitSpec {
-    return portraitSpecFor(urlForAsset, skinFor(m.role, m.id, m.skin), 0, 'character')
-  }
-
-  /** 建筑头像规格（上半身）：从建筑 sheet 第 0 帧裁取 */
-  private portraitForBuilding(sheetFile: string): PortraitSpec {
-    return portraitSpecFor(urlForAsset, sheetFile, 0, 'building')
-  }
-
   private wireHover() {
     this.input.on(
       'gameobjectover',
       (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-        if (this.drawer?.isOpen) return
         this._lastTooltipTarget = obj
         this._lastTooltipData = this.tooltipFor(obj)
         if (this._lastTooltipData) {
@@ -1254,7 +1206,6 @@ export class WorldScene extends Phaser.Scene {
     this.input.on(
       'gameobjectmove',
       (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-        if (this.drawer?.isOpen) return
         // 同一对象内移动：跳过 tooltipFor() 重新计算，只更新位置
         if (obj !== this._lastTooltipTarget) {
           this._lastTooltipTarget = obj
@@ -1273,11 +1224,6 @@ export class WorldScene extends Phaser.Scene {
     })
   }
 
-  private resetMemberTap() {
-    this.lastMemberTapId = null
-    this.lastMemberTapAt = 0
-  }
-
   private wireClickAndDrag() {
     this.input.dragDistanceThreshold = 8
 
@@ -1290,7 +1236,7 @@ export class WorldScene extends Phaser.Scene {
       },
     )
 
-    // 成员/建筑/作坊抬起：单击开抽屉；成员双击打开聊天
+    // 人物/建筑抬起：把目标定位请求交给父页面控制台，不再创建游戏侧边栏。
     this.input.on(
       'gameobjectup',
       (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
@@ -1304,34 +1250,18 @@ export class WorldScene extends Phaser.Scene {
         if (dist >= 8 || !this.snap) return
         this.playSfx('ui_click', 0.4)
         if (obj instanceof MemberActor) {
-          const now = Date.now()
-          // 双击同一成员：打开聊天
-          if (this.lastMemberTapId === obj.memberId && now - this.lastMemberTapAt <= this.MEMBER_DOUBLE_TAP_MS) {
-            this.resetMemberTap()
-            this.drawer.close()
-            this.openMemberChat(obj.memberId)
-            this.playSfx('ui_click', 0.5)
-            return
-          }
-          // 单击：记录本次点击并打开抽屉
-          this.lastMemberTapId = obj.memberId
-          this.lastMemberTapAt = now
-          const m = this.snap.members.find(x => x.id === obj.memberId)
-          if (m) this.drawer.openMember(m, this.snap, this.portraitForMember(m))
+          this.focusMemberCard(obj.memberId)
           return
         }
         const deviceId = obj.getData?.('deviceId') as string | undefined
         if (deviceId) {
-          const view = this.workshops.get(deviceId)
-          const portrait = view ? this.portraitForBuilding(view.sprite.texture.key) : null
-          this.drawer.openWorkshop(deviceId, this.snap, portrait)
+          this.postToDashboard({ type: 'world:focus-device', deviceId })
           return
         }
         const key = obj.getData?.('buildingKey') as string | undefined
         const minigameId = obj.getData?.('minigameId') as MinigameId | undefined
         if (minigameId) this.openMinigame(minigameId)
-        else if (key === 'library') this.drawer.openLibrary(this.snap, this.portraitForBuilding('building_library.png'))
-        else if (key === 'spawn') this.drawer.openSpawn(this.snap, this.portraitForBuilding('building_spawn.png'))
+        else if (key === 'library') this.postToDashboard({ type: 'world:open-knowledge' })
         if (key) {
           const bSprite = this.buildings.get(key)
           if (bSprite) {
@@ -1353,9 +1283,7 @@ export class WorldScene extends Phaser.Scene {
 
     // 拖拽成员 → 放到作坊上绑定 / 放到出生地解绑
     this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-      if (this.drawer?.isOpen) return
       if (obj instanceof MemberActor && !obj.isDying) {
-        this.resetMemberTap()
         this.pressedObj = null
         this.draggingActor = obj
         obj.beginDrag()
@@ -1789,14 +1717,6 @@ export class WorldScene extends Phaser.Scene {
 
   private updateBuildingStates(_snap: WorldSnapshot) {}
 
-  private openMemberChat(id: number) {
-    if (window.parent !== window) {
-      window.parent.postMessage({ type: 'world:open-chat', aiConfigId: id }, window.location.origin)
-    } else {
-      window.open('/', '_blank', 'noopener')
-    }
-  }
-
   // ---------------------------------------------------------------- tooltip / HUD
   private memberTooltip(m: WorldMember): TooltipData {
     return memberTooltipData(m)
@@ -1819,7 +1739,7 @@ export class WorldScene extends Phaser.Scene {
   // ---------------------------------------------------------------- 主循环
   update(time: number, delta: number) {
     // 相机惯性：松手后以 0.88/frame 指数衰减
-    if (!this.camDragging && !this.governorMode && !this.drawer?.isOpen) {
+    if (!this.camDragging && !this.governorMode) {
       if (Math.abs(this.camVx) > 0.15 || Math.abs(this.camVy) > 0.15) {
         this.cameras.main.scrollX += this.camVx
         this.cameras.main.scrollY += this.camVy
@@ -1832,7 +1752,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     for (const actor of this.actors.values()) {
-      const stationary = this.drawer.activeMemberId === actor.memberId || this.chatMemberId === actor.memberId
+      const stationary = this.chatMemberId === actor.memberId
       actor.setStationary(stationary)
       actor.setNightness(this.nightness)
       actor.tick(time, delta)

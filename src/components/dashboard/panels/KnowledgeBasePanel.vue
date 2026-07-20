@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useAttrs } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs } from 'vue'
 import { formatDateMinute } from '@/utils/datetime'
 import AppIcon from '@/components/common/AppIcon.vue'
 import {
@@ -68,13 +68,17 @@ const rootAttrs = computed(() => {
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
+const detailQuery = ref('')
+const detailCloseButton = ref<HTMLButtonElement | null>(null)
 const selectedItem = ref<KnowledgeItem | null>(null)
 const currentDetail = ref<KnowledgeEntryItem | null>(null)
+const detailHistory = ref<KnowledgeEntryItem[]>([])
+const canGoBackDetail = computed(() => detailHistory.value.length > 0)
 const savingPersonaId = ref<number | null>(null)
 const personaEditError = ref('')
 const personaEditNotice = ref('')
 const personaDraftPrompt = ref('')
-// 人格详情弹窗：当前打开的 AI。
+// 当前在固有人格栏目内展开的 AI。
 const detailPersonaId = ref<number | null>(null)
 const editingPropertyCategory = ref<string | null>(null)
 const savingPropertyCategory = ref<string | null>(null)
@@ -86,10 +90,13 @@ const propertyDraftTools = ref<Array<{
   parameters: Array<{ name: string; description: string }>
 }>>([])
 const editingPromptSection = ref<string | null>(null)
+const activePromptSectionKey = ref('')
+const activePromptItemKey = ref('')
 const savingPromptSection = ref<string | null>(null)
 const promptEditError = ref('')
 const promptEditNotice = ref('')
 const promptDraftItems = ref<Array<{ key: string; content: string | number }>>([])
+const activeInheritanceToolKey = ref('')
 const clawhubQuery = ref('')
 const clawhubModalOpen = ref(false)
 const clawhubSearching = ref(false)
@@ -137,6 +144,9 @@ const intrinsicPersonas = computed(() => currentDetail.value?.intrinsic_personas
 const detailAgent = computed(() =>
   intrinsicPersonas.value?.agents.find(agent => agent.id === detailPersonaId.value) || null,
 )
+const personaHasUnsavedChanges = computed(() => Boolean(
+  detailAgent.value && personaDraftPrompt.value !== (detailAgent.value.prompt || ''),
+))
 const systemPrompts = computed(() => currentDetail.value?.system_prompts || null)
 const inheritanceSkills = computed(() => currentDetail.value?.inheritance_skills || null)
 const inheritanceServerCategories = computed(() => inheritanceSkills.value?.server_categories || [])
@@ -147,11 +157,142 @@ const inheritanceDevices = computed(() =>
 
 const inheritanceThoughts = computed(() => currentDetail.value?.inheritance_tools || null)
 
+const normalizedDetailQuery = computed(() => detailQuery.value.trim().toLocaleLowerCase())
+const includesDetailQuery = (...values: unknown[]) => {
+  const query = normalizedDetailQuery.value
+  if (!query) return true
+  return values.some(value => String(value ?? '').toLocaleLowerCase().includes(query))
+}
+
+const filteredPersonaAgents = computed(() => {
+  const agents = intrinsicPersonas.value?.agents || []
+  return agents.filter(agent => includesDetailQuery(
+    agent.name,
+    agent.description,
+    agent.role,
+    agent.digital_member_role,
+    agent.platform,
+    agent.model,
+  ))
+})
+
+const filteredPromptSections = computed(() => {
+  const sections = systemPrompts.value?.sections || []
+  if (!normalizedDetailQuery.value) return sections
+  return sections
+    .map(section => {
+      if (includesDetailQuery(section.title, section.key)) return section
+      const items = section.items.filter(item => includesDetailQuery(item.label, item.key, item.content))
+      return items.length ? { ...section, items, count: items.length } : null
+    })
+    .filter((section): section is NonNullable<typeof section> => Boolean(section))
+})
+
+const selectedPromptSection = computed(() =>
+  filteredPromptSections.value.find(section => section.key === activePromptSectionKey.value)
+  || filteredPromptSections.value[0]
+  || null,
+)
+
+const selectedPromptItem = computed(() =>
+  selectedPromptSection.value?.items.find(item => item.key === activePromptItemKey.value)
+  || selectedPromptSection.value?.items[0]
+  || null,
+)
+
+const filteredInheritanceDevices = computed(() => {
+  const devices = inheritanceDevices.value
+  if (!normalizedDetailQuery.value) return devices
+  return devices
+    .map(device => {
+      const deviceMatches = includesDetailQuery(
+        device.device_id,
+        device.device_type,
+        deviceDisplayLabel(device),
+      )
+      if (deviceMatches) return device
+      const tools = device.tools.filter(tool => includesDetailQuery(
+        tool.name,
+        getMcpToolZhLabel(tool.name),
+        tool.description,
+      ))
+      return tools.length ? { ...device, tools, tool_count: tools.length } : null
+    })
+    .filter((device): device is NonNullable<typeof device> => Boolean(device))
+})
+
 const filteredInstalledThoughts = computed(() => {
   const installed = inheritanceThoughts.value?.installed || []
-  if (thoughtEndpointFilter.value === 'all') return installed
-  return installed.filter(skill => String(skill.endpoint_kind || 'any') === thoughtEndpointFilter.value)
+  return installed.filter(skill => {
+    const endpointMatches = thoughtEndpointFilter.value === 'all'
+      || String(skill.endpoint_kind || 'any') === thoughtEndpointFilter.value
+    return endpointMatches && includesDetailQuery(
+      skill.displayName,
+      skill.slug,
+      skill.summary,
+      skill.ownerHandle,
+      skill.version,
+    )
+  })
 })
+
+const detailPresentation = computed(() => {
+  if (intrinsicPersonas.value) {
+    return {
+      eyebrow: '知识库 · 固有配置',
+      title: currentDetail.value?.title || selectedItem.value?.title || '固有人格',
+      description: currentDetail.value?.summary || intrinsicPersonas.value.description,
+      icon: 'robot' as const,
+      searchPlaceholder: '搜索 AI、角色、平台或模型',
+      resultText: `${filteredPersonaAgents.value.length} / ${intrinsicPersonas.value.total} 个 AI`,
+    }
+  }
+  if (systemPrompts.value) {
+    const total = systemPrompts.value.total
+    const visible = filteredPromptSections.value.reduce((sum, section) => sum + section.items.length, 0)
+    return {
+      eyebrow: '知识库 · 系统配置',
+      title: currentDetail.value?.title || selectedItem.value?.title || '固有思想',
+      description: currentDetail.value?.summary || systemPrompts.value.description,
+      icon: 'compass' as const,
+      searchPlaceholder: '搜索配置项、键名或提示词内容',
+      resultText: `${visible} / ${total} 项配置`,
+    }
+  }
+  if (inheritanceSkills.value) {
+    const visibleTools = filteredInheritanceDevices.value.reduce((sum, device) => sum + device.tools.length, 0)
+    return {
+      eyebrow: '知识库 · 能力目录',
+      title: currentDetail.value?.title || selectedItem.value?.title || '传承技能',
+      description: inheritanceSkills.value.description,
+      icon: 'bolt' as const,
+      searchPlaceholder: '搜索设备、MCP 名称或工具描述',
+      resultText: `${visibleTools} / ${inheritanceSkills.value.total} 个 MCP`,
+    }
+  }
+  if (inheritanceThoughts.value) {
+    return {
+      eyebrow: '知识库 · 可复用经验',
+      title: currentDetail.value?.title || selectedItem.value?.title || '传承思想',
+      description: inheritanceThoughts.value.description,
+      icon: 'dna' as const,
+      searchPlaceholder: '搜索名称、标识或简介',
+      resultText: `${filteredInstalledThoughts.value.length} / ${inheritanceThoughts.value.installed_total} 个本地快照`,
+    }
+  }
+  return {
+    eyebrow: '知识库 · 条目详情',
+    title: currentDetail.value?.title || selectedItem.value?.title || '知识库详情',
+    description: currentDetail.value?.summary || currentDetail.value?.memory_id || selectedItem.value?.id || '',
+    icon: 'book' as const,
+    searchPlaceholder: '',
+    resultText: '',
+  }
+})
+
+const detailSearchVisible = computed(() => Boolean(
+  intrinsicPersonas.value || systemPrompts.value || inheritanceSkills.value || inheritanceThoughts.value,
+))
 
 const installedEndpointKind = computed<'any' | 'desktop' | 'browser'>(() => {
   const kind = String(installedClawhubSelected.value?.skill?.endpoint_kind || 'any')
@@ -185,6 +326,33 @@ const formatImplementationCode = (code: unknown) => JSON.stringify(code, null, 2
 type InheritanceSkillDevice = NonNullable<KnowledgeEntryItem['inheritance_skills']>['devices'][number]
 type InheritanceSkillTool = InheritanceSkillDevice['tools'][number]
 
+const inheritanceToolKey = (device: InheritanceSkillDevice, tool: InheritanceSkillTool) =>
+  `${device.device_type}:${device.device_id}:${tool.name}`
+
+const filteredInheritanceToolTabs = computed(() =>
+  filteredInheritanceDevices.value.flatMap(device =>
+    device.tools.map(tool => ({
+      key: inheritanceToolKey(device, tool),
+      device,
+      tool,
+    })),
+  ),
+)
+
+const selectedInheritanceToolTab = computed(() =>
+  filteredInheritanceToolTabs.value.find(item => item.key === activeInheritanceToolKey.value)
+  || filteredInheritanceToolTabs.value[0]
+  || null,
+)
+
+const selectedInheritanceServerCategory = computed(() => {
+  const toolName = selectedInheritanceToolTab.value?.tool.name
+  if (!toolName) return null
+  return inheritanceServerCategories.value.find(category =>
+    category.tools.some(tool => tool.name === toolName),
+  ) || null
+})
+
 const isServerInheritanceDevice = (device: InheritanceSkillDevice) =>
   String(device.device_type || '').toLowerCase() === 'server'
 
@@ -195,113 +363,10 @@ const deviceDisplayLabel = (device: InheritanceSkillDevice) => {
   return deviceTypeLabel(device?.device_type)
 }
 
-const implementationSummary = (tool: InheritanceSkillTool) => {
-  const impl = tool.implementation
-  if (!impl || !Object.keys(impl).length) return '—'
-  return String(impl.kind || 'unknown')
-}
 const hasImplementation = (tool: InheritanceSkillTool) => {
   const impl = tool.implementation
   return Boolean(impl && Object.keys(impl).length)
 }
-
-type InheritanceHoverKind = 'params' | 'impl'
-
-interface InheritanceHoverPopover {
-  kind: InheritanceHoverKind
-  deviceId: string
-  toolName: string
-  top: number
-  left: number
-  width: number
-  maxHeight: number
-  placement: 'below' | 'above'
-}
-
-const inheritanceHoverPopover = ref<InheritanceHoverPopover | null>(null)
-let inheritanceHoverCloseTimer: ReturnType<typeof setTimeout> | null = null
-
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
-
-const openInheritanceHoverPopover = (
-  event: MouseEvent,
-  kind: InheritanceHoverKind,
-  deviceId: string,
-  toolName: string,
-) => {
-  if (inheritanceHoverCloseTimer) {
-    clearTimeout(inheritanceHoverCloseTimer)
-    inheritanceHoverCloseTimer = null
-  }
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  const width = Math.min(384, window.innerWidth - 16)
-  let left = rect.left
-  if (left + width > window.innerWidth - 8) {
-    left = rect.right - width
-  }
-  left = clamp(left, 8, window.innerWidth - width - 8)
-  const spaceBelow = window.innerHeight - rect.bottom - 8
-  const spaceAbove = rect.top - 8
-  const placement: 'below' | 'above' = spaceBelow >= 140 || spaceBelow >= spaceAbove ? 'below' : 'above'
-  const maxHeight = Math.max(Math.min(320, placement === 'below' ? spaceBelow : spaceAbove), 96)
-  const top = placement === 'below' ? rect.bottom + 4 : rect.top - 4
-
-  inheritanceHoverPopover.value = {
-    kind,
-    deviceId,
-    toolName,
-    top,
-    left,
-    width,
-    maxHeight,
-    placement,
-  }
-}
-
-const scheduleCloseInheritanceHoverPopover = () => {
-  if (inheritanceHoverCloseTimer) clearTimeout(inheritanceHoverCloseTimer)
-  inheritanceHoverCloseTimer = setTimeout(() => {
-    inheritanceHoverPopover.value = null
-    inheritanceHoverCloseTimer = null
-  }, 120)
-}
-
-const cancelCloseInheritanceHoverPopover = () => {
-  if (inheritanceHoverCloseTimer) {
-    clearTimeout(inheritanceHoverCloseTimer)
-    inheritanceHoverCloseTimer = null
-  }
-}
-
-const inheritanceHoverPopoverStyle = computed(() => {
-  const pop = inheritanceHoverPopover.value
-  if (!pop) return {}
-  if (pop.placement === 'below') {
-    return {
-      top: `${pop.top}px`,
-      left: `${pop.left}px`,
-      width: `${pop.width}px`,
-      maxHeight: `${pop.maxHeight}px`,
-    }
-  }
-  return {
-    bottom: `${window.innerHeight - pop.top}px`,
-    left: `${pop.left}px`,
-    width: `${pop.width}px`,
-    maxHeight: `${pop.maxHeight}px`,
-  }
-})
-
-const hoveredInheritanceTool = computed(() => {
-  const pop = inheritanceHoverPopover.value
-  if (!pop || !inheritanceSkills.value) return null
-  for (const device of inheritanceSkills.value.devices) {
-    if (device.device_id !== pop.deviceId) continue
-    const tool = device.tools.find(item => item.name === pop.toolName)
-    if (tool) return { device, tool }
-  }
-  return null
-})
 
 interface McpTestTarget {
   device: InheritanceSkillDevice
@@ -345,10 +410,8 @@ const mcpTestInputSchema = computed(() => {
 
 // 弹窗自动置顶：每个 overlay 各领一个自增 z-index，后开者居上
 const detailZIndex = usePopupZIndex(detailOpen)
-const personaDetailZIndex = usePopupZIndex(() => !!detailAgent.value)
 const clawhubZIndex = usePopupZIndex(clawhubModalOpen)
 const installedClawhubZIndex = usePopupZIndex(installedClawhubModalOpen)
-const inheritanceHoverZIndex = usePopupZIndex(() => !!inheritanceHoverPopover.value)
 const mcpTestPresetLoading = ref(false)
 const mcpTestSubmitting = ref(false)
 const mcpTestError = ref('')
@@ -431,6 +494,57 @@ const closePersonaDetail = () => {
   personaEditError.value = ''
   personaEditNotice.value = ''
   personaDraftPrompt.value = ''
+}
+
+const selectPersonaSection = async (agent: IntrinsicPersonaAgent) => {
+  if (!agent.id) return
+  if (detailPersonaId.value === agent.id) return
+  if (personaHasUnsavedChanges.value) {
+    const ok = await confirm({
+      message: '当前成员的人格 Prompt 尚未保存，确认切换到其他成员吗？',
+      type: 'warning',
+      confirmText: '放弃并切换',
+      cancelText: '继续编辑',
+    })
+    if (!ok) return
+  }
+  closePersonaDetail()
+  openPersonaDetail(agent)
+}
+
+const selectPromptSection = async (section: SystemPromptSection) => {
+  if (selectedPromptSection.value?.key === section.key) return
+  if (editingPromptSection.value) {
+    const ok = await confirm({
+      message: '当前提示词栏目还有未保存的修改，确认切换栏目吗？',
+      type: 'warning',
+      confirmText: '放弃并切换',
+      cancelText: '继续编辑',
+    })
+    if (!ok) return
+    cancelEditPromptSection()
+  }
+  activePromptSectionKey.value = section.key
+  activePromptItemKey.value = section.items[0]?.key || ''
+  promptEditError.value = ''
+  promptEditNotice.value = ''
+}
+
+const selectInheritanceToolTab = async (key: string) => {
+  if (selectedInheritanceToolTab.value?.key === key) return
+  if (editingPropertyCategory.value) {
+    const ok = await confirm({
+      message: '当前工具说明还有未保存的修改，确认切换工具吗？',
+      type: 'warning',
+      confirmText: '放弃并切换',
+      cancelText: '继续编辑',
+    })
+    if (!ok) return
+    cancelEditPropertyCategory()
+  }
+  activeInheritanceToolKey.value = key
+  propertyEditError.value = ''
+  propertyEditNotice.value = ''
 }
 
 const savePersona = async (agent: IntrinsicPersonaAgent) => {
@@ -689,7 +803,10 @@ const openInheritanceThoughtItem = async (item: InheritanceThoughtItem) => {
     detailError.value = ''
     try {
       const token = getAuthToken()
-      currentDetail.value = await readEntry(token, memoryId)
+      const nextDetail = await readEntry(token, memoryId)
+      if (currentDetail.value) detailHistory.value.push(currentDetail.value)
+      currentDetail.value = nextDetail
+      detailQuery.value = ''
     } catch (err) {
       detailError.value = (err as Error).message || '条目加载失败'
     } finally {
@@ -708,6 +825,21 @@ const closeInstalledClawHubModal = () => {
   installedClawhubError.value = ''
   installedClawhubNotice.value = ''
   installedClawhubEditMode.value = false
+}
+
+const requestCloseInstalledClawHubModal = async () => {
+  const hasUnsavedChanges = installedClawhubEditMode.value
+    && installedClawhubDraft.value !== (installedClawhubSelected.value?.skill_card || '')
+  if (hasUnsavedChanges) {
+    const ok = await confirm({
+      message: '本地快照还有未保存的修改，确认关闭吗？',
+      type: 'warning',
+      confirmText: '放弃并关闭',
+      cancelText: '继续编辑',
+    })
+    if (!ok) return
+  }
+  closeInstalledClawHubModal()
 }
 
 const saveInstalledClawHubSkill = async () => {
@@ -789,11 +921,26 @@ const applyFilter = (value: Props['filterValue']) => {
 
 const formatTime = (ts?: number | null) => formatDateMinute(ts, '')
 
+const initializeDetailColumns = (detail: KnowledgeEntryItem) => {
+  closePersonaDetail()
+  activePromptSectionKey.value = detail.system_prompts?.sections[0]?.key || ''
+  activePromptItemKey.value = detail.system_prompts?.sections[0]?.items[0]?.key || ''
+  const firstDevice = detail.inheritance_skills?.devices.find(device => device.tools.length)
+  const firstTool = firstDevice?.tools[0]
+  activeInheritanceToolKey.value = firstDevice && firstTool
+    ? inheritanceToolKey(firstDevice, firstTool)
+    : ''
+  const firstPersona = detail.intrinsic_personas?.agents.find(agent => Boolean(agent.id))
+  if (firstPersona) openPersonaDetail(firstPersona)
+}
+
 const openDetail = async (item: KnowledgeItem) => {
   selectedItem.value = item
   detailOpen.value = true
   detailLoading.value = true
   detailError.value = ''
+  detailQuery.value = ''
+  detailHistory.value = []
   currentDetail.value = null
   detailPersonaId.value = null
   personaEditError.value = ''
@@ -802,8 +949,11 @@ const openDetail = async (item: KnowledgeItem) => {
   propertyEditError.value = ''
   propertyEditNotice.value = ''
   editingPromptSection.value = null
+  activePromptSectionKey.value = ''
+  activePromptItemKey.value = ''
   promptEditError.value = ''
   promptEditNotice.value = ''
+  activeInheritanceToolKey.value = ''
   clawhubModalOpen.value = false
   clawhubError.value = ''
   clawhubNotice.value = ''
@@ -816,23 +966,28 @@ const openDetail = async (item: KnowledgeItem) => {
   installedClawhubDraft.value = ''
   try {
     const token = getAuthToken()
-    currentDetail.value = await readEntry(token, item.id)
+    const detail = await readEntry(token, item.id)
+    currentDetail.value = detail
+    initializeDetailColumns(detail)
   } catch (err) {
     detailError.value = (err as Error).message || '条目加载失败'
   } finally {
     detailLoading.value = false
+    await nextTick()
+    detailCloseButton.value?.focus()
   }
+}
+
+const retryDetail = () => {
+  if (selectedItem.value) void openDetail(selectedItem.value)
 }
 
 const closeDetail = () => {
   detailOpen.value = false
   detailError.value = ''
+  detailQuery.value = ''
+  detailHistory.value = []
   currentDetail.value = null
-  inheritanceHoverPopover.value = null
-  if (inheritanceHoverCloseTimer) {
-    clearTimeout(inheritanceHoverCloseTimer)
-    inheritanceHoverCloseTimer = null
-  }
   closeMcpTestModal()
   selectedItem.value = null
   savingPersonaId.value = null
@@ -846,10 +1001,13 @@ const closeDetail = () => {
   propertyEditNotice.value = ''
   propertyDraftTools.value = []
   editingPromptSection.value = null
+  activePromptSectionKey.value = ''
+  activePromptItemKey.value = ''
   savingPromptSection.value = null
   promptEditError.value = ''
   promptEditNotice.value = ''
   promptDraftItems.value = []
+  activeInheritanceToolKey.value = ''
   clawhubQuery.value = ''
   clawhubModalOpen.value = false
   clawhubError.value = ''
@@ -862,6 +1020,55 @@ const closeDetail = () => {
   installedClawhubSelected.value = null
   installedClawhubDraft.value = ''
 }
+
+const requestCloseDetail = async () => {
+  if (personaHasUnsavedChanges.value || editingPromptSection.value || editingPropertyCategory.value) {
+    const ok = await confirm({
+      message: '当前栏目还有未保存的编辑内容，确认关闭吗？',
+      type: 'warning',
+      confirmText: '放弃并关闭',
+      cancelText: '继续编辑',
+    })
+    if (!ok) return
+  }
+  closeDetail()
+}
+
+const goBackDetail = () => {
+  const previous = detailHistory.value[detailHistory.value.length - 1]
+  if (!previous) return
+  detailHistory.value = detailHistory.value.slice(0, -1)
+  currentDetail.value = previous
+  initializeDetailColumns(previous)
+  detailQuery.value = ''
+  detailError.value = ''
+}
+
+const navigateBackOrCloseDetail = () => {
+  if (canGoBackDetail.value) {
+    goBackDetail()
+    return
+  }
+  void requestCloseDetail()
+}
+
+const handleDetailKeydown = (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || !detailOpen.value) return
+  event.preventDefault()
+  if (installedClawhubModalOpen.value) {
+    void requestCloseInstalledClawHubModal()
+    return
+  }
+  if (clawhubModalOpen.value) {
+    closeClawHubModal()
+    return
+  }
+  if (mcpTestModalOpen.value) return
+  navigateBackOrCloseDetail()
+}
+
+onMounted(() => window.addEventListener('keydown', handleDetailKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown))
 </script>
 
 <template>
@@ -934,95 +1141,101 @@ const closeDetail = () => {
     <div
       v-if="detailOpen"
       :style="{ zIndex: detailZIndex }"
-      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
-      @click.self="closeDetail"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="knowledge-detail-title"
+      @click.self="navigateBackOrCloseDetail"
     >
-      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[88vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
-        <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-zinc-700 dark:text-zinc-200 truncate">
-                {{ currentDetail?.title || selectedItem?.title || '知识库详情' }}
+      <div class="acrylic-modal w-full max-w-7xl h-app-viewport sm:h-[92vh] flex flex-col overflow-hidden rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-zinc-200 dark:border-zinc-800">
+        <header class="shrink-0 border-b border-zinc-200/80 bg-white/45 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/25 sm:px-6 sm:py-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex min-w-0 items-start gap-3">
+              <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:ring-indigo-900/60">
+                <AppIcon :name="detailPresentation.icon" class="h-5 w-5" />
               </div>
-              <template v-if="intrinsicPersonas">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
-                  {{ intrinsicPersonas.total }} 个 AI
-                </span>
-                <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
-                  人格 Prompt 与自动控制 Prompt，保存后同步 AI 配置
-                </span>
-              </template>
-              <template v-else-if="systemPrompts">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
-                  {{ systemPrompts.total }} 项配置
-                </span>
-                <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
-                  系统设置提示词，保存后同步系统设置
-                </span>
-              </template>
-              <template v-else-if="inheritanceSkills">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
-                  服务端 {{ inheritanceSkills.server_total ?? 0 }} 个
-                </span>
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
-                  端侧 {{ inheritanceSkills.endpoint_device_total ?? 0 }} 台
-                </span>
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
-                  共 {{ inheritanceSkills.total }} 个 MCP
-                </span>
-                <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
-                  服务端与在线设备统一展示，按来源分类
-                </span>
-              </template>
-              <template v-else-if="inheritanceThoughts">
-                <span class="px-1.5 py-0.5 rounded bg-zinc-100/60 text-[10px] text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
-                  {{ inheritanceThoughts.installed_total }} 个本地快照
-                </span>
-                <span class="text-[10px] text-zinc-500 dark:text-zinc-400">
-                  ClawHub：{{ inheritanceThoughts.registry_url }}
-                </span>
-              </template>
+              <div class="min-w-0">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-500 dark:text-indigo-300">
+                  {{ detailPresentation.eyebrow }}
+                </div>
+                <h2 id="knowledge-detail-title" class="mt-0.5 truncate text-base font-semibold text-zinc-900 dark:text-zinc-100 sm:text-lg">
+                  {{ detailPresentation.title }}
+                </h2>
+                <p class="mt-1 max-w-4xl text-xs leading-relaxed text-zinc-500 dark:text-zinc-400 sm:text-sm">
+                  {{ detailPresentation.description }}
+                </p>
+              </div>
             </div>
-            <div class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 truncate">
-              <template v-if="intrinsicPersonas">
-                {{ currentDetail?.summary || intrinsicPersonas.description }}
-              </template>
-              <template v-else-if="systemPrompts">
-                {{ currentDetail?.summary || systemPrompts.description }}
-              </template>
-              <template v-else-if="inheritanceSkills">
-                {{ inheritanceSkills.description }}
-              </template>
-              <template v-else-if="inheritanceThoughts">
-                {{ inheritanceThoughts.description }}
-              </template>
-              <template v-else>
-                {{ currentDetail?.memory_id || selectedItem?.id }}
-              </template>
+            <button
+              ref="detailCloseButton"
+              type="button"
+              class="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white/70 text-zinc-500 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
+              :class="canGoBackDetail ? 'px-3' : 'w-10'"
+              :aria-label="canGoBackDetail ? '返回上一级' : '关闭知识库详情'"
+              :title="canGoBackDetail ? '返回上一级（Esc）' : '关闭（Esc）'"
+              @click="navigateBackOrCloseDetail"
+            >
+              <AppIcon v-if="canGoBackDetail" name="chevron" class="h-4 w-4 rotate-180" />
+              <span v-if="canGoBackDetail" class="text-xs font-medium">返回上一级</span>
+              <AppIcon v-else name="close" class="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        <div
+          v-if="!detailLoading && !detailError && currentDetail && detailSearchVisible"
+          class="shrink-0 border-b border-zinc-100 bg-zinc-50/50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/25 sm:px-6"
+        >
+          <div class="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center">
+            <label class="relative min-w-0 flex-1">
+              <span class="sr-only">筛选当前栏目</span>
+              <AppIcon name="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              <input
+                v-model="detailQuery"
+                type="search"
+                class="w-full rounded-xl border border-zinc-200 bg-white/80 py-2.5 pl-9 pr-9 text-sm text-zinc-800 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100 dark:focus:border-indigo-700 dark:focus:ring-indigo-950"
+                :placeholder="detailPresentation.searchPlaceholder"
+              />
+              <button
+                v-if="detailQuery"
+                type="button"
+                class="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                aria-label="清空搜索"
+                @click="detailQuery = ''"
+              >
+                <AppIcon name="close" class="h-3 w-3" />
+              </button>
+            </label>
+            <div class="shrink-0 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 sm:min-w-[9rem] sm:text-right">
+              {{ detailPresentation.resultText }}
             </div>
           </div>
-          <button class="ml-3 text-zinc-400 hover:text-zinc-600 text-xl leading-none" @click="closeDetail">×</button>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-5 custom-scrollbar">
-          <div v-if="detailLoading" class="text-center text-zinc-400 py-10">加载中…</div>
-          <div v-else-if="detailError" class="text-center text-rose-500 py-10">{{ detailError }}</div>
+        <div class="flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar sm:p-6">
+          <div v-if="detailLoading" class="mx-auto max-w-6xl space-y-3 py-5" aria-live="polite">
+            <div class="h-20 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800/70"></div>
+            <div class="h-28 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800/70"></div>
+            <div class="h-28 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800/70"></div>
+            <div class="text-center text-xs text-zinc-400">正在整理栏目内容…</div>
+          </div>
+          <div v-else-if="detailError" class="mx-auto flex max-w-md flex-col items-center py-16 text-center" role="alert">
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-500 dark:bg-rose-950/40 dark:text-rose-300">
+              <AppIcon name="warning" class="h-5 w-5" />
+            </div>
+            <div class="mt-3 text-sm font-semibold text-zinc-800 dark:text-zinc-100">栏目加载失败</div>
+            <div class="mt-1 text-xs leading-relaxed text-rose-500 dark:text-rose-300">{{ detailError }}</div>
+            <button type="button" class="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500" @click="retryDetail">
+              重新加载
+            </button>
+          </div>
           <template v-else-if="currentDetail">
-            <div class="mb-3 flex flex-wrap gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+            <div class="mx-auto max-w-6xl">
+            <div v-if="!intrinsicPersonas && !systemPrompts && !inheritanceSkills && !inheritanceThoughts" class="mb-3 flex flex-wrap gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
               <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">范围：{{ currentDetail.scope }}</span>
               <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">置信度：{{ Math.round(currentDetail.confidence * 100) }}%</span>
               <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">使用：{{ currentDetail.use_count }} 次</span>
               <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">更新：{{ formatTime(currentDetail.updated_at) }}</span>
-            </div>
-
-            <div v-if="currentDetail.triggers.length" class="mb-4 flex flex-wrap gap-1.5">
-              <span
-                v-for="trigger in currentDetail.triggers"
-                :key="trigger"
-                class="text-[10px] px-1.5 py-0.5 bg-white/75 border border-zinc-200 rounded text-zinc-500 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-400"
-              >
-                #{{ trigger }}
-              </span>
             </div>
 
             <div v-if="currentDetail.summary && !intrinsicPersonas && !systemPrompts && !inheritanceSkills && !inheritanceThoughts" class="mb-4">
@@ -1040,32 +1253,59 @@ const closeDetail = () => {
                 <div v-if="personaEditError" class="text-xs text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900 rounded-lg px-3 py-2">
                   {{ personaEditError }}
                 </div>
-                <div
-                  v-for="agent in intrinsicPersonas.agents"
-                  :key="agent.id || agent.name"
-                  class="rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40 px-3 py-2.5"
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <div class="min-w-0">
-                      <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ agent.name }}</div>
-                      <div class="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-                        {{ agent.platform }} · 第 {{ agent.generation }} 代 · {{ agent.model || '未设置模型' }}
-                      </div>
-                    </div>
+                <div v-if="filteredPersonaAgents.length" class="overflow-x-auto border-b border-zinc-200 custom-scrollbar dark:border-zinc-700" role="tablist" aria-label="AI 成员栏目">
+                  <div class="flex min-w-max items-end gap-1 px-1">
                     <button
-                      v-if="agent.id"
+                      v-for="agent in filteredPersonaAgents"
+                      :key="agent.id || agent.name"
                       type="button"
-                      class="shrink-0 px-3 py-1.5 rounded border border-indigo-200 bg-white/75 text-xs text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-                      @click="openPersonaDetail(agent)"
+                      role="tab"
+                      class="relative min-w-[8rem] whitespace-nowrap rounded-t-xl border border-b-0 px-5 py-3 text-sm font-semibold transition-colors"
+                      :class="detailPersonaId === agent.id
+                        ? 'border-indigo-200 bg-white text-indigo-600 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300'
+                        : 'border-transparent bg-zinc-100/60 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+                      :aria-selected="detailPersonaId === agent.id"
+                      @click="selectPersonaSection(agent)"
                     >
-                      详情
+                      {{ agent.name }}
                     </button>
                   </div>
-                  <div class="mt-2 flex flex-wrap gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                    <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">ID {{ agent.id }}</span>
-                    <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ agent.role }}</span>
-                    <span v-if="agent.is_librarian" class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">图书管理员</span>
+                </div>
+                <section v-if="detailAgent" class="min-h-[28rem] rounded-b-xl border border-t-0 border-zinc-200 bg-white/75 p-5 dark:border-zinc-700 dark:bg-zinc-900/40">
+                  <header class="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
+                    <div>
+                      <h3 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{{ detailAgent.name }}</h3>
+                      <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ detailAgent.platform }} · 第 {{ detailAgent.generation }} 代 · {{ detailAgent.model || '未设置模型' }}</p>
+                    </div>
+                    <div class="flex flex-wrap gap-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                      <span class="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-800">ID {{ detailAgent.id }}</span>
+                      <span class="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-800">{{ detailAgent.role }}</span>
+                      <span v-if="detailAgent.is_librarian" class="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-800">图书管理员</span>
+                    </div>
+                  </header>
+                  <label class="block">
+                    <span class="mb-2 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">人格 Prompt</span>
+                    <textarea
+                      :value="personaDraftPrompt"
+                      rows="18"
+                      class="min-h-[22rem] w-full resize-y whitespace-pre-wrap rounded-xl border border-zinc-200 bg-white/90 p-4 font-mono text-xs leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-950/70 dark:text-zinc-200 dark:focus:ring-indigo-800"
+                      @input="personaDraftPrompt = ($event.target as HTMLTextAreaElement).value"
+                    />
+                  </label>
+                  <div class="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      class="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="savingPersonaId === detailAgent.id || !personaHasUnsavedChanges"
+                      @click="savePersona(detailAgent)"
+                    >
+                      {{ savingPersonaId === detailAgent.id ? '保存中…' : '保存人格 Prompt' }}
+                    </button>
                   </div>
+                </section>
+                <div v-if="filteredPersonaAgents.length === 0" class="rounded-xl border border-dashed border-zinc-200 px-4 py-12 text-center dark:border-zinc-700">
+                  <div class="text-sm font-medium text-zinc-600 dark:text-zinc-300">没有匹配的 AI</div>
+                  <button type="button" class="mt-2 text-xs text-indigo-600 hover:underline dark:text-indigo-300" @click="detailQuery = ''">清空搜索条件</button>
                 </div>
               </div>
             </template>
@@ -1077,64 +1317,89 @@ const closeDetail = () => {
                 <div v-if="promptEditError" class="text-xs text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900 rounded-lg px-3 py-2">
                   {{ promptEditError }}
                 </div>
-                <details
-                  v-for="section in systemPrompts.sections"
-                  :key="section.key"
-                  :open="editingPromptSection === section.key || undefined"
-                  class="group rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40 overflow-hidden"
-                >
-                  <summary class="list-none cursor-pointer px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 select-none">
-                    <div class="flex items-center justify-between gap-3">
-                      <div class="flex min-w-0 items-center gap-2">
-                        <span class="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-                        <div class="truncate text-xs font-semibold text-zinc-700 dark:text-zinc-200">{{ section.title }}</div>
-                      </div>
-                      <div class="flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        <span>{{ section.count }} 项</span>
-                        <button
-                          v-if="editingPromptSection !== section.key"
-                          type="button"
-                          class="px-2 py-0.5 rounded border border-indigo-200 bg-white/75 text-[10px] text-indigo-600 hover:bg-indigo-50 dark:bg-zinc-900/60 dark:border-indigo-800 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-                          @click.stop.prevent="startEditPromptSection(section)"
-                        >
-                          编辑
-                        </button>
-                      </div>
+                <div v-if="filteredPromptSections.length" class="overflow-x-auto border-b border-zinc-200 custom-scrollbar dark:border-zinc-700" role="tablist" aria-label="固有思想栏目">
+                  <div class="flex min-w-max items-end gap-1 px-1">
+                    <button
+                      v-for="section in filteredPromptSections"
+                      :key="section.key"
+                      type="button"
+                      role="tab"
+                      class="min-w-[10rem] whitespace-nowrap rounded-t-xl border border-b-0 px-5 py-3 text-sm font-semibold transition-colors"
+                      :class="selectedPromptSection?.key === section.key
+                        ? 'border-indigo-200 bg-white text-indigo-600 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300'
+                        : 'border-transparent bg-zinc-100/60 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+                      :aria-selected="selectedPromptSection?.key === section.key"
+                      @click="selectPromptSection(section)"
+                    >
+                      {{ section.title }}
+                    </button>
+                  </div>
+                </div>
+                <section v-if="selectedPromptSection" class="min-h-[28rem] overflow-hidden rounded-b-xl border border-t-0 border-zinc-200 bg-white/75 dark:border-zinc-700 dark:bg-zinc-900/40">
+                  <header class="flex items-center justify-end gap-3 border-b border-zinc-100 px-5 py-2.5 dark:border-zinc-800">
+                    <div class="flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <span>{{ selectedPromptSection.count }} 项</span>
+                      <button
+                        v-if="editingPromptSection !== selectedPromptSection.key"
+                        type="button"
+                        class="rounded-lg border border-indigo-200 bg-white/75 px-3 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
+                        @click="startEditPromptSection(selectedPromptSection)"
+                      >
+                        编辑
+                      </button>
                     </div>
-                  </summary>
+                  </header>
+                  <div v-if="selectedPromptSection.items.length" class="overflow-x-auto border-b border-zinc-100 bg-zinc-50/70 custom-scrollbar dark:border-zinc-800 dark:bg-zinc-950/30" role="tablist" :aria-label="`${selectedPromptSection.title}子设置`">
+                    <div class="flex min-w-max gap-1 px-4 pt-3">
+                      <button
+                        v-for="item in selectedPromptSection.items"
+                        :key="item.key"
+                        type="button"
+                        role="tab"
+                        class="whitespace-nowrap rounded-t-lg border border-b-0 px-4 py-2 text-xs font-medium transition-colors"
+                        :class="selectedPromptItem?.key === item.key
+                          ? 'border-indigo-200 bg-white text-indigo-600 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300'
+                          : 'border-transparent text-zinc-500 hover:bg-white/70 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+                        :aria-selected="selectedPromptItem?.key === item.key"
+                        @click="activePromptItemKey = item.key"
+                      >
+                        {{ item.label }}
+                      </button>
+                    </div>
+                  </div>
                   <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
                     <div
-                      v-for="item in section.items"
-                      :key="item.key"
-                      class="px-3 py-3"
+                      v-if="selectedPromptItem"
+                      :key="selectedPromptItem.key"
+                      class="min-h-[22rem] px-5 py-5"
                     >
                       <div class="flex items-center justify-between gap-3 mb-1">
-                        <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">{{ item.label }}</div>
-                        <code class="text-[10px] text-zinc-400 dark:text-zinc-500">{{ item.key }}</code>
+                        <div class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{{ selectedPromptItem.label }}</div>
+                        <code class="text-[10px] text-zinc-400 dark:text-zinc-500">{{ selectedPromptItem.key }}</code>
                       </div>
                       <input
-                        v-if="editingPromptSection === section.key && item.type === 'number'"
-                        :value="promptDraftValue(item.key)"
+                        v-if="editingPromptSection === selectedPromptSection.key && selectedPromptItem.type === 'number'"
+                        :value="promptDraftValue(selectedPromptItem.key)"
                         type="number"
                         min="0"
                         max="3600"
                         class="w-full text-xs text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 px-2 py-1.5 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
-                        @input="updatePromptDraftValue(item.key, Number(($event.target as HTMLInputElement).value || 0))"
+                        @input="updatePromptDraftValue(selectedPromptItem.key, Number(($event.target as HTMLInputElement).value || 0))"
                       />
                       <textarea
-                        v-else-if="editingPromptSection === section.key"
-                        :value="promptDraftValue(item.key)"
-                        rows="6"
-                        class="w-full resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
-                        @input="updatePromptDraftValue(item.key, ($event.target as HTMLTextAreaElement).value)"
+                        v-else-if="editingPromptSection === selectedPromptSection.key"
+                        :value="promptDraftValue(selectedPromptItem.key)"
+                        rows="16"
+                        class="mt-2 min-h-[20rem] w-full resize-y whitespace-pre-wrap rounded-xl border border-zinc-200 bg-white/60 p-4 font-mono text-xs leading-relaxed text-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200 dark:focus:ring-indigo-800"
+                        @input="updatePromptDraftValue(selectedPromptItem.key, ($event.target as HTMLTextAreaElement).value)"
                       />
-                      <pre v-else class="whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-100 dark:border-zinc-700">{{ item.content || '（空）' }}</pre>
+                      <pre v-else class="mt-2 min-h-[20rem] whitespace-pre-wrap rounded-xl border border-zinc-100 bg-white/60 p-4 font-mono text-xs leading-relaxed text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200">{{ selectedPromptItem.content || '（空）' }}</pre>
                     </div>
-                    <div v-if="editingPromptSection === section.key" class="flex justify-end gap-2 px-3 py-3">
+                    <div v-if="editingPromptSection === selectedPromptSection.key" class="flex justify-end gap-2 px-5 py-4">
                       <button
                         type="button"
                         class="px-3 py-1.5 rounded border border-zinc-200 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                        :disabled="savingPromptSection === section.key"
+                        :disabled="savingPromptSection === selectedPromptSection.key"
                         @click="cancelEditPromptSection"
                       >
                         取消
@@ -1142,14 +1407,18 @@ const closeDetail = () => {
                       <button
                         type="button"
                         class="px-3 py-1.5 rounded bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                        :disabled="savingPromptSection === section.key"
-                        @click="savePromptSection(section)"
+                        :disabled="savingPromptSection === selectedPromptSection.key"
+                        @click="savePromptSection(selectedPromptSection)"
                       >
-                        {{ savingPromptSection === section.key ? '保存中…' : '保存' }}
+                        {{ savingPromptSection === selectedPromptSection.key ? '保存中…' : '保存' }}
                       </button>
                     </div>
                   </div>
-                </details>
+                </section>
+                <div v-if="filteredPromptSections.length === 0" class="rounded-xl border border-dashed border-zinc-200 px-4 py-12 text-center dark:border-zinc-700">
+                  <div class="text-sm font-medium text-zinc-600 dark:text-zinc-300">没有匹配的配置项</div>
+                  <button type="button" class="mt-2 text-xs text-indigo-600 hover:underline dark:text-indigo-300" @click="detailQuery = ''">清空搜索条件</button>
+                </div>
               </div>
             </template>
             <template v-else-if="inheritanceSkills">
@@ -1190,143 +1459,139 @@ const closeDetail = () => {
                 >
                   暂无 MCP 工具。
                 </div>
-                <details
-                  v-for="device in inheritanceDevices"
+                <div v-if="filteredInheritanceToolTabs.length" class="overflow-x-auto border-b border-zinc-200 custom-scrollbar dark:border-zinc-700" role="tablist" aria-label="传承技能工具栏目">
+                  <div class="flex min-w-max items-end gap-1 px-1">
+                    <button
+                      v-for="item in filteredInheritanceToolTabs"
+                      :key="item.key"
+                      type="button"
+                      role="tab"
+                      class="min-w-[10rem] whitespace-nowrap rounded-t-xl border border-b-0 px-4 py-2.5 text-left transition-colors"
+                      :class="selectedInheritanceToolTab?.key === item.key
+                        ? 'border-indigo-200 bg-white text-indigo-600 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300'
+                        : 'border-transparent bg-zinc-100/60 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:bg-zinc-800/60 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100'"
+                      :aria-selected="selectedInheritanceToolTab?.key === item.key"
+                      @click="selectInheritanceToolTab(item.key)"
+                    >
+                      <span class="block text-xs font-semibold">{{ getMcpToolZhLabel(item.tool.name) }}</span>
+                      <span class="mt-0.5 block max-w-[13rem] truncate text-[10px] opacity-70">{{ deviceDisplayLabel(item.device) }}</span>
+                    </button>
+                  </div>
+                </div>
+                <section
+                  v-for="device in filteredInheritanceDevices"
                   :key="`${device.device_type}-${device.device_id}`"
-                  class="group overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40"
+                  v-show="selectedInheritanceToolTab?.device.device_id === device.device_id && selectedInheritanceToolTab?.device.device_type === device.device_type"
+                  class="min-h-[30rem] overflow-hidden rounded-b-xl border border-t-0 border-zinc-200 bg-zinc-50/60 dark:border-zinc-700 dark:bg-zinc-800/40"
                 >
-                  <summary class="list-none cursor-pointer px-3 py-3 select-none">
+                  <header class="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div class="flex min-w-0 items-center gap-2">
-                        <span class="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-                        <div class="min-w-0">
-                          <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                            {{ deviceDisplayLabel(device) }}
-                          </div>
-                          <div class="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
-                            <template v-if="device.device_id === 'toolbox' || device.device_id === 'library'">内置服务端固定</template>
-                            <template v-else>设备号：{{ device.device_id || '未提供' }}</template>
-                            <template v-if="device.updated_at"> · {{ formatTime(device.updated_at) }}</template>
-                          </div>
+                      <div class="min-w-0">
+                        <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                          {{ deviceDisplayLabel(device) }}
+                        </div>
+                        <div class="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+                          <template v-if="device.device_id === 'toolbox' || device.device_id === 'library'">内置服务端固定</template>
+                          <template v-else>设备号：{{ device.device_id || '未提供' }}</template>
+                          <template v-if="device.updated_at"> · {{ formatTime(device.updated_at) }}</template>
                         </div>
                       </div>
-                      <div class="flex shrink-0 items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400">
-                        <span class="rounded bg-white/75 px-2 py-1 dark:bg-zinc-900/60">{{ device.tool_count }} 个 MCP</span>
-                        <span class="text-zinc-400 group-open:hidden">展开详情</span>
-                        <span class="hidden text-indigo-500 group-open:inline dark:text-indigo-300">收起</span>
-                      </div>
+                      <span class="shrink-0 rounded bg-white/75 px-2 py-1 text-[10px] text-zinc-500 dark:bg-zinc-900/60 dark:text-zinc-400">{{ device.tool_count }} 个 MCP</span>
                     </div>
-                  </summary>
-                  <div class="border-t border-zinc-100 bg-white/75 dark:border-zinc-800 dark:bg-zinc-900/40">
+                  </header>
+                  <div class="space-y-3 bg-white/75 p-3 dark:bg-zinc-900/40">
                     <div v-if="!device.tools.length" class="px-3 py-6 text-center text-xs text-zinc-400">
                       该设备暂未上报 MCP 工具
                     </div>
-                    <div v-else class="overflow-x-auto -mx-1 px-1">
-                      <table class="w-full min-w-[32rem] md:min-w-[48rem] border-collapse text-xs">
-                        <thead>
-                          <tr class="border-b border-zinc-100 bg-zinc-50/80 text-left text-[11px] font-semibold text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
-                            <th class="px-2 md:px-3 py-2 md:w-[9rem]">中文名称</th>
-                            <th class="px-2 md:px-3 py-2 md:w-[11rem]">调用工具</th>
-                            <th class="hidden md:table-cell px-3 py-2">工具描述</th>
-                            <th class="hidden sm:table-cell px-2 md:px-3 py-2 md:w-[6.5rem]">参数详情</th>
-                            <th class="hidden md:table-cell px-3 py-2 w-[7rem]">底层实现</th>
-                            <th class="px-2 md:px-3 py-2 md:w-[6.5rem]">测试</th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-zinc-100 dark:divide-zinc-800">
-                          <template
-                            v-for="tool in device.tools"
-                            :key="`${device.device_id}-${tool.name}`"
+                    <article
+                      v-for="tool in device.tools"
+                      :key="`${device.device_id}-${tool.name}`"
+                      v-show="selectedInheritanceToolTab?.tool.name === tool.name"
+                      class="min-h-[24rem] rounded-xl border border-zinc-100 bg-zinc-50/70 p-5 dark:border-zinc-800 dark:bg-zinc-950/35"
+                    >
+                      <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <h4 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ getMcpToolZhLabel(tool.name) }}</h4>
+                          <code class="mt-0.5 block break-all text-[11px] text-indigo-600 dark:text-indigo-300">{{ tool.name }}</code>
+                        </div>
+                        <button
+                          v-if="!isServerInheritanceDevice(device)"
+                          type="button"
+                          class="shrink-0 whitespace-nowrap rounded-lg border border-emerald-200 bg-white/75 px-2.5 py-1.5 text-[11px] text-emerald-700 transition-colors hover:bg-emerald-50 active:bg-emerald-100 dark:border-emerald-900/60 dark:bg-zinc-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                          @click="openMcpTestModal(device, tool)"
+                        >
+                          测试 MCP
+                        </button>
+                        <span v-else class="shrink-0 rounded bg-zinc-100 px-2 py-1 text-[10px] text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">服务端内置</span>
+                      </div>
+
+                      <div class="mt-3">
+                        <div class="mb-1 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">工具描述</div>
+                        <p class="whitespace-pre-wrap text-xs leading-relaxed text-zinc-700 dark:text-zinc-200">
+                          {{ tool.description || '（无描述）' }}
+                          <span v-if="tool.destructive" class="ml-1 text-amber-600 dark:text-amber-300">可能产生写入/变更</span>
+                        </p>
+                      </div>
+
+                      <div class="mt-3">
+                        <div class="mb-1 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">参数详情</div>
+                        <div v-if="toolParameters(tool).length" class="overflow-hidden rounded-lg border border-zinc-100 dark:border-zinc-700">
+                          <div
+                            v-for="param in toolParameters(tool)"
+                            :key="`${device.device_id}-${tool.name}-${param.name}`"
+                            class="grid grid-cols-1 gap-1.5 border-b border-zinc-100 px-3 py-2 text-[11px] last:border-b-0 dark:border-zinc-700 sm:grid-cols-[minmax(8rem,12rem)_5rem_4rem_1fr]"
                           >
-                            <tr class="align-top">
-                              <td class="px-2 md:px-3 py-2.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-100">
-                                {{ getMcpToolZhLabel(tool.name) }}
-                              </td>
-                              <td class="px-2 md:px-3 py-2.5">
-                                <code class="break-all text-[11px] text-indigo-600 dark:text-indigo-300">{{ tool.name }}</code>
-                              </td>
-                              <td class="hidden md:table-cell px-3 py-2.5 leading-relaxed text-zinc-700 dark:text-zinc-200">
-                                {{ tool.description || '（无描述）' }}
-                                <span v-if="tool.destructive" class="ml-1 text-amber-600 dark:text-amber-300">可能产生写入/变更</span>
-                              </td>
-                              <td
-                                class="hidden sm:table-cell relative px-2 md:px-3 py-2.5 align-top cursor-default transition-colors hover:bg-indigo-50/60 dark:hover:bg-indigo-950/25"
-                                @mouseenter="openInheritanceHoverPopover($event, 'params', device.device_id, tool.name)"
-                                @mouseleave="scheduleCloseInheritanceHoverPopover"
-                              >
-                                <div class="flex min-h-[2rem] items-center text-[11px]">
-                                  <span class="rounded border border-zinc-200 bg-white/75 px-2 py-1 text-indigo-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-indigo-300">
-                                    {{ toolParameters(tool).length ? `${toolParameters(tool).length} 个参数` : '无参数' }}
-                                  </span>
-                                </div>
-                              </td>
-                              <td
-                                class="hidden md:table-cell relative px-3 py-2.5 align-top transition-colors"
-                                :class="hasImplementation(tool) ? 'cursor-default hover:bg-indigo-50/60 dark:hover:bg-indigo-950/25' : ''"
-                                @mouseenter="hasImplementation(tool) ? openInheritanceHoverPopover($event, 'impl', device.device_id, tool.name) : undefined"
-                                @mouseleave="scheduleCloseInheritanceHoverPopover"
-                              >
-                                <span
-                                  v-if="hasImplementation(tool)"
-                                  class="inline-flex min-h-[2rem] items-center rounded border border-indigo-100 bg-indigo-50/70 px-2 py-1 font-mono text-[10px] text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300"
-                                >
-                                  {{ implementationSummary(tool) }}
-                                </span>
-                                <span v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">—</span>
-                              </td>
-                              <td class="px-2 md:px-3 py-2.5 align-top">
-                                <button
-                                  v-if="!isServerInheritanceDevice(device)"
-                                  type="button"
-                                  class="whitespace-nowrap rounded border border-emerald-200 bg-white/75 px-2 py-1 text-[11px] text-emerald-700 transition-colors hover:bg-emerald-50 active:bg-emerald-100 dark:border-emerald-900/60 dark:bg-zinc-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
-                                  @click.stop.prevent="openMcpTestModal(device, tool)"
-                                >
-                                  测试 MCP
-                                </button>
-                                <span v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">服务端内置</span>
-                              </td>
-                            </tr>
-                          </template>
-                        </tbody>
-                      </table>
-                    </div>
+                            <code class="break-all font-semibold text-zinc-700 dark:text-zinc-200">{{ param.name }}</code>
+                            <span class="text-zinc-500 dark:text-zinc-400">{{ param.type || 'any' }}</span>
+                            <span :class="param.required ? 'text-rose-600 dark:text-rose-300' : 'text-zinc-400 dark:text-zinc-500'">{{ param.required ? '必填' : '可选' }}</span>
+                            <span class="text-zinc-600 dark:text-zinc-300">{{ param.description || '（无描述）' }}</span>
+                          </div>
+                        </div>
+                        <div v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">无参数</div>
+                      </div>
+
+                      <div class="mt-3">
+                        <div class="mb-1 text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">底层实现</div>
+                        <pre v-if="hasImplementation(tool)" class="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 font-mono text-[10px] leading-relaxed text-indigo-800 dark:border-indigo-900/60 dark:bg-indigo-950/25 dark:text-indigo-200">{{ formatImplementationCode(tool.implementation) }}</pre>
+                        <div v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">未提供实现信息</div>
+                      </div>
+                    </article>
+
                     <div
-                      v-if="isServerInheritanceDevice(device) && device.device_id === 'toolbox' && inheritanceServerCategories.length"
-                      class="border-t border-zinc-100 px-3 py-3 dark:border-zinc-800"
+                      v-if="isServerInheritanceDevice(device) && selectedInheritanceServerCategory"
+                      class="border-t border-zinc-100 pt-4 dark:border-zinc-800"
                     >
                       <div class="mb-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
                         编辑服务端工具说明（保存后同步工具目录与 mcp.describe+tool）。工具箱与图书管理工具共享此编辑。
                       </div>
                       <div class="space-y-2">
-                        <details
+                        <section
                           v-for="category in inheritanceServerCategories"
                           :key="category.namespace"
-                          :open="editingPropertyCategory === category.namespace || undefined"
-                          class="group overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40"
+                          v-show="category.namespace === selectedInheritanceServerCategory?.namespace"
+                          class="overflow-hidden rounded-lg border border-zinc-100 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-800/40"
                         >
-                          <summary class="list-none cursor-pointer border-b border-zinc-100 px-3 py-2 select-none dark:border-zinc-800">
+                          <header class="border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
                             <div class="flex items-center justify-between gap-3">
-                              <div class="flex min-w-0 items-center gap-2">
-                                <span class="text-zinc-400 transition-transform group-open:rotate-90">›</span>
-                                <div class="truncate text-xs font-semibold text-zinc-700 dark:text-zinc-200">工具总栏目：{{ category.namespace }}</div>
-                              </div>
+                              <div class="truncate text-xs font-semibold text-zinc-700 dark:text-zinc-200">工具总栏目：{{ category.namespace }}</div>
                               <div class="flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
                                 <span>{{ category.count }} 个工具</span>
                                 <button
                                   v-if="editingPropertyCategory !== category.namespace"
                                   type="button"
                                   class="rounded border border-indigo-200 bg-white/75 px-2 py-0.5 text-[10px] text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:bg-zinc-900/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40"
-                                  @click.stop.prevent="startEditPropertyCategory(category)"
+                                  @click="startEditPropertyCategory(category)"
                                 >
                                   编辑
                                 </button>
                               </div>
                             </div>
-                          </summary>
+                          </header>
                           <div class="divide-y divide-zinc-100 dark:divide-zinc-800">
                             <div
                               v-for="tool in category.tools"
                               :key="tool.name"
+                              v-show="tool.name === selectedInheritanceToolTab?.tool.name"
                               class="px-3 py-3"
                             >
                               <div class="grid grid-cols-1 gap-2 md:grid-cols-[13rem_1fr]">
@@ -1394,11 +1659,15 @@ const closeDetail = () => {
                               </button>
                             </div>
                           </div>
-                        </details>
+                        </section>
                       </div>
                     </div>
                   </div>
-                </details>
+                </section>
+                <div v-if="inheritanceDevices.length && filteredInheritanceDevices.length === 0" class="rounded-xl border border-dashed border-zinc-200 px-4 py-12 text-center dark:border-zinc-700">
+                  <div class="text-sm font-medium text-zinc-600 dark:text-zinc-300">没有匹配的设备或 MCP</div>
+                  <button type="button" class="mt-2 text-xs text-indigo-600 hover:underline dark:text-indigo-300" @click="detailQuery = ''">清空搜索条件</button>
+                </div>
               </div>
             </template>
             <template v-else-if="inheritanceThoughts">
@@ -1442,7 +1711,16 @@ const closeDetail = () => {
                       >{{ opt.t }}</button>
                     </div>
                   </div>
-                  <div v-if="filteredInstalledThoughts.length === 0" class="text-center text-[11px] text-zinc-400 py-4">该端暂无传承思想</div>
+                  <div v-if="filteredInstalledThoughts.length === 0" class="rounded-xl border border-dashed border-zinc-200 px-4 py-10 text-center dark:border-zinc-700">
+                    <div class="text-sm font-medium text-zinc-600 dark:text-zinc-300">没有匹配的传承思想</div>
+                    <button
+                      type="button"
+                      class="mt-2 text-xs text-indigo-600 hover:underline dark:text-indigo-300"
+                      @click="detailQuery = ''; thoughtEndpointFilter = 'all'"
+                    >
+                      清空搜索与端筛选
+                    </button>
+                  </div>
                   <button
                     v-for="skill in filteredInstalledThoughts"
                     :key="skill.slug"
@@ -1474,72 +1752,21 @@ const closeDetail = () => {
             <div v-if="currentDetail.source_job_id" class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">
               来源任务：{{ currentDetail.source_job_id }} · 第 {{ currentDetail.source_generation || 1 }} 代
             </div>
-          </template>
-        </div>
-      </div>
-    </div>
-    <div
-      v-if="detailAgent"
-      :style="{ zIndex: personaDetailZIndex }"
-      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
-      @click.self="closePersonaDetail"
-    >
-      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-5xl max-h-[90vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
-        <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
-          <div class="min-w-0">
-            <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">{{ detailAgent.name }} · 详情</div>
-            <div class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 truncate">
-              ID {{ detailAgent.id }} · {{ detailAgent.role }} · {{ detailAgent.model || '未设置模型' }}
             </div>
-          </div>
-          <button class="ml-3 text-zinc-400 hover:text-zinc-600 text-xl leading-none" @click="closePersonaDetail">×</button>
-        </div>
-
-        <div class="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-          <div v-if="personaEditNotice" class="text-xs text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900 rounded-lg px-3 py-2">
-            {{ personaEditNotice }}
-          </div>
-          <div v-if="personaEditError" class="text-xs text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900 rounded-lg px-3 py-2">
-            {{ personaEditError }}
-          </div>
-
-          <div>
-            <div class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">人格 Prompt</div>
-            <textarea
-              :value="personaDraftPrompt"
-              rows="12"
-              class="w-full min-h-[160px] resize-y whitespace-pre-wrap font-mono text-xs leading-relaxed text-zinc-700 dark:text-zinc-200 bg-white/60 dark:bg-zinc-900/50 p-3 rounded border border-zinc-200 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:focus:ring-indigo-800"
-              @input="personaDraftPrompt = ($event.target as HTMLTextAreaElement).value"
-            />
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-800">
-          <button
-            type="button"
-            class="px-3 py-1.5 rounded border border-zinc-200 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            @click="closePersonaDetail"
-          >
-            关闭
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1.5 rounded bg-indigo-600 text-xs text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="savingPersonaId === detailAgent.id"
-            @click="savePersona(detailAgent)"
-          >
-            {{ savingPersonaId === detailAgent.id ? '保存中…' : '保存人格 Prompt' }}
-          </button>
+          </template>
         </div>
       </div>
     </div>
     <div
       v-if="clawhubModalOpen"
       :style="{ zIndex: clawhubZIndex }"
-      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="ClawHub 搜索"
       @click.self="closeClawHubModal"
     >
-      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-6xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
+      <div class="acrylic-modal h-app-viewport w-full max-w-6xl rounded-none shadow-2xl flex flex-col border-0 sm:h-[88vh] sm:rounded-2xl sm:border border-zinc-200 dark:border-zinc-800">
         <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">ClawHub 搜索</div>
@@ -1547,10 +1774,12 @@ const closeDetail = () => {
               {{ inheritanceThoughts?.registry_url || 'https://clawhub.ai' }}
             </div>
           </div>
-          <button class="ml-3 text-zinc-400 hover:text-zinc-600 text-xl leading-none" @click="closeClawHubModal">×</button>
+          <button type="button" class="ml-3 flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200" aria-label="关闭 ClawHub 搜索" @click="closeClawHubModal">
+            <AppIcon name="close" class="h-4 w-4" />
+          </button>
         </div>
 
-        <div class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[22rem_1fr]">
+        <div class="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(13rem,40%)_1fr] lg:grid-cols-[22rem_1fr] lg:grid-rows-1">
           <aside class="min-h-0 border-b lg:border-b-0 lg:border-r border-zinc-100 dark:border-zinc-800 flex flex-col">
             <div class="p-3 border-b border-zinc-100 dark:border-zinc-800">
               <div class="flex gap-2">
@@ -1655,10 +1884,13 @@ const closeDetail = () => {
     <div
       v-if="installedClawhubModalOpen"
       :style="{ zIndex: installedClawhubZIndex }"
-      class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
-      @click.self="closeInstalledClawHubModal"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="本地知识快照"
+      @click.self="requestCloseInstalledClawHubModal"
     >
-      <div class="acrylic-modal rounded-2xl shadow-2xl w-[calc(100vw-2rem)] max-w-5xl h-[82vh] flex flex-col border border-zinc-200 dark:border-zinc-800">
+      <div class="acrylic-modal h-app-viewport w-full max-w-5xl rounded-none shadow-2xl flex flex-col border-0 sm:h-[88vh] sm:rounded-2xl sm:border border-zinc-200 dark:border-zinc-800">
         <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">
@@ -1668,7 +1900,9 @@ const closeDetail = () => {
               {{ installedClawhubSelected?.slug || '加载中' }}
             </div>
           </div>
-          <button class="ml-3 text-zinc-400 hover:text-zinc-600 text-xl leading-none" @click="closeInstalledClawHubModal">×</button>
+          <button type="button" class="ml-3 flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200" aria-label="关闭本地快照" @click="requestCloseInstalledClawHubModal">
+            <AppIcon name="close" class="h-4 w-4" />
+          </button>
         </div>
 
         <div v-if="installedClawhubLoading" class="flex-1 flex items-center justify-center text-sm text-zinc-400">加载中…</div>
@@ -1759,68 +1993,6 @@ const closeDetail = () => {
       :input-schema="mcpTestInputSchema"
       @close="closeMcpTestModal"
     />
-    <div
-      v-if="inheritanceHoverPopover && hoveredInheritanceTool"
-      class="fixed overflow-y-auto rounded-lg acrylic-modal p-3 text-left shadow-xl"
-      :class="inheritanceHoverPopover.kind === 'impl'
-        ? 'border-indigo-100 dark:border-indigo-900/60'
-        : 'border-zinc-200 dark:border-zinc-700'"
-      :style="[inheritanceHoverPopoverStyle, { zIndex: inheritanceHoverZIndex }]"
-      @mouseenter="cancelCloseInheritanceHoverPopover"
-      @mouseleave="scheduleCloseInheritanceHoverPopover"
-    >
-      <template v-if="inheritanceHoverPopover.kind === 'params'">
-        <div class="mb-2 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">参数详情</div>
-        <div v-if="toolParameters(hoveredInheritanceTool.tool).length" class="space-y-2">
-          <div
-            v-for="param in toolParameters(hoveredInheritanceTool.tool)"
-            :key="`${hoveredInheritanceTool.device.device_id}-${hoveredInheritanceTool.tool.name}-${param.name}`"
-            class="rounded border border-zinc-100 px-2.5 py-2 dark:border-zinc-700"
-          >
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-              <code class="break-all font-semibold text-zinc-800 dark:text-zinc-100">{{ param.name }}</code>
-              <span class="text-zinc-400">·</span>
-              <span class="text-zinc-500 dark:text-zinc-400">{{ param.type || 'any' }}</span>
-              <span class="text-zinc-400">·</span>
-              <span :class="param.required ? 'text-rose-600 dark:text-rose-300' : 'text-zinc-400 dark:text-zinc-500'">
-                {{ param.required ? '必填' : '可选' }}
-              </span>
-            </div>
-            <div class="mt-1.5 text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-              <span class="font-semibold text-zinc-500 dark:text-zinc-400">参数解释：</span>{{ param.description || '（无描述）' }}
-            </div>
-          </div>
-        </div>
-        <div v-else class="text-[11px] text-zinc-500 dark:text-zinc-400">无参数</div>
-      </template>
-      <template v-else>
-        <div class="mb-2 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">底层实现</div>
-        <div class="text-[10px] text-zinc-500 dark:text-zinc-400">
-          类型：<code class="text-indigo-600 dark:text-indigo-300">{{ hoveredInheritanceTool.tool.implementation?.kind || 'unknown' }}</code>
-        </div>
-        <div v-if="hoveredInheritanceTool.tool.implementation?.source_files?.length" class="mt-2">
-          <div class="mb-1 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">源码入口</div>
-          <div class="flex flex-wrap gap-1">
-            <code
-              v-for="sourceFile in hoveredInheritanceTool.tool.implementation.source_files"
-              :key="`${hoveredInheritanceTool.device.device_id}-${hoveredInheritanceTool.tool.name}-${sourceFile}`"
-              class="break-all rounded bg-zinc-50/60 px-1.5 py-1 text-[10px] text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300"
-            >{{ sourceFile }}</code>
-          </div>
-        </div>
-        <div v-if="hoveredInheritanceTool.tool.implementation?.editable_via" class="mt-2 text-[10px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-          修改入口：<code>{{ hoveredInheritanceTool.tool.implementation.editable_via }}</code>，先调用 <code>inspect</code>，再调用 <code>get_source</code> 读取源码或 <code>upsert</code> 创建同名覆盖。
-        </div>
-        <div v-if="hoveredInheritanceTool.tool.implementation?.handler_source" class="mt-2">
-          <div class="mb-1 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">处理函数入口</div>
-          <pre class="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-50/60 p-2 font-mono text-[10px] leading-relaxed text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">{{ hoveredInheritanceTool.tool.implementation.handler_source }}</pre>
-        </div>
-        <div v-if="hoveredInheritanceTool.tool.implementation?.code?.length" class="mt-2">
-          <div class="mb-1 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">动态程序代码</div>
-          <pre class="max-h-52 overflow-auto whitespace-pre-wrap break-all rounded bg-zinc-50/60 p-2 font-mono text-[10px] leading-relaxed text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">{{ formatImplementationCode(hoveredInheritanceTool.tool.implementation.code) }}</pre>
-        </div>
-      </template>
-    </div>
     </Teleport>
   </div>
 </template>

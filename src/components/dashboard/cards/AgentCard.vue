@@ -28,6 +28,8 @@ interface AgentTaskSnapshot {
 }
 
 interface AgentProps {
+  focused?: boolean
+  focusSignal?: number
   agent: {
     id: string
     name: string
@@ -122,6 +124,17 @@ const emit = defineEmits<{
 }>()
 
 const isUnlimitedLife = computed(() => props.agent.tokenLimit <= 0)
+const cardRootRef = ref<HTMLElement | null>(null)
+
+watch(
+  () => [props.focused, props.focusSignal] as const,
+  async ([focused]) => {
+    if (!focused) return
+    await nextTick()
+    cardRootRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+  },
+  { immediate: true },
+)
 // AI 自身的代数（进化代际），与任务无关。
 const syncedGeneration = computed(() => Math.max(1, Number(props.agent.generation) || 1))
 
@@ -537,8 +550,9 @@ const onCardPointerUp = (event: PointerEvent) => {
 
 <template>
   <div 
+    ref="cardRootRef"
     class="agent-card-shell relative acrylic-panel rounded-xl p-4 transition-all duration-300 border shadow-sm hover:shadow-lg hover:-translate-y-1 w-full min-w-0 dark:bg-zinc-900/90 dark:border-zinc-700/50 backdrop-blur-sm group cursor-pointer touch-manipulation"
-    :class="[cardBorderClass, cardGlowClass]"
+    :class="[cardBorderClass, cardGlowClass, { 'agent-card-world-focus': focused }]"
     @dblclick="onCardDblClick"
     @pointerup="onCardPointerUp"
   >
@@ -782,6 +796,19 @@ const onCardPointerUp = (event: PointerEvent) => {
 <style scoped>
 .agent-card-shell {
   isolation: isolate;
+}
+
+.agent-card-world-focus {
+  z-index: 30;
+  transform: scale(1.035);
+  border-color: rgb(99 102 241) !important;
+  box-shadow: 0 0 0 3px rgb(165 180 252 / 0.65), 0 18px 42px rgb(49 46 129 / 0.28) !important;
+}
+
+.agent-card-world-focus::before {
+  opacity: 0.92;
+  filter: blur(10px);
+  animation-duration: 1.4s;
 }
 
 .agent-card-shell::before {

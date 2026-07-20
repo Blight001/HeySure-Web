@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import AgentCard from '../cards/AgentCard.vue'
 
@@ -35,6 +35,8 @@ interface Props {
   memberAgents: Agent[]
   viewMode: 'sections' | 'all'
   noGlass?: boolean
+  focusedAiConfigId?: number | null
+  focusSignal?: number
 }
 
 const props = defineProps<Props>()
@@ -54,6 +56,13 @@ const isAllView = computed(() => props.viewMode === 'all')
 const toggleViewMode = () => {
   emit('update:view-mode', isAllView.value ? 'sections' : 'all')
 }
+
+watch(() => props.focusSignal, () => {
+  const id = Number(props.focusedAiConfigId)
+  if (!Number.isFinite(id)) return
+  if (props.adminAgents.some(agent => Number(agent.aiConfigId) === id)) activeSection.value = 'admins'
+  else if (props.memberAgents.some(agent => Number(agent.aiConfigId) === id)) activeSection.value = 'members'
+})
 </script>
 
 <template>
@@ -107,11 +116,13 @@ const toggleViewMode = () => {
           暂无 AI 配置
         </div>
 
-        <TransitionGroup v-else name="list" tag="div" class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-visible pr-2 pt-2 pb-1">
+        <TransitionGroup v-else name="list" tag="div" class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto px-4 py-4">
           <AgentCard
             v-for="agent in allAgents"
             :key="agent.id"
             :agent="agent"
+            :focused="Number(agent.aiConfigId) === Number(focusedAiConfigId)"
+            :focus-signal="focusSignal"
             @show-tasks="emit('show-tasks', $event)"
             @show-task-detail="emit('show-task-detail', $event)"
             @chat="emit('chat', $event)"
@@ -127,11 +138,13 @@ const toggleViewMode = () => {
           <AppIcon name="warning" class="w-4 h-4" /> 警告：管理员离线或正在重生中...
         </div>
 
-        <TransitionGroup v-else name="list" tag="div" class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-visible pr-2 pt-2 pb-1">
+        <TransitionGroup v-else name="list" tag="div" class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto px-4 py-4">
           <AgentCard
             v-for="agent in adminAgents"
             :key="agent.id"
             :agent="agent"
+            :focused="Number(agent.aiConfigId) === Number(focusedAiConfigId)"
+            :focus-signal="focusSignal"
             @show-tasks="emit('show-tasks', $event)"
             @show-task-detail="emit('show-task-detail', $event)"
             @chat="emit('chat', $event)"
@@ -147,11 +160,13 @@ const toggleViewMode = () => {
           暂无数字成员
         </div>
 
-        <TransitionGroup v-else name="list" tag="div" class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-visible pr-2 pt-2 pb-1">
+        <TransitionGroup v-else name="list" tag="div" class="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto px-4 py-4">
           <AgentCard
             v-for="agent in memberAgents"
             :key="agent.id"
             :agent="agent"
+            :focused="Number(agent.aiConfigId) === Number(focusedAiConfigId)"
+            :focus-signal="focusSignal"
             @show-tasks="emit('show-tasks', $event)"
             @show-task-detail="emit('show-task-detail', $event)"
             @chat="emit('chat', $event)"

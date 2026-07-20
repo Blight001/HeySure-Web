@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import type { McpRoleMeta } from '@/types'
 import { assignDeviceAi, deleteDeviceRecord, updateDeviceDisplay } from '@/api/devices'
@@ -38,9 +38,20 @@ interface Props {
   agents: Agent[]
   mcpRoleMeta: McpRoleMeta
   roleMcpPermissions: Record<string, string[]>
+  focusedDeviceId?: string
+  focusSignal?: number
 }
 
 const props = defineProps<Props>()
+const panelRootRef = ref<HTMLElement | null>(null)
+
+watch(() => props.focusSignal, async () => {
+  if (!props.focusedDeviceId) return
+  await nextTick()
+  const card = Array.from(panelRootRef.value?.querySelectorAll<HTMLElement>('[data-device-card]') || [])
+    .find(item => item.dataset.deviceId === props.focusedDeviceId)
+  card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+})
 
 const emit = defineEmits<{
   (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
@@ -474,7 +485,7 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
 </script>
 
 <template>
-  <div class="relative flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+  <div ref="panelRootRef" class="relative flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
     <div v-if="devices.length === 0" class="text-center text-zinc-400 text-xs py-10 dark:text-zinc-500">
       暂无已连接设备。
     </div>
@@ -482,8 +493,13 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
     <div
       v-for="device in devices"
       :key="device.id"
-      class="relative rounded-xl border p-3"
-      :class="deviceCardClass(device)"
+      data-device-card
+      :data-device-id="device.id"
+      class="relative rounded-xl border p-3 transition-[transform,box-shadow,border-color] duration-300"
+      :class="[
+        deviceCardClass(device),
+        device.id === focusedDeviceId ? 'z-20 scale-[1.045] !border-indigo-400 ring-2 ring-indigo-300/70 shadow-2xl shadow-indigo-500/25 dark:!border-indigo-400 dark:ring-indigo-500/50' : '',
+      ]"
     >
       <!-- 单AI绑定设备的AI头像作为背景填充（作坊设备卡片）：85% 透明 + 虚化处理（与数字生命一致） -->
       <div 

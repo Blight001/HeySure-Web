@@ -60,15 +60,10 @@ const mcpLines = (raw: string) => decodeEscapedNewlinesIfNeeded(raw).split('\n')
 const appliedEditsSet = computed(() => new Set(props.appliedEdits));
 const appliedSignaturesSet = computed(() => new Set(props.appliedSignatures));
 
-const emit = defineEmits<{
+defineEmits<{
   (e: 'apply', blockIdx: number): void;
   (e: 'revert', blockIdx: number): void;
 }>();
-
-const getBlockIndex = (blockId: string): number => {
-  const parts = blockId.split('-');
-  return parseInt(parts[parts.length - 1], 10);
-};
 
 const stableStringify = (value: any): string => {
   if (value === null || value === undefined) return String(value);
@@ -169,7 +164,7 @@ const isApplied = (block: any) => {
           </div>
         </template>
       </template>
-      <div v-else-if="item.type === 'block' && item.block" class="block my-1.5 text-xs">
+      <div v-else-if="item.type === 'block' && item.block && isApplied(item.block)" class="block my-1.5 text-xs">
         <div class="flex items-center gap-2">
           <span
             class="shrink-0 h-1.5 w-1.5 rounded-full"
@@ -179,15 +174,7 @@ const isApplied = (block: any) => {
           ></span>
           <span class="font-medium text-zinc-500 dark:text-zinc-400">{{ getBlockInfo(item.block).label }}</span>
           <span class="font-mono text-[10px] text-zinc-600 dark:text-zinc-300 truncate max-w-[220px]">{{ getBlockInfo(item.block).target }}</span>
-          <button
-            v-if="!isApplied(item.block)"
-            @click="emit('apply', getBlockIndex(item.block!.id))"
-            class="ml-auto px-2 py-0.5 bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors text-[10px]"
-          >
-            确认
-          </button>
           <span
-            v-else
             class="ml-auto text-[10px] font-medium"
             :class="isFailed(item.block) ? 'text-rose-500 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'"
           >

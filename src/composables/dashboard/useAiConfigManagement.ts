@@ -11,7 +11,7 @@ import {
 } from '@/api/ai'
 import { DEFAULT_AI_AVATAR, resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
-type SettingsSection = 'mcp' | 'bot'
+type SettingsSection = 'mcp' | 'bot' | 'appearance'
 
 interface UseAiConfigManagementOptions {
   defaultMcpTools: string[]
@@ -21,7 +21,6 @@ interface UseAiConfigManagementOptions {
   normalizeSystemAutoControl: (raw: unknown) => any
   alert?: (options: { title?: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' }) => Promise<void>
   onReloadAgents: () => Promise<void>
-  onPatchChatTargetAutoApprove?: (configId: number, enabled: boolean) => void
 }
 
 const ROLE_MEMBER = 'digital_member_member'
@@ -107,7 +106,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     normalizeSystemAutoControl,
     alert,
     onReloadAgents,
-    onPatchChatTargetAutoApprove,
   } = options
 
   const aiConfigModalOpen = ref(false)
@@ -116,30 +114,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
   const aiConfigMode = ref<'create' | 'edit'>('create')
   const aiConfigForm = ref<any>(null)
   const availableMcpTools = ref<string[]>([])
-
-  const mcpAutoApproveStorageKey = 'mcp_auto_approve_by_config'
-
-  const loadMcpAutoApproveMap = (): Record<string, boolean> => {
-    try {
-      const raw = localStorage.getItem(mcpAutoApproveStorageKey)
-      if (!raw) return {}
-      const parsed = JSON.parse(raw)
-      return parsed && typeof parsed === 'object' ? parsed : {}
-    } catch {
-      return {}
-    }
-  }
-
-  const getMcpAutoApprove = (configId?: number) => {
-    if (!configId) return false
-    return !!loadMcpAutoApproveMap()[String(configId)]
-  }
-
-  const setMcpAutoApprove = (configId: number, enabled: boolean) => {
-    const map = loadMcpAutoApproveMap()
-    map[String(configId)] = !!enabled
-    localStorage.setItem(mcpAutoApproveStorageKey, JSON.stringify(map))
-  }
 
   const roleGroupFromRole = (role?: string): 'assistant_admin' | 'digital_member' => {
     return role === 'assistant_admin' ? 'assistant_admin' : 'digital_member'
@@ -196,7 +170,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     prompt: '',
     // 新建 AI 默认勾选全部可用 MCP 工具（工具列表已加载时用全量，否则回退到基础默认集）。
     mcp_tools: availableMcpTools.value.length ? [...availableMcpTools.value] : [...defaultMcpTools],
-    mcp_auto_approve: false,
     bot_channel: 'feishu' as 'feishu' | 'qq',
     bot_configs: {
       feishu: {
@@ -331,7 +304,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       model: cfg.model ?? aiConfigForm.value.model,
       prompt: cfg.prompt || '',
       mcp_tools: parsedTools,
-      mcp_auto_approve: !!aiConfigForm.value.mcp_auto_approve,
       bot_channel: cfg.bot_channel === 'qq' ? 'qq' : 'feishu',
       // Hydrate ``bot_configs`` from the server (default fills in any
       // missing keys so the form bindings always have a value).
@@ -366,7 +338,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       model: agent.model || '',
       prompt: '',
       mcp_tools: parsedTools,
-      mcp_auto_approve: !!agent.mcpAutoApprove,
       bot_channel: agent.botChannel === 'qq' ? 'qq' : 'feishu',
       bot_configs: hydrateBotConfigs(null),
       system_auto_control: normalizeSystemAutoControl({}),
@@ -416,14 +387,9 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
 
     try {
       if (aiConfigMode.value === 'create') {
-        const created = await createAiConfig(payload)
-        if (created?.id) setMcpAutoApprove(created.id, !!aiConfigForm.value.mcp_auto_approve)
+        await createAiConfig(payload)
       } else if (aiConfigForm.value.id) {
         await updateAiConfig(aiConfigForm.value.id, payload)
-        setMcpAutoApprove(aiConfigForm.value.id, !!aiConfigForm.value.mcp_auto_approve)
-        if (typeof aiConfigForm.value.id === 'number') {
-          onPatchChatTargetAutoApprove?.(aiConfigForm.value.id, !!aiConfigForm.value.mcp_auto_approve)
-        }
       }
     } catch (err) {
       await alert?.({
@@ -520,7 +486,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigForm,
     availableMcpTools,
     configAvailableMcpTools,
-    getMcpAutoApprove,
     loadMcpTools,
     toggleAiConfigSettingsSection,
     openCreateAiConfig,

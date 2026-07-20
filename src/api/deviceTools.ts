@@ -141,8 +141,8 @@ export const listDeviceToolFailures = (name: string) =>
   )
 
 // Server-governed permission policy for runtime tools: maps a permission tag to
-// allow / confirm / deny. Shipped to devices in the tool-config push.
-export type PermissionDecision = 'allow' | 'confirm' | 'deny'
+// allow / deny. MCP 调用不再进入用户确认流程。
+export type PermissionDecision = 'allow' | 'deny'
 
 export const getPermissionPolicy = (deviceType: DeviceToolType) =>
   get<{ deviceType: DeviceToolType; policy: Record<string, PermissionDecision>; knownTags: string[] }>(

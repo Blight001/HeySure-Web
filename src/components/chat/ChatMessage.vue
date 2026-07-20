@@ -2,7 +2,7 @@
 import ChatCollapsible from './ChatCollapsible.vue'
 import InlineContent from './InlineContent.vue'
 import type { InlineContent as InlineContentType } from '@/utils/chatParser'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { parseMcpToolBubbleDetails } from '@/utils/mcpFormat'
@@ -101,6 +101,23 @@ const mcpToolSections = computed(() => {
 const copiedTarget = ref('')
 const frontPromptDetailsOpen = ref(false)
 const frontPromptDetailsZIndex = usePopupZIndex(frontPromptDetailsOpen)
+const imagePreviewOpen = ref(false)
+const imagePreviewDialog = ref<HTMLElement | null>(null)
+const imagePreviewZIndex = usePopupZIndex(imagePreviewOpen)
+let imagePreviewTrigger: HTMLElement | null = null
+
+const openImagePreview = async (event: MouseEvent) => {
+  imagePreviewTrigger = event.currentTarget as HTMLElement | null
+  imagePreviewOpen.value = true
+  await nextTick()
+  imagePreviewDialog.value?.focus()
+}
+
+const closeImagePreview = async () => {
+  imagePreviewOpen.value = false
+  await nextTick()
+  imagePreviewTrigger?.focus()
+}
 
 const userMessageCopyText = computed(() => {
   return String(props.message.display_text || props.message.content || '')
@@ -305,16 +322,16 @@ const attachedMcpToolCount = computed(() =>
           v-if="isMcpToolMessage"
           class="text-[13px] leading-snug"
         >
-          <a
+          <button
             v-if="mcpImageUrl"
-            :href="mcpImageUrl"
-            target="_blank"
-            rel="noopener noreferrer"
+            type="button"
             class="mcp-screenshot-link"
-            title="点击查看原图"
+            title="点击放大图片"
+            aria-label="放大查看截图"
+            @click="openImagePreview"
           >
             <img :src="mcpImageUrl" alt="截图" class="mcp-screenshot" loading="lazy" />
-          </a>
+          </button>
           <ChatCollapsible
             details-class="mcp-details group/mcp"
             summary-class="flex items-center gap-2 whitespace-nowrap cursor-pointer select-none leading-5 py-0.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
@@ -468,6 +485,36 @@ const attachedMcpToolCount = computed(() =>
         <pre class="front-prompt-detail-pre">{{ frontPromptDetailsText }}</pre>
       </div>
     </div>
+
+    <div
+      v-if="mcpImageUrl && imagePreviewOpen"
+      :style="{ zIndex: imagePreviewZIndex }"
+      class="fixed inset-0 modal-overlay flex items-center justify-center p-3 sm:p-6"
+      @click.self="closeImagePreview"
+    >
+      <div
+        ref="imagePreviewDialog"
+        class="image-preview-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="图片预览"
+        tabindex="-1"
+        @keydown.esc.stop.prevent="closeImagePreview"
+      >
+        <img :src="mcpImageUrl" alt="截图大图预览" class="image-preview-full" draggable="false" />
+        <button
+          type="button"
+          class="image-preview-close"
+          aria-label="关闭图片预览"
+          title="关闭"
+          @click="closeImagePreview"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -553,10 +600,13 @@ const attachedMcpToolCount = computed(() =>
 .mcp-screenshot-link {
   display: inline-block;
   margin-bottom: 6px;
+  padding: 0;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgb(228 228 231);
   background: rgb(244 244 245);
+  line-height: 0;
+  cursor: zoom-in;
 }
 
 .dark .mcp-screenshot-link {
@@ -571,7 +621,57 @@ const attachedMcpToolCount = computed(() =>
   width: auto;
   height: auto;
   object-fit: contain;
-  cursor: zoom-in;
+}
+
+.image-preview-dialog {
+  position: relative;
+  display: flex;
+  max-width: calc(100vw - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: rgb(9 9 11 / 0.96);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.45);
+  outline: none;
+  overflow: hidden;
+}
+
+.image-preview-full {
+  display: block;
+  max-width: calc(100vw - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+}
+
+.image-preview-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 999px;
+  background: rgb(9 9 11 / 0.72);
+  color: white;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.3);
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.image-preview-close:hover {
+  background: rgb(39 39 42 / 0.92);
+  transform: scale(1.04);
+}
+
+.image-preview-close:focus-visible {
+  outline: 2px solid rgb(165 180 252);
+  outline-offset: 2px;
 }
 
 .segment-time-badge {

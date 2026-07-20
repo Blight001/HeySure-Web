@@ -44,7 +44,6 @@ export interface Agent {
   enabled?: boolean
   mcpEnabled?: boolean
   mcpTools?: string
-  mcpAutoApprove?: boolean
   botChannel?: 'feishu' | 'qq'
   botEnabled?: boolean
   botStatus?: {

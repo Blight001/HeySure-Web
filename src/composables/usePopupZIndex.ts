@@ -14,6 +14,12 @@ import { ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue'
 const POPUP_Z_BASE = 1000
 let counter = POPUP_Z_BASE
 
+/**
+ * 固定置顶层级。用于需要始终压在普通弹窗之上的常驻浮窗；普通弹窗的自增层级
+ * 不会追上这个值，因此后打开的窗口也不会遮挡它。
+ */
+export const PINNED_POPUP_Z_INDEX = 2_147_483_000
+
 /** 领取下一个（更高的）弹窗层级值。 */
 export function nextPopupZIndex(): number {
   counter += 1

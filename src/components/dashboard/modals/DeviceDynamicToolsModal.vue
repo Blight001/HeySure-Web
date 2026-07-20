@@ -161,7 +161,7 @@ const toggleFailures = () => {
 
 const ratePct = (s?: DeviceToolStat) => (s ? Math.round((s.failure_rate || 0) * 100) : 0)
 
-// Permission policy editor (desktop only): per-tag allow/confirm/deny override
+// Permission policy editor (desktop only): per-tag allow/deny override
 // of the device's built-in defaults. '' means "use the device default".
 const policyOpen = ref(false)
 const policyTags = ref<string[]>([])
@@ -547,15 +547,15 @@ const onDesktopKindChange = () => {
               </div>
             </div>
 
-            <!-- permission policy (desktop only): per-tag allow/confirm/deny override -->
+            <!-- permission policy (desktop only): per-tag allow/deny override -->
             <div v-if="deviceType === 'desktop'" class="mt-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
               <button type="button" class="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300" @click="togglePolicy">
-                <span>权限策略（runtime 工具的 allow / confirm / deny）</span>
+                <span>权限策略（允许 / 拒绝）</span>
                 <span class="text-zinc-400">{{ policyOpen ? '收起' : '展开' }}</span>
               </button>
               <div v-if="policyOpen" class="border-t border-zinc-200 dark:border-zinc-700 p-2">
                 <p class="mb-2 text-[10px] text-zinc-400 leading-relaxed">
-                  覆盖设备内置默认值；「默认」表示沿用设备默认（只读多为允许、写入/输入多需确认、删除/提权拒绝）。改动保存后立即下发到在线设备。
+                  「默认」表示沿用设备默认策略，改动保存后立即下发到在线设备。
                 </p>
                 <div class="grid grid-cols-2 gap-x-3 gap-y-1">
                   <label v-for="tag in policyTags" :key="tag" class="flex items-center gap-1.5">
@@ -563,7 +563,6 @@ const onDesktopKindChange = () => {
                     <select v-model="policy[tag]" class="rounded border border-zinc-200 dark:border-zinc-700 bg-transparent px-1 py-0.5 text-[10px]">
                       <option value="">默认</option>
                       <option value="allow">允许</option>
-                      <option value="confirm">确认</option>
                       <option value="deny">拒绝</option>
                     </select>
                   </label>
@@ -671,7 +670,7 @@ const onDesktopKindChange = () => {
               <p class="mt-1 text-[10px] text-zinc-400 leading-relaxed">
                 <template v-if="draft.desktopKind === 'python'">入参在 <code>args</code> 字典里；把结果赋给 <code>result</code> 返回。需要设备已装 Python（或设 <code>HEYSURE_PYTHON</code>）。</template>
                 <template v-else>命令/脚本支持 <code>${'{'}args.x{'}'}</code> 模板。</template>
-                高风险操作请在下方声明权限标签，设备会按策略弹窗确认或拒绝。
+                高风险操作请在下方声明权限标签，设备会按策略允许或拒绝。
               </p>
               <label class="mt-2 block">
                 <span class="text-[11px] text-zinc-500">权限标签（逗号分隔，可留空）</span>

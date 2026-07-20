@@ -71,11 +71,10 @@ interface UseDashboardDataOptions {
   alert: AlertFn
   confirm: ConfirmFn
   getCurrentUserId: () => number
-  getMcpAutoApprove: (configId?: number) => boolean
 }
 
 export const useDashboardData = (options: UseDashboardDataOptions) => {
-  const { unassignedProjectId, alert, confirm, getCurrentUserId, getMcpAutoApprove } = options
+  const { unassignedProjectId, alert, confirm, getCurrentUserId } = options
 
   const agents = ref<Agent[]>([])
   const connectedDevices = ref<ConnectedDevice[]>([])
@@ -255,7 +254,6 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
         enabled: !!row.enabled,
         mcpEnabled: !!row.mcp_enabled,
         mcpTools: row.mcp_tools || '[]',
-        mcpAutoApprove: getMcpAutoApprove(configId),
         botChannel: row.bot_channel === 'qq' ? 'qq' : 'feishu',
         botEnabled: !!row.bot_enabled,
         botStatus: row.bot_status || undefined,

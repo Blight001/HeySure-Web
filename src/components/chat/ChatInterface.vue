@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { useMessage } from '@/composables/useMessage'
 import ChatHeader from './ChatHeader.vue'
 import ChatConversationView from './ChatConversationView.vue'
@@ -14,6 +14,7 @@ import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/co
 import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { formatDurationMs } from '@/utils/datetime'
 import { copyTextToClipboard } from '@/utils/clipboard'
+import { PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import heySureLogo from '@/assets/logo/HeySure.png'
 
 /** 新建空白对话的默认标题；首条消息发出后会自动改成摘要标题。 */
@@ -60,19 +61,15 @@ interface PersistedMessageActionState {
 }
 
 interface Props {
-  adminModel?: string
-  /** AI 配置的 token 上限（0 表示无上限）；空白对话页展示用。 */
-  tokenLimit?: number
-  /** AI 已使用 token；空白对话页展示用。 */
-  tokensUsed?: number
   aiConfigId?: number
   aiKind?: 'assistant' | 'core'
   /** Logged-in user id, used to join the `user_{id}` Socket.IO room for live runs. */
   currentUserId?: number
   initialSessionId?: string
-  mcpAutoApprove?: boolean
   mcpIcon?: string
   mcpDynamicRule?: string
+  /** 页面内置顶浮窗中启用：将宽下拉层传送到 body，避免被浮窗圆角裁剪。 */
+  floatingLayer?: boolean
   stripMarkdownSymbols?: boolean
   selectedFiles: string[]
   allFiles: string[]
@@ -173,6 +170,10 @@ const configuredFrontPrompt = ref('')
 const effectiveSystemPromptPreview = ref('')
 const frontPromptPreviewError = ref('')
 const frontPromptCopied = ref(false)
+const frontPromptButtonRef = ref<HTMLElement | null>(null)
+const frontPromptPopupOpen = ref(false)
+const frontPromptPopupStyle = ref<CSSProperties>({})
+let frontPromptPopupCloseTimer: number | null = null
 const frontPromptAvailableTools = ref<any[]>([])
 const frontPromptToolGroups = ref<McpCatalogToolGroup[]>([])
 const frontPromptToolScope = ref('')
@@ -216,6 +217,60 @@ const copyFrontPrompt = async (event?: Event) => {
     frontPromptCopied.value = false
   }, 1200)
 }
+
+const clearFrontPromptPopupClose = () => {
+  if (frontPromptPopupCloseTimer === null) return
+  window.clearTimeout(frontPromptPopupCloseTimer)
+  frontPromptPopupCloseTimer = null
+}
+
+const updateFrontPromptPopupPosition = () => {
+  const button = frontPromptButtonRef.value
+  if (!button || !props.floatingLayer) return
+  const view = button.ownerDocument.defaultView || window
+  const rect = button.getBoundingClientRect()
+  const margin = 16
+  const gap = 8
+  const width = Math.min(672, view.innerWidth - margin * 2)
+  const belowSpace = view.innerHeight - rect.bottom - gap - margin
+  const aboveSpace = rect.top - gap - margin
+  const placeAbove = belowSpace < 220 && aboveSpace > belowSpace
+  const availableHeight = Math.max(120, placeAbove ? aboveSpace : belowSpace)
+  const style: CSSProperties = {
+    left: `${Math.min(Math.max(rect.right - width, margin), view.innerWidth - width - margin)}px`,
+    width: `${width}px`,
+    maxHeight: `${Math.min(448, availableHeight)}px`,
+    zIndex: PINNED_POPUP_Z_INDEX + 1,
+  }
+  if (placeAbove) style.bottom = `${view.innerHeight - rect.top + gap}px`
+  else style.top = `${rect.bottom + gap}px`
+  frontPromptPopupStyle.value = style
+}
+
+const openFrontPromptPopup = async () => {
+  if (!props.floatingLayer) return
+  clearFrontPromptPopupClose()
+  updateFrontPromptPopupPosition()
+  frontPromptPopupOpen.value = true
+  await nextTick()
+  updateFrontPromptPopupPosition()
+}
+
+const scheduleFrontPromptPopupClose = () => {
+  if (!props.floatingLayer) return
+  clearFrontPromptPopupClose()
+  frontPromptPopupCloseTimer = window.setTimeout(() => {
+    frontPromptPopupOpen.value = false
+    frontPromptPopupCloseTimer = null
+  }, 120)
+}
+
+watch(() => props.floatingLayer, enabled => {
+  if (!enabled) {
+    clearFrontPromptPopupClose()
+    frontPromptPopupOpen.value = false
+  }
+})
 // Live elapsed of the CURRENT segment only, updated by timeTick every 200 ms.
 // The segment restarts on every phase change and on every MCP tool switch (see
 // resetSegmentTimer); per-phase totals still accumulate into mcpElapsedMs /
@@ -469,7 +524,7 @@ const buildAutoSessionTitle = (content: string) => {
   return text.length > 28 ? `${text.slice(0, 28)}…` : text
 }
 
-/** 空白对话欢迎页：无消息且未在生成时展示 logo / 最近对话 / AI 配置。 */
+/** 空白对话欢迎页：无消息且未在生成时展示 logo 与最近对话。 */
 const isBlankConversation = computed(() => {
   if (chatMessages.value.length > 0) return false
   if (isTyping.value || isRunActive.value) return false
@@ -483,18 +538,6 @@ const recentNormalSessions = computed(() =>
     .filter(item => !isTaskSession(item))
     .slice(0, 8),
 )
-
-const displayModelLabel = computed(() => String(props.adminModel || '').trim() || '未设置')
-const displayTokenLimitLabel = computed(() => {
-  const limit = Number(props.tokenLimit)
-  if (!Number.isFinite(limit) || limit <= 0) return '无上限'
-  return String(Math.floor(limit))
-})
-const displayTokensUsedLabel = computed(() => {
-  const used = Number(props.tokensUsed)
-  if (!Number.isFinite(used) || used < 0) return '0'
-  return String(Math.floor(used))
-})
 
 const chatCtx = computed<chatApi.AiContext>(() => ({
   aiKind: aiKindValue.value,
@@ -2279,6 +2322,7 @@ watch(chatScrollRef, (newEl, oldEl) => {
 })
 
 onMounted(async () => {
+  window.addEventListener('resize', updateFrontPromptPopupPosition)
   if (props.currentUserId) runStream.connect(props.currentUserId)
   await initializeSessions()
   emit('update:currentSessionId', currentSessionId.value || '')
@@ -2295,6 +2339,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearFrontPromptPopupClose()
+  window.removeEventListener('resize', updateFrontPromptPopupPosition)
   stopRunPolling()
   stopSessionSyncPolling()
   stopTimeTicker()
@@ -2341,15 +2387,22 @@ onBeforeUnmount(() => {
           class="text-[11px] tabular-nums"
           :class="isRunActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400 dark:text-zinc-500'"
         >{{ runTimingText }}</span>
-        <div class="relative group/front-prompt">
+        <div
+          class="relative"
+          :class="{ 'group/front-prompt': !props.floatingLayer }"
+          @mouseenter="openFrontPromptPopup"
+          @mouseleave="scheduleFrontPromptPopupClose"
+        >
           <button
+            ref="frontPromptButtonRef"
             class="shrink-0 text-xs px-2 py-1 rounded border border-violet-200 text-violet-600 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/20"
             type="button"
           >
             前置 Prompt
           </button>
           <div
-            class="absolute right-0 top-full z-[80] hidden w-[min(42rem,calc(100vw-2rem))] pt-2 group-hover/front-prompt:block"
+            v-if="!props.floatingLayer"
+            class="absolute right-0 top-full z-[120] hidden w-[min(42rem,calc(100vw-2rem))] pt-2 group-hover/front-prompt:block"
           >
             <div class="max-h-[28rem] overflow-hidden rounded-lg acrylic-modal shadow-xl">
               <div class="flex items-center justify-between gap-3 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
@@ -2366,6 +2419,27 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
+        <Teleport to="body">
+          <div
+            v-if="props.floatingLayer && frontPromptPopupOpen"
+            :style="frontPromptPopupStyle"
+            class="fixed pointer-events-auto flex flex-col overflow-hidden rounded-lg acrylic-modal shadow-xl"
+            @mouseenter="clearFrontPromptPopupClose"
+            @mouseleave="scheduleFrontPromptPopupClose"
+          >
+            <div class="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
+              <div class="text-xs font-semibold text-zinc-700 dark:text-zinc-200">前置 Prompt</div>
+              <button
+                class="shrink-0 rounded border border-zinc-200 px-2 py-1 text-[11px] text-zinc-600 hover:border-violet-300 hover:text-violet-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-violet-500 dark:hover:text-violet-300"
+                type="button"
+                @click.stop="copyFrontPrompt"
+              >
+                {{ frontPromptCopied ? '已复制' : '复制' }}
+              </button>
+            </div>
+            <pre class="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">{{ frontPromptPreviewText }}</pre>
+          </div>
+        </Teleport>
         <button
           class="shrink-0 text-xs px-2 py-1 rounded border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-300"
           @click="emit('open-settings')"
@@ -2378,7 +2452,7 @@ onBeforeUnmount(() => {
     <!-- 聊天内容区：消息 + 输入（任务流程已移到顶部标题边上，水平显示） -->
     <div class="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
       <div ref="chatScrollRef" class="flex-1 overflow-y-auto">
-        <!-- 空白对话欢迎页：logo + 最近对话 + AI 基础配置 -->
+        <!-- 空白对话欢迎页：logo + 最近对话 -->
         <div
           v-if="isBlankConversation"
           class="flex min-h-[300px] h-full flex-col items-center justify-center gap-5 px-4 py-8"
@@ -2414,24 +2488,6 @@ onBeforeUnmount(() => {
           </div>
           <div v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">
             暂无历史对话
-          </div>
-
-          <div class="w-full max-w-md rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-3 py-3 dark:border-zinc-700/60 dark:bg-zinc-900/40">
-            <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-2">
-              当前 AI 配置
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-              <div class="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-2 dark:bg-zinc-800/50">
-                <span class="shrink-0 text-zinc-400 dark:text-zinc-500">AI 模型</span>
-                <span class="min-w-0 truncate font-medium text-right" :title="displayModelLabel">{{ displayModelLabel }}</span>
-              </div>
-              <div class="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-2 dark:bg-zinc-800/50">
-                <span class="shrink-0 text-zinc-400 dark:text-zinc-500">Token 上限</span>
-                <span class="min-w-0 truncate font-medium text-right tabular-nums" :title="`${displayTokensUsedLabel} / ${displayTokenLimitLabel}`">
-                  {{ displayTokensUsedLabel }} / {{ displayTokenLimitLabel }}
-                </span>
-              </div>
-            </div>
           </div>
         </div>
 

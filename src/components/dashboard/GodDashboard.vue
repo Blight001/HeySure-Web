@@ -8,7 +8,7 @@ import { useDashboardData } from '@/composables/dashboard/useDashboardData'
 import { useDashboardUi } from '@/composables/dashboard/useDashboardUi'
 import { useDashboardSystemSettings } from '@/composables/dashboard/useDashboardSystemSettings'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import { PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import {
   DASHBOARD_REFRESH_FAST_MS,
   DASHBOARD_REFRESH_HIDDEN_MS,
@@ -62,12 +62,20 @@ const activateArenaTab = () => {
 }
 
 const selectedFiles = ref<string[]>([])
+const focusedAgentConfigId = ref<number | null>(null)
+const agentFocusSignal = ref(0)
+const focusedDeviceId = ref('')
+const deviceFocusSignal = ref(0)
+const knowledgeFocusSignal = ref(0)
+const worldArenaPanelRef = ref<{ getBoundingRect: () => DOMRect | null } | null>(null)
 const chatModalOpen = ref(false)
 const chatTarget = ref<Agent | null>(null)
-const agentChatZIndex = usePopupZIndex(() => chatModalOpen.value && !!chatTarget.value)
+// 总督对话是常驻操作入口：始终高于页面内其它弹窗，不参与“后开者居上”。
+const agentChatZIndex = PINNED_POPUP_Z_INDEX
 const chatInitialSessionId = ref('')
 const chatCurrentSessionId = ref('')
 const chatTaskPlanRefreshSignal = ref(0)
+let defaultGovernorChatHandled = false
 const adminModalOpen = ref(false)
 const deviceDocOpen = ref(false)
 const isAdminUser = computed(() => ['owner', 'admin'].includes(props.currentUser?.role || ''))
@@ -116,7 +124,6 @@ const {
   mcpRoleMeta,
 })
 
-let resolveMcpAutoApprove = (_configId?: number) => false
 const {
   agents,
   connectedDevices,
@@ -134,7 +141,6 @@ const {
   alert,
   confirm,
   getCurrentUserId: () => Number(props.currentUser?.id),
-  getMcpAutoApprove: configId => resolveMcpAutoApprove(configId),
 })
 
 const {
@@ -177,7 +183,6 @@ const {
   aiConfigForm,
   availableMcpTools,
   configAvailableMcpTools,
-  getMcpAutoApprove,
   loadMcpTools,
   toggleAiConfigSettingsSection,
   openCreateAiConfig,
@@ -193,14 +198,7 @@ const {
   normalizeSystemAutoControl,
   alert,
   onReloadAgents: loadAIAgents,
-  onPatchChatTargetAutoApprove: (configId, enabled) => {
-    const currentTarget = chatTarget.value
-    if (currentTarget && currentTarget.aiConfigId === configId) {
-      chatTarget.value = { ...currentTarget, mcpAutoApprove: enabled }
-    }
-  },
 })
-resolveMcpAutoApprove = getMcpAutoApprove
 
 const {
   taskListModalOpen,
@@ -298,20 +296,53 @@ const resolveActiveRunSessionId = (agent: Agent) => {
   return ''
 }
 
-const openAgentChat = (agent: Agent) => {
+const openAgentChat = (agent: Agent, options: { floating?: boolean } = {}) => {
   if (!agent.aiConfigId) return
+  defaultGovernorChatHandled = true
   chatTarget.value = agent
   selectedFiles.value = []
   chatInitialSessionId.value = resolveActiveRunSessionId(agent)
   chatCurrentSessionId.value = ''
   chatTaskPlanRefreshSignal.value = 0
+  if (options.floating !== undefined) {
+    chatFloating.value = options.floating && !isMobile.value
+  }
   chatModalOpen.value = true
+  if (chatFloating.value) void positionChatFloatAtBottomRight()
 }
 
-// 游戏世界（中间 iframe）请求打开某成员对话：复用现有聊天弹窗
-const onWorldOpenChat = (aiConfigId: number) => {
-  const agent = agents.value.find(a => Number(a.aiConfigId) === aiConfigId)
-  if (agent) openAgentChat(agent)
+const openDefaultGovernorChat = () => {
+  if (defaultGovernorChatHandled || chatModalOpen.value) return
+  const governor = agents.value.find(agent =>
+    agent.aiRole === 'assistant_admin' || String(agent.name || '').trim() === '总督',
+  )
+  if (governor) openAgentChat(governor, { floating: true })
+}
+
+// 社会显示点击人物：切到数字生命栏目、展开侧栏并定位突出对应成员卡片。
+const onWorldFocusAgent = (aiConfigId: number) => {
+  if (!agents.value.some(agent => Number(agent.aiConfigId) === aiConfigId)) return
+  focusedAgentConfigId.value = aiConfigId
+  agentFocusSignal.value += 1
+  leftCollapsed.value = false
+  if (isMobile.value) mobileTab.value = 'console'
+}
+
+const revealConsolePanel = () => {
+  leftCollapsed.value = false
+  if (isMobile.value) mobileTab.value = 'console'
+}
+
+const onWorldOpenKnowledge = () => {
+  knowledgeFocusSignal.value += 1
+  revealConsolePanel()
+}
+
+const onWorldFocusDevice = (deviceId: string) => {
+  if (!deviceId) return
+  focusedDeviceId.value = deviceId
+  deviceFocusSignal.value += 1
+  revealConsolePanel()
 }
 
 const closeAgentChat = () => {
@@ -323,6 +354,7 @@ const closeAgentChat = () => {
   // 否则下次打开会以"无定位的悬浮态"渲染
   chatFloating.value = false
   endChatDrag()
+  endChatResize()
   closeChatPip()
 }
 
@@ -336,20 +368,37 @@ const chatPanelRef = ref<HTMLElement | null>(null)
 const chatFloatConstraints = { minWidth: '320px', minHeight: '380px', maxWidth: '96vw', maxHeight: '92vh' }
 const CHAT_FLOAT_MARGIN = 16
 
-const toggleChatFloating = async () => {
-  chatFloating.value = !chatFloating.value
+const positionChatFloatAtBottomRight = async () => {
   await nextTick()
   const el = chatPanelRef.value
-  if (!el) return
+  if (!el || !chatFloating.value) return
+  const socialRect = worldArenaPanelRef.value?.getBoundingRect()
+  const bounds = socialRect && socialRect.width > 0 && socialRect.height > 0
+    ? socialRect
+    : new DOMRect(0, 0, window.innerWidth, window.innerHeight)
+  const w = Math.min(420, Math.max(320, bounds.width - CHAT_FLOAT_MARGIN * 2))
+  const h = Math.min(620, Math.max(380, bounds.height - CHAT_FLOAT_MARGIN * 2))
+  el.style.width = `${w}px`
+  el.style.height = `${h}px`
+  el.style.left = `${Math.max(CHAT_FLOAT_MARGIN, bounds.right - w - CHAT_FLOAT_MARGIN)}px`
+  el.style.top = `${Math.max(CHAT_FLOAT_MARGIN, bounds.bottom - h - CHAT_FLOAT_MARGIN)}px`
+}
+
+// 异步加载的社会显示若晚于默认总督对话挂载，待其真实边界可用后再校准一次。
+watch(worldArenaPanelRef, panel => {
+  if (panel && chatFloating.value) void positionChatFloatAtBottomRight()
+}, { flush: 'post' })
+
+const toggleChatFloating = async () => {
+  chatFloating.value = !chatFloating.value
   if (chatFloating.value) {
-    const w = Math.min(420, window.innerWidth - CHAT_FLOAT_MARGIN * 2)
-    const h = Math.min(620, window.innerHeight - CHAT_FLOAT_MARGIN * 2)
-    el.style.width = `${w}px`
-    el.style.height = `${h}px`
-    el.style.left = `${window.innerWidth - w - CHAT_FLOAT_MARGIN}px`
-    el.style.top = `${window.innerHeight - h - CHAT_FLOAT_MARGIN}px`
+    await positionChatFloatAtBottomRight()
   } else {
+    await nextTick()
+    const el = chatPanelRef.value
+    if (!el) return
     endChatDrag()
+    endChatResize()
     el.style.width = ''
     el.style.height = ''
     el.style.left = ''
@@ -365,7 +414,21 @@ const clampChatFloatIntoView = () => {
   el.style.top = `${Math.min(Math.max(rect.top, CHAT_FLOAT_MARGIN), Math.max(CHAT_FLOAT_MARGIN, window.innerHeight - rect.height - CHAT_FLOAT_MARGIN))}px`
 }
 
+let chatResizeObserver: ResizeObserver | null = null
+watch(
+  chatPanelRef,
+  el => {
+    chatResizeObserver?.disconnect()
+    chatResizeObserver = null
+    if (!el || typeof ResizeObserver === 'undefined') return
+    chatResizeObserver = new ResizeObserver(clampChatFloatIntoView)
+    chatResizeObserver.observe(el)
+  },
+  { flush: 'post' },
+)
+
 let chatDragOffset: { dx: number; dy: number } | null = null
+let chatDragCapture: { element: HTMLElement; pointerId: number } | null = null
 const onChatDragMove = (e: PointerEvent) => {
   const el = chatPanelRef.value
   if (!el || !chatDragOffset) return
@@ -375,20 +438,131 @@ const onChatDragMove = (e: PointerEvent) => {
 }
 const endChatDrag = () => {
   chatDragOffset = null
+  const capture = chatDragCapture
+  chatDragCapture = null
+  if (capture?.element.hasPointerCapture(capture.pointerId)) {
+    capture.element.releasePointerCapture(capture.pointerId)
+  }
   window.removeEventListener('pointermove', onChatDragMove)
   window.removeEventListener('pointerup', endChatDrag)
+  window.removeEventListener('pointercancel', endChatDrag)
 }
 const onChatHeaderPointerDown = (e: PointerEvent) => {
-  if (!chatFloating.value) return
+  if (!chatFloating.value || e.button !== 0) return
   // 头部里的按钮/任务进度等可交互元素不触发拖动
   if ((e.target as HTMLElement).closest('button, a, input, textarea, select, [data-chat-drag-ignore]')) return
   const el = chatPanelRef.value
   if (!el) return
   const rect = el.getBoundingClientRect()
   chatDragOffset = { dx: e.clientX - rect.left, dy: e.clientY - rect.top }
+  const captureElement = e.currentTarget as HTMLElement
+  captureElement.setPointerCapture(e.pointerId)
+  chatDragCapture = { element: captureElement, pointerId: e.pointerId }
   window.addEventListener('pointermove', onChatDragMove)
   window.addEventListener('pointerup', endChatDrag)
+  window.addEventListener('pointercancel', endChatDrag)
   e.preventDefault()
+}
+
+type ChatResizeEdge = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw'
+type ChatResizeState = {
+  edge: ChatResizeEdge
+  startX: number
+  startY: number
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+let chatResizeState: ChatResizeState | null = null
+let chatResizeCapture: { element: HTMLElement; pointerId: number } | null = null
+let previousResizeCursor = ''
+let previousResizeUserSelect = ''
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+const onChatResizeMove = (e: PointerEvent) => {
+  const el = chatPanelRef.value
+  const state = chatResizeState
+  if (!el || !state) return
+
+  const dx = e.clientX - state.startX
+  const dy = e.clientY - state.startY
+  const startRight = state.left + state.width
+  const startBottom = state.top + state.height
+  const minWidth = Math.min(320, window.innerWidth - CHAT_FLOAT_MARGIN * 2)
+  const minHeight = Math.min(380, window.innerHeight - CHAT_FLOAT_MARGIN * 2)
+  const maxWidth = Math.max(minWidth, Math.min(window.innerWidth * 0.96, window.innerWidth - CHAT_FLOAT_MARGIN * 2))
+  const maxHeight = Math.max(minHeight, Math.min(window.innerHeight * 0.92, window.innerHeight - CHAT_FLOAT_MARGIN * 2))
+
+  let left = state.left
+  let right = startRight
+  let top = state.top
+  let bottom = startBottom
+
+  if (state.edge.includes('e')) {
+    right = clampNumber(startRight + dx, state.left + minWidth, Math.min(window.innerWidth - CHAT_FLOAT_MARGIN, state.left + maxWidth))
+  }
+  if (state.edge.includes('w')) {
+    left = clampNumber(state.left + dx, Math.max(CHAT_FLOAT_MARGIN, startRight - maxWidth), startRight - minWidth)
+  }
+  if (state.edge.includes('s')) {
+    bottom = clampNumber(startBottom + dy, state.top + minHeight, Math.min(window.innerHeight - CHAT_FLOAT_MARGIN, state.top + maxHeight))
+  }
+  if (state.edge.includes('n')) {
+    top = clampNumber(state.top + dy, Math.max(CHAT_FLOAT_MARGIN, startBottom - maxHeight), startBottom - minHeight)
+  }
+
+  el.style.left = `${left}px`
+  el.style.top = `${top}px`
+  el.style.width = `${right - left}px`
+  el.style.height = `${bottom - top}px`
+  e.preventDefault()
+}
+
+function endChatResize() {
+  if (!chatResizeState) return
+  chatResizeState = null
+  const capture = chatResizeCapture
+  chatResizeCapture = null
+  if (capture?.element.hasPointerCapture(capture.pointerId)) {
+    capture.element.releasePointerCapture(capture.pointerId)
+  }
+  window.removeEventListener('pointermove', onChatResizeMove)
+  window.removeEventListener('pointerup', endChatResize)
+  window.removeEventListener('pointercancel', endChatResize)
+  document.documentElement.style.cursor = previousResizeCursor
+  document.body.style.userSelect = previousResizeUserSelect
+}
+
+const onChatResizePointerDown = (edge: ChatResizeEdge, e: PointerEvent) => {
+  if (!chatFloating.value || e.button !== 0) return
+  const el = chatPanelRef.value
+  if (!el) return
+  endChatDrag()
+  const rect = el.getBoundingClientRect()
+  chatResizeState = {
+    edge,
+    startX: e.clientX,
+    startY: e.clientY,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  }
+  const captureElement = e.currentTarget as HTMLElement
+  captureElement.setPointerCapture(e.pointerId)
+  chatResizeCapture = { element: captureElement, pointerId: e.pointerId }
+  previousResizeCursor = document.documentElement.style.cursor
+  previousResizeUserSelect = document.body.style.userSelect
+  document.documentElement.style.cursor = `${edge}-resize`
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', onChatResizeMove, { passive: false })
+  window.addEventListener('pointerup', endChatResize)
+  window.addEventListener('pointercancel', endChatResize)
+  e.preventDefault()
+  e.stopPropagation()
 }
 
 // ── 聊天桌面置顶小窗（Document Picture-in-Picture，Chrome/Edge 116+）────
@@ -413,6 +587,7 @@ const openChatPip = async () => {
   if (chatFloating.value) {
     chatFloating.value = false
     endChatDrag()
+    endChatResize()
     const panel = chatPanelRef.value
     if (panel) {
       panel.style.width = ''
@@ -558,6 +733,7 @@ watch(
   agents,
   () => {
     syncOpenAgentReferences()
+    openDefaultGovernorChat()
   },
   { flush: 'post' }
 )
@@ -572,6 +748,7 @@ onMounted(async () => {
     // 即使初始化部分失败，也通知外层撤下加载遮罩，避免界面卡在加载态
     emit('ready')
   }
+  openDefaultGovernorChat()
   startDashboardRefreshLoop()
   document.addEventListener('visibilitychange', handleDashboardVisibilityChange)
   window.addEventListener('resize', clampChatFloatIntoView)
@@ -581,7 +758,10 @@ onUnmounted(() => {
   stopDashboardRefreshLoop()
   document.removeEventListener('visibilitychange', handleDashboardVisibilityChange)
   window.removeEventListener('resize', clampChatFloatIntoView)
+  chatResizeObserver?.disconnect()
+  chatResizeObserver = null
   endChatDrag()
+  endChatResize()
   closeChatPip()
 })
 </script>
@@ -680,16 +860,16 @@ onUnmounted(() => {
       :class="leftCollapsed ? 'lg:gap-4' : 'lg:gap-6'"
     >
 
-      <!-- 左侧：数字生命、知识库与作坊（移动端为「控制台」Tab） -->
+      <!-- 右侧：数字生命、知识库与作坊（移动端仍为「控制台」Tab） -->
       <section
-        class="flex flex-col gap-4 sm:gap-6 transition-all duration-300 relative w-full min-h-0 flex-1 lg:flex-none lg:h-full"
+        class="flex flex-col gap-4 sm:gap-6 transition-all duration-300 relative w-full min-h-0 flex-1 lg:order-2 lg:flex-none lg:h-full"
         :class="[
           leftCollapsed ? 'lg:w-10 lg:min-w-[40px]' : 'lg:w-[20%] lg:min-w-[280px]',
           mobileTab !== 'console' ? 'max-lg:hidden' : '',
         ]"
       >
-        <button class="hidden lg:block absolute -right-3 top-4 w-6 h-6 rounded-full acrylic-chip backdrop-blur-sm text-zinc-500 text-xs shadow hover:text-indigo-600 hover:border-indigo-200 dark:text-zinc-300 dark:hover:text-indigo-300 z-10 transition-transform hover:scale-110" @click="leftCollapsed = !leftCollapsed">
-          {{ leftCollapsed ? '⟩' : '⟨' }}
+        <button class="hidden lg:block absolute -left-3 top-4 w-6 h-6 rounded-full acrylic-chip backdrop-blur-sm text-zinc-500 text-xs shadow hover:text-indigo-600 hover:border-indigo-200 dark:text-zinc-300 dark:hover:text-indigo-300 z-10 transition-transform hover:scale-110" @click="leftCollapsed = !leftCollapsed">
+          {{ leftCollapsed ? '⟨' : '⟩' }}
         </button>
         <div v-if="leftCollapsed" class="hidden lg:flex flex-1 items-center justify-center text-zinc-400 text-xs dark:text-zinc-500">
           数字生命
@@ -705,6 +885,11 @@ onUnmounted(() => {
             :knowledge-filter-open="knowledgeFilterOpen"
             :knowledge-filter="knowledgeFilter"
             :brain-view-mode="brainViewMode"
+            :focused-ai-config-id="focusedAgentConfigId"
+            :focus-signal="agentFocusSignal"
+            :knowledge-focus-signal="knowledgeFocusSignal"
+            :focused-device-id="focusedDeviceId"
+            :device-focus-signal="deviceFocusSignal"
             :mcp-role-meta="mcpRoleMeta"
             :role-mcp-permissions="roleMcpPermissions"
             @update:brain-view-mode="saveBrainViewMode"
@@ -724,13 +909,16 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <!-- 中间：社会显示（游戏世界实时画面）。移动端懒挂载：首次切到该 Tab 才加载 iframe -->
+      <!-- 左侧主体：社会显示（游戏世界实时画面）。移动端懒挂载：首次切到该 Tab 才加载 iframe -->
       <WorldArenaPanel
+        ref="worldArenaPanelRef"
         v-if="!isMobile || arenaActivated"
         v-show="!isMobile || mobileTab === 'arena'"
-        class="w-full min-h-0 flex-1 lg:h-full lg:min-h-0 lg:min-w-0"
+        class="w-full min-h-0 flex-1 lg:order-1 lg:h-full lg:min-h-0 lg:min-w-0"
         :chat-ai-config-id="chatModalOpen ? chatTarget?.aiConfigId : null"
-        @open-chat="onWorldOpenChat"
+        @focus-agent="onWorldFocusAgent"
+        @open-knowledge="onWorldOpenKnowledge"
+        @focus-device="onWorldFocusDevice"
       />
 
     </main>
@@ -812,15 +1000,26 @@ onUnmounted(() => {
           <Teleport :to="chatPipContainer ?? 'body'" :disabled="!chatPipActive">
           <div
             ref="chatPanelRef"
-            class="acrylic-modal shadow-xl flex flex-col overflow-hidden"
+            class="acrylic-modal shadow-xl flex flex-col"
             :class="chatPipActive
-              ? 'h-full w-full rounded-none !border-0'
+              ? 'h-full w-full overflow-hidden rounded-none !border-0'
               : chatFloating
-                ? 'pointer-events-auto fixed rounded-2xl resize'
-                : 'rounded-none sm:rounded-2xl !border-0 sm:!border w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0'"
+                ? 'pointer-events-auto fixed overflow-hidden rounded-2xl'
+                : 'overflow-hidden rounded-none sm:rounded-2xl !border-0 sm:!border w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0'"
             :style="chatFloating ? chatFloatConstraints : undefined"
             @click.stop
           >
+            <!-- 八方向缩放热区：四条边与四个角均可拖拽，角部热区覆盖边部交叉区域。 -->
+            <template v-if="chatFloating">
+              <span class="absolute inset-x-3 top-0 z-[100] h-2 cursor-n-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('n', $event)" />
+              <span class="absolute inset-y-3 right-0 z-[100] w-2 cursor-e-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('e', $event)" />
+              <span class="absolute inset-x-3 bottom-0 z-[100] h-2 cursor-s-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('s', $event)" />
+              <span class="absolute inset-y-3 left-0 z-[100] w-2 cursor-w-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('w', $event)" />
+              <span class="absolute right-0 top-0 z-[101] h-3 w-3 cursor-ne-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('ne', $event)" />
+              <span class="absolute bottom-0 right-0 z-[101] h-3 w-3 cursor-se-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('se', $event)" />
+              <span class="absolute bottom-0 left-0 z-[101] h-3 w-3 cursor-sw-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('sw', $event)" />
+              <span class="absolute left-0 top-0 z-[101] h-3 w-3 cursor-nw-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('nw', $event)" />
+            </template>
             <div
               class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200/60 bg-white/40 px-2 py-2 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:px-3 sm:py-2.5"
               :class="chatFloating ? 'cursor-move select-none' : ''"
@@ -889,15 +1088,12 @@ onUnmounted(() => {
             <div class="flex-1 min-h-0 p-2">
               <ChatInterface
                 :key="`unified-chat-${chatTarget.aiConfigId}-${chatInitialSessionId || 'blank'}`"
-                :adminModel="chatTarget.model || ''"
-                :tokenLimit="chatTarget.tokenLimit"
-                :tokensUsed="chatTarget.tokensUsed"
                 :aiConfigId="chatTarget.aiConfigId"
                 :aiKind="chatTargetAiKind"
                 :currentUserId="Number(currentUser?.id) || undefined"
                 :initialSessionId="chatInitialSessionId || undefined"
-                :mcpAutoApprove="!!chatTarget.mcpAutoApprove"
                 :mcpDynamicRule="mcpDynamicRule"
+                :floating-layer="chatFloating && !chatPipActive"
                 :selectedFiles="selectedFiles"
                 :allFiles="allFiles"
                 :selectable-file-root="aiWorkspaceDirname(chatTarget)"

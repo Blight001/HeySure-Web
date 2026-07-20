@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
+import { defineAsyncComponent, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import BrainCorePanel from './BrainCorePanel.vue'
 
@@ -48,11 +48,16 @@ interface Props {
   knowledgeFilterOpen: boolean
   knowledgeFilter: 'all' | 'personas' | 'skills' | 'tools' | 'inheritance' | 'system' | 'business'
   brainViewMode: 'sections' | 'all'
+  focusedAiConfigId?: number | null
+  focusSignal?: number
+  knowledgeFocusSignal?: number
+  focusedDeviceId?: string
+  deviceFocusSignal?: number
   mcpRoleMeta: McpRoleMeta
   roleMcpPermissions: Record<string, string[]>
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'update:brain-view-mode', value: Props['brainViewMode']): void
   (e: 'show-tasks', agent: Agent): void
@@ -70,6 +75,18 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
+
+watch(() => props.focusSignal, () => {
+  if (props.focusedAiConfigId) activeTab.value = 'brain'
+})
+
+watch(() => props.knowledgeFocusSignal, () => {
+  activeTab.value = 'knowledge'
+})
+
+watch(() => props.deviceFocusSignal, () => {
+  if (props.focusedDeviceId) activeTab.value = 'workshop'
+})
 </script>
 
 <template>
@@ -116,6 +133,8 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           :admin-agents="adminAgents"
           :member-agents="memberAgents"
           :view-mode="brainViewMode"
+          :focused-ai-config-id="focusedAiConfigId"
+          :focus-signal="focusSignal"
           @update:view-mode="emit('update:brain-view-mode', $event)"
           @show-tasks="emit('show-tasks', $event)"
           @show-task-detail="emit('show-task-detail', $event)"
@@ -144,6 +163,8 @@ const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
           :agents="activeAgents"
           :mcp-role-meta="mcpRoleMeta"
           :role-mcp-permissions="roleMcpPermissions"
+          :focused-device-id="focusedDeviceId"
+          :focus-signal="deviceFocusSignal"
           @toggle-role-tool="emit('toggle-role-tool', $event)"
           @save-role-mcp-permissions="emit('save-role-mcp-permissions')"
         />

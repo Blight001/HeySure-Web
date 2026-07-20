@@ -2,7 +2,7 @@
 /**
  * 社会显示：直接内嵌游戏世界（/game/ 同源 iframe），实时显示数字社会。
  * 原"项目安排 + 运行中 AI 卡片"功能已按需求移除（2026-06-11）。
- * postMessage 桥：world:open-chat → 父页面打开对应成员聊天弹窗。
+ * postMessage 桥：把人物、图书馆与设备建筑点击转成控制台栏目定位。
  */
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
@@ -12,12 +12,17 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'open-chat', aiConfigId: number): void
+  (e: 'focus-agent', aiConfigId: number): void
+  (e: 'open-knowledge'): void
+  (e: 'focus-device', deviceId: string): void
 }>()
 
 const GAME_URL = '/game/'
 const gameFrame = ref<HTMLIFrameElement | null>(null)
 const rootEl = ref<HTMLElement | null>(null)
+
+const getBoundingRect = () => rootEl.value?.getBoundingClientRect() ?? null
+defineExpose({ getBoundingRect })
 
 const syncChatState = () => {
   gameFrame.value?.contentWindow?.postMessage(
@@ -49,8 +54,12 @@ const onFrameLoad = () => {
 const onMessage = (event: MessageEvent) => {
   if (event.origin !== window.location.origin) return
   const data = event.data as { type?: string; aiConfigId?: number } | null
-  if (data?.type === 'world:open-chat' && Number.isFinite(Number(data.aiConfigId))) {
-    emit('open-chat', Number(data.aiConfigId))
+  if (data?.type === 'world:focus-agent' && Number.isFinite(Number(data.aiConfigId))) {
+    emit('focus-agent', Number(data.aiConfigId))
+  } else if (data?.type === 'world:open-knowledge') {
+    emit('open-knowledge')
+  } else if (data?.type === 'world:focus-device' && typeof (data as { deviceId?: unknown }).deviceId === 'string') {
+    emit('focus-device', (data as { deviceId: string }).deviceId)
   }
 }
 

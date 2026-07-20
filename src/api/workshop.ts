@@ -2,7 +2,7 @@ import { get, post } from './http'
 
 // 服务端内置图书馆 Agent 的专用绑定管理。
 // 当前工具集为空，绑定关系保留给后续 MCP 能力使用。
-// 工坊与 AI 为 1:1 —— 只能绑定一个 AI 数字成员，绑定新成员会替换旧绑定。
+// 工坊与 AI 为 1:1；已被其它 AI 占用时不可绑定。
 
 export interface WorkshopAgentItem {
   device_id: string
@@ -14,7 +14,7 @@ export interface WorkshopAgentItem {
   /** 当前绑定的成员（1:1，可能是其它 AI），null = 未绑定 */
   bound_ai_config_id: number | null
   bound_ai_name: string
-  /** 工具箱：多绑、默认自动绑定全部 AI（图书馆则为 1:1）。 */
+  /** 兼容服务端旧字段；当前所有作坊均按 1:1 绑定。 */
   is_toolbox?: boolean
   multi?: boolean
 }

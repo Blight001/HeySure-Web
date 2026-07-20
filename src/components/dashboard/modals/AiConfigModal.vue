@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type CSSProperties } from 'vue'
 // System MCPs (knowledge.* etc) are direct now; device tools + governance use scopes/toolbox. getMcpToolZhLabel not needed for server list here.
 import { fetchWorkshopBindings, setWorkshopBinding, type WorkshopAgentItem } from '@/api/workshop'
 import type { ModelPreset } from '@/types'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import DeviceMcpScopeEditor from './DeviceMcpScopeEditor.vue'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
-import { useMessage } from '@/composables/useMessage'
 import { PRESET_AI_AVATARS, resolveAiAvatarUrl } from '@/utils/aiAvatar'
+import { listWorldActorMeta, setWorldActorMeta, type WorldActorAppearance } from '@/api/world'
+import memberBlueUrl from '../../../../game/assets/char_member_blue.png?url'
+import memberRedUrl from '../../../../game/assets/char_member_red.png?url'
+import memberAmberUrl from '../../../../game/assets/char_member_amber.png?url'
+import memberSlateUrl from '../../../../game/assets/char_member_slate.png?url'
+import assistantUrl from '../../../../game/assets/char_assistant.png?url'
 
-type SettingsSection = 'mcp' | 'bot'
+type SettingsSection = 'mcp' | 'bot' | 'appearance'
 
 interface Props {
   show: boolean
@@ -37,11 +42,10 @@ const settingsZIndex = usePopupZIndex(() => !!props.settingsSection)
 const promptDetailZIndex = usePopupZIndex(promptDetailOpen)
 
 const settingsSectionTitle: Record<SettingsSection, string> = {
-  mcp: 'MCP 工具权限',
+  mcp: '设备绑定',
   bot: '机器人配置',
+  appearance: '数字社会人物显示',
 }
-
-const { confirm } = useMessage()
 
 const openSettingsSection = (section: SettingsSection) => {
   props.onToggleSettingsSection(section)
@@ -89,9 +93,7 @@ const onModelPresetChange = () => {
   props.form.model = preset?.model || ''
 }
 
-// ---------- 内置图书馆绑定 ----------
-// 工坊 agent（agent/workshop/）服务多个 AI；在这里为当前 AI 单独绑定/解绑。
-// 当前工具集为空，绑定关系保留给后续 MCP 能力使用。
+// ---------- 作坊绑定 ----------
 const workshopAgents = ref<WorkshopAgentItem[]>([])
 const workshopLoading = ref(false)
 const workshopError = ref('')
@@ -100,6 +102,93 @@ const editingConfigId = computed(() => {
   const cfgId = Number(props.form?.id)
   return Number.isFinite(cfgId) && cfgId > 0 ? cfgId : 0
 })
+
+const DEFAULT_APPEARANCE: WorldActorAppearance = { skin: '', tint: '', scale: 1, aura: '' }
+const appearanceDraft = ref<WorldActorAppearance>({ ...DEFAULT_APPEARANCE })
+const appearanceLoading = ref(false)
+const appearanceSaving = ref(false)
+const appearanceError = ref('')
+const appearanceNotice = ref('')
+
+const memberSkinOptions = [
+  { key: '', label: '默认', url: '' },
+  { key: 'char_member_blue.png', label: '蓝色', url: memberBlueUrl },
+  { key: 'char_member_red.png', label: '红色', url: memberRedUrl },
+  { key: 'char_member_amber.png', label: '琥珀', url: memberAmberUrl },
+  { key: 'char_member_slate.png', label: '青灰', url: memberSlateUrl },
+]
+const skinUrlByKey: Record<string, string> = Object.fromEntries(
+  memberSkinOptions.filter(item => item.key).map(item => [item.key, item.url]),
+)
+const defaultMemberSkinUrl = computed(() => {
+  const urls = [memberBlueUrl, memberRedUrl, memberAmberUrl, memberSlateUrl]
+  return urls[Math.abs(editingConfigId.value * 2654435761) % urls.length]
+})
+const appearanceSkinUrl = computed(() => {
+  if (props.form?.ai_role_group === 'assistant_admin') return assistantUrl
+  return skinUrlByKey[appearanceDraft.value.skin] || defaultMemberSkinUrl.value
+})
+const appearancePreviewStyle = computed<CSSProperties>(() => ({
+  backgroundImage: `url(${appearanceSkinUrl.value})`,
+  backgroundPosition: '0 0',
+  backgroundRepeat: 'no-repeat',
+  backgroundSize: '256px auto',
+  imageRendering: 'pixelated',
+  transform: `scale(${appearanceDraft.value.scale})`,
+}))
+
+const loadAppearance = async () => {
+  const cfgId = editingConfigId.value
+  appearanceNotice.value = ''
+  appearanceError.value = ''
+  appearanceDraft.value = { ...DEFAULT_APPEARANCE }
+  if (!cfgId) return
+  appearanceLoading.value = true
+  try {
+    const data = await listWorldActorMeta()
+    const current = (data.items || []).find(item => Number(item.ai_config_id) === cfgId)
+    if (current) {
+      appearanceDraft.value = {
+        skin: current.skin || '',
+        tint: current.tint || '',
+        scale: Number(current.scale) || 1,
+        aura: current.aura || '',
+      }
+    }
+  } catch (err: any) {
+    appearanceError.value = err?.message || '人物外观加载失败'
+  } finally {
+    appearanceLoading.value = false
+  }
+}
+
+const saveAppearance = async () => {
+  const cfgId = editingConfigId.value
+  if (!cfgId) return
+  appearanceSaving.value = true
+  appearanceError.value = ''
+  appearanceNotice.value = ''
+  try {
+    const saved = await setWorldActorMeta(cfgId, appearanceDraft.value)
+    appearanceDraft.value = {
+      skin: saved.skin || '',
+      tint: saved.tint || '',
+      scale: Number(saved.scale) || 1,
+      aura: saved.aura || '',
+    }
+    appearanceNotice.value = '人物外观已保存，社会显示会自动同步。'
+  } catch (err: any) {
+    appearanceError.value = err?.message || '外观保存失败'
+  } finally {
+    appearanceSaving.value = false
+  }
+}
+
+const resetAppearanceDraft = () => {
+  appearanceDraft.value = { ...DEFAULT_APPEARANCE }
+  appearanceError.value = ''
+  appearanceNotice.value = '已恢复默认预览，点击保存后生效。'
+}
 
 const loadWorkshopAgents = async () => {
   const cfgId = editingConfigId.value
@@ -122,7 +211,10 @@ const loadWorkshopAgents = async () => {
 watch(
   () => [props.show, editingConfigId.value],
   ([show, cfgId]) => {
-    if (show && cfgId) void loadWorkshopAgents()
+    if (show && cfgId) {
+      void loadWorkshopAgents()
+      void loadAppearance()
+    }
   },
   { immediate: true },
 )
@@ -132,16 +224,9 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
   const next = !!target?.checked
   const cfgId = editingConfigId.value
   if (!cfgId) return
-  // 1:1 绑定（图书馆）：勾选会替换工坊当前绑定的成员，先确认。工具箱多绑无需确认。
-  if (!agent.is_toolbox && next && agent.bound_ai_config_id && agent.bound_ai_config_id !== cfgId) {
-    const ok = await confirm({
-      message: `「${agent.name}」当前绑定的是「${agent.bound_ai_name}」。图书馆只能绑定一个 AI 数字成员，继续将替换为本 AI？`,
-      type: 'warning',
-    })
-    if (!ok) {
-      if (target) target.checked = agent.bound
-      return
-    }
+  if (next && !agent.bound && agent.bound_ai_config_id) {
+    if (target) target.checked = false
+    return
   }
   try {
     await setWorkshopBinding(cfgId, agent.device_id, next)
@@ -151,6 +236,9 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
     if (target) target.checked = agent.bound
   }
 }
+
+const workshopOccupiedByOther = (agent: WorkshopAgentItem) =>
+  !agent.bound && !!agent.bound_ai_config_id
 </script>
 
 <template>
@@ -189,24 +277,6 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
             <div class="mt-1 text-[10px] text-zinc-400">创建/设置 AI 时选择，默认为第一张。数字生命卡片将以虚化头像作为背景填充（低透明度）。</div>
           </div>
 
-          <div>
-            <label class="block text-xs text-zinc-500 mb-1">AI 类型</label>
-            <!-- 角色扁平化：辅助管理员由系统默认创建（每用户一个），不再支持
-                 新建或切换；除它之外所有 AI 都按数字生命成员对待。 -->
-            <div
-              v-if="form.ai_role_group === 'assistant_admin'"
-              class="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-zinc-50/60 text-zinc-500 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-400"
-            >
-              辅助管理员（系统默认，不可新增）
-            </div>
-            <select
-              v-else
-              v-model="form.ai_role_group"
-              class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100"
-            >
-              <option value="digital_member">数字生命成员</option>
-            </select>
-          </div>
           <div v-if="form.ai_role_group === 'digital_member'">
             <label class="block text-xs text-zinc-500 mb-1">成员身份</label>
             <select v-model="form.digital_member_role" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100">
@@ -250,7 +320,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
               v-else
               class="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs text-zinc-500 bg-zinc-50/60 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300"
             >
-              辅助管理员无 Token 上限（仅用于与用户对话）
+              无 Token 上限（仅用于与用户对话）
             </div>
           </div>
           <div class="md:col-span-2">
@@ -269,7 +339,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
         </div>
 
         <div class="mt-4 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
-          <div class="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-2">权限及其系统设置</div>
+          <div class="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-2">AI 设置</div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
             <button
@@ -277,9 +347,9 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
               class="text-left px-3 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50/70 hover:border-indigo-300 hover:bg-white dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800"
               @click="openSettingsSection('mcp')"
             >
-              <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">MCP 工具权限</span>
+              <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">设备绑定</span>
               <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">
-                工具箱 + 端侧 Agent 范围，{{ form.mcp_auto_approve ? '无需确认' : '调用需确认' }}
+                管理端侧设备与作坊
               </span>
             </button>
             <button
@@ -290,6 +360,17 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
               <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">机器人配置</span>
               <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">
                 {{ selectedBotName }}，{{ selectedBotEnabled ? '已启用' : '未启用' }}
+              </span>
+            </button>
+            <button
+              v-if="editingConfigId"
+              type="button"
+              class="text-left px-3 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50/70 hover:border-indigo-300 hover:bg-white dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800"
+              @click="openSettingsSection('appearance')"
+            >
+              <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">数字社会人物</span>
+              <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">
+                人物显示、皮肤、调色、体型与光环
               </span>
             </button>
           </div>
@@ -334,20 +415,8 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
 
             <div class="p-4 overflow-y-auto">
               <div v-if="settingsSection === 'mcp'">
-                <label class="mb-3 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
-                  <span>MCP 调用无需确认</span>
-                  <input type="checkbox" v-model="form.mcp_auto_approve" />
-                </label>
-                <p class="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                  系统自带 MCP（knowledge.search、workspace.*、todo.manage 等）默认直接可用，无需工具箱选择/显示。
-                  task.manage 属于图书馆 MCP，仅向已绑定图书馆的 AI 开放；端侧设备 MCP 仍需各 Agent 范围单独授予。
-                </p>
-
-                <!-- Endpoint agents bound to this AI: per-agent MCP permission.
-                     These tools come from the connected device, not from the
-                     server MCP list, and only show while the device is online. -->
                 <div v-if="boundEndpointAgents.length" class="mb-3 space-y-2">
-                  <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">已连接 Agent 的 MCP 权限</div>
+                  <div class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">已绑定端侧设备</div>
                   <DeviceMcpScopeEditor
                     v-for="agent in boundEndpointAgents"
                     :key="`ai-config-agent-scope-${agent.id}`"
@@ -356,21 +425,17 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                   />
                 </div>
 
-                <!-- 服务端内置作坊绑定：图书馆 1:1（仅数字成员）、工具箱多绑（默认全部 AI）。 -->
                 <div
                   v-if="editingConfigId"
                   class="mb-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 dark:border-indigo-500/30 dark:bg-indigo-500/5"
                 >
                   <div class="flex items-center justify-between">
-                    <div class="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">内置作坊绑定</div>
+                    <div class="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">作坊绑定</div>
                     <button
                       class="text-[10px] px-1.5 py-0.5 rounded border border-indigo-200 text-indigo-600 dark:border-indigo-500/40 dark:text-indigo-300"
                       @click="loadWorkshopAgents"
                     >刷新</button>
                   </div>
-                  <p class="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                    工具箱：绑定后提供系统固定工具集（支持多绑，可在此或「作坊」面板管理绑定与 MCP 范围）。图书馆：任务管理与治理类工具，1:1 只绑一个 AI 数字成员。
-                  </p>
                   <div v-if="workshopLoading" class="mt-2 text-[11px] text-zinc-400">加载中…</div>
                   <div v-else-if="workshopError" class="mt-2 text-[11px] text-rose-500">{{ workshopError }}</div>
                   <div v-else-if="workshopAgents.length === 0" class="mt-2 text-[11px] text-zinc-400">
@@ -379,7 +444,10 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                   <label
                     v-for="agent in workshopAgents"
                     :key="`workshop-${agent.device_id}`"
-                    class="mt-2 flex items-center justify-between gap-2 rounded border border-zinc-200 bg-white/70 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900/50"
+                    class="mt-2 flex items-center justify-between gap-2 rounded border px-2 py-1.5 text-xs"
+                    :class="workshopOccupiedByOther(agent)
+                      ? 'border-zinc-200 bg-zinc-100/70 opacity-60 dark:border-zinc-700 dark:bg-zinc-800/50'
+                      : 'border-zinc-200 bg-white/70 dark:border-zinc-700 dark:bg-zinc-900/50'"
                   >
                     <span class="flex items-center gap-2 min-w-0">
                       <span
@@ -388,16 +456,17 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                       ></span>
                       <span class="truncate text-zinc-700 dark:text-zinc-200">{{ agent.name }}</span>
                       <span class="shrink-0 text-[10px] text-zinc-400">
-                        {{ agent.is_toolbox ? `${agent.tools.length} 个工具 · 多绑` : (agent.online ? `${agent.tools.length} 个工具` : '离线') }} ·
-                        {{ agent.is_toolbox ? (agent.bound ? '本AI已绑定' : '本AI未绑定') : (agent.bound_ai_config_id ? `已绑定：${agent.bound_ai_name}` : '未绑定') }}
+                        {{ agent.online ? `${agent.tools.length} 个工具` : '离线' }} ·
+                        {{ agent.bound ? '已绑定当前 AI' : (agent.bound_ai_config_id ? `已被 ${agent.bound_ai_name} 绑定` : '可绑定') }}
                       </span>
                     </span>
-                    <input type="checkbox" :checked="agent.bound" @change="toggleWorkshopBinding(agent, $event)" />
+                    <input
+                      type="checkbox"
+                      :checked="agent.bound"
+                      :disabled="workshopOccupiedByOther(agent)"
+                      @change="toggleWorkshopBinding(agent, $event)"
+                    />
                   </label>
-                </div>
-
-                <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  系统自带非图书馆 MCP 可直接调用；task.manage 与治理类工具要求绑定图书馆。工具箱绑定用于展示分组，端侧工具由各设备范围控制。
                 </div>
               </div>
 
@@ -448,7 +517,7 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                   </div>
                 </div>
                 <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  仅通知 URL 只能让 AI 主动发通知；飞书用户主动与 AI 对话需要配置自建应用 App ID / Secret，并在飞书开放平台的事件订阅里选择“使用长连接接收事件”。启用后请在 MCP 工具权限中勾选 <span class="font-mono">message.send+to</span>。
+                  仅通知 URL 只能让 AI 主动发通知；飞书用户主动与 AI 对话需要配置自建应用 App ID / Secret，并在飞书开放平台的事件订阅里选择“使用长连接接收事件”。
                 </div>
                 </template>
 
@@ -494,6 +563,89 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
                 <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
                   QQ 入站由服务端 botpy 长连接托管。原生 Markdown 和私聊流式输出需要 QQ 开放平台权限；未获权限时服务端会自动回退为纯文本。
                 </div>
+                </template>
+              </div>
+
+              <div v-else-if="settingsSection === 'appearance'" class="space-y-4">
+                <div v-if="appearanceLoading" class="py-10 text-center text-xs text-zinc-400">人物外观加载中…</div>
+                <template v-else>
+                  <div class="flex min-h-40 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-gradient-to-b from-sky-100 to-emerald-100 dark:border-zinc-700 dark:from-slate-900 dark:to-emerald-950/70">
+                    <div class="relative flex h-32 w-28 items-end justify-center">
+                      <div
+                        v-if="appearanceDraft.aura"
+                        class="absolute bottom-4 h-20 w-20 rounded-full opacity-60 blur-xl"
+                        :style="{ backgroundColor: appearanceDraft.aura }"
+                      ></div>
+                      <div class="relative h-24 w-16 origin-bottom transition-transform duration-200" :style="appearancePreviewStyle">
+                        <div
+                          v-if="appearanceDraft.tint"
+                          class="absolute inset-0 opacity-35 mix-blend-color"
+                          :style="{ backgroundColor: appearanceDraft.tint }"
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div class="mb-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">人物皮肤</div>
+                    <div v-if="form.ai_role_group === 'assistant_admin'" class="rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
+                      该角色使用固定身份皮肤，可继续调整调色、体型和光环。
+                    </div>
+                    <div v-else class="grid grid-cols-5 gap-2">
+                      <button
+                        v-for="skin in memberSkinOptions"
+                        :key="skin.key || 'default'"
+                        type="button"
+                        class="rounded-lg border px-2 py-2 text-[11px] transition-colors"
+                        :class="appearanceDraft.skin === skin.key
+                          ? 'border-indigo-400 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 dark:border-indigo-500 dark:bg-indigo-500/10 dark:text-indigo-200'
+                          : 'border-zinc-200 bg-white/70 text-zinc-500 hover:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400'"
+                        @click="appearanceDraft.skin = skin.key"
+                      >
+                        {{ skin.label }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                      <div class="mb-2 flex items-center justify-between">
+                        <label class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">人物调色</label>
+                        <button type="button" class="text-[10px] text-zinc-400 hover:text-indigo-500" @click="appearanceDraft.tint = ''">无调色</button>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <input v-model="appearanceDraft.tint" type="color" class="h-9 w-12 cursor-pointer rounded border border-zinc-200 bg-transparent p-1 dark:border-zinc-700" />
+                        <input v-model.trim="appearanceDraft.tint" maxlength="7" placeholder="#RRGGBB" class="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white/70 px-2 py-2 text-xs uppercase dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100" />
+                      </div>
+                    </div>
+                    <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                      <div class="mb-2 flex items-center justify-between">
+                        <label class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">光环颜色</label>
+                        <button type="button" class="text-[10px] text-zinc-400 hover:text-indigo-500" @click="appearanceDraft.aura = ''">无光环</button>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <input v-model="appearanceDraft.aura" type="color" class="h-9 w-12 cursor-pointer rounded border border-zinc-200 bg-transparent p-1 dark:border-zinc-700" />
+                        <input v-model.trim="appearanceDraft.aura" maxlength="7" placeholder="#RRGGBB" class="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white/70 px-2 py-2 text-xs uppercase dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <div class="mb-2 flex items-center justify-between text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                      <span>人物体型</span>
+                      <span>{{ Number(appearanceDraft.scale).toFixed(2) }}×</span>
+                    </div>
+                    <input v-model.number="appearanceDraft.scale" type="range" min="0.7" max="1.4" step="0.05" class="w-full accent-indigo-600" />
+                  </div>
+
+                  <div v-if="appearanceError" class="text-xs text-rose-500">{{ appearanceError }}</div>
+                  <div v-if="appearanceNotice" class="text-xs text-emerald-600 dark:text-emerald-400">{{ appearanceNotice }}</div>
+                  <div class="flex justify-end gap-2">
+                    <button type="button" class="rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300" @click="resetAppearanceDraft">恢复默认</button>
+                    <button type="button" :disabled="appearanceSaving" class="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-50" @click="saveAppearance">
+                      {{ appearanceSaving ? '保存中…' : '保存人物外观' }}
+                    </button>
+                  </div>
                 </template>
               </div>
 
