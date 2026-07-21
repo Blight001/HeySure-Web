@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
+import { probeModelConfig } from '@/api/diagnostics'
 import { useUiEffects } from '@/composables/useUiEffects'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { ModelPreset } from '@/types'
@@ -93,6 +94,42 @@ const isModelPresetComplete = (preset: ModelPreset) => {
     && !!String(preset.base_url || '').trim()
 }
 const selectedModelPreset = computed(() => modelPresetsValue.value[selectedModelPresetIndex.value] || null)
+type ModelTestStatus = 'idle' | 'testing' | 'success' | 'error'
+const modelTestStatus = ref<ModelTestStatus>('idle')
+const modelTestMessage = ref('')
+
+const resetModelTest = () => {
+  modelTestStatus.value = 'idle'
+  modelTestMessage.value = ''
+}
+
+const testSelectedModel = async () => {
+  const preset = selectedModelPreset.value
+  if (!preset) return
+  if (!isModelPresetComplete(preset)) {
+    modelTestStatus.value = 'error'
+    modelTestMessage.value = '请先填写显示名称、模型名、Base URL 和 API Key'
+    return
+  }
+  modelTestStatus.value = 'testing'
+  modelTestMessage.value = '正在请求模型…'
+  try {
+    const result = await probeModelConfig({
+      name: String(preset.name || preset.model).trim(),
+      model: String(preset.model).trim(),
+      base_url: String(preset.base_url).trim(),
+      api_key: String(preset.api_key).trim(),
+      provider: preset.provider || 'auto',
+    })
+    const latency = result.latency_ms == null ? '' : ` · ${result.latency_ms} ms`
+    const detail = result.reply || result.detail || (result.ok ? '响应正常' : '测试失败')
+    modelTestStatus.value = result.ok ? 'success' : 'error'
+    modelTestMessage.value = `${result.ok ? '连接成功' : '连接失败'}${latency} · ${detail}`
+  } catch (err: any) {
+    modelTestStatus.value = 'error'
+    modelTestMessage.value = `测试失败：${err?.message || '未知错误'}`
+  }
+}
 
 const addModelPreset = () => {
   const id = `model_${Date.now()}`
@@ -105,6 +142,7 @@ const addModelPreset = () => {
 }
 
 const updateModelPreset = (index: number, patch: Partial<ModelPreset>) => {
+  if (index === selectedModelPresetIndex.value) resetModelTest()
   modelPresetsValue.value = modelPresetsValue.value.map((item, idx) => {
     if (idx !== index) return item
     const next = { ...item, ...patch }
@@ -114,6 +152,7 @@ const updateModelPreset = (index: number, patch: Partial<ModelPreset>) => {
 }
 
 const removeModelPreset = (index: number) => {
+  resetModelTest()
   modelPresetsValue.value = modelPresetsValue.value.filter((_, idx) => idx !== index)
   selectedModelPresetIndex.value = Math.max(0, Math.min(index, modelPresetsValue.value.length - 1))
 }
@@ -150,6 +189,8 @@ watch(() => props.show, visible => {
     selectedModelPresetIndex.value = 0
   }
 })
+
+watch(selectedModelPresetIndex, resetModelTest)
 
 const openExtensionTestPage = () => {
   window.open(`${window.location.origin}/extension-test/`, '_blank', 'noopener,noreferrer')
@@ -375,8 +416,32 @@ const openExtensionTestPage = () => {
                   </label>
                 </div>
 
-                <div class="mt-4 flex justify-end">
-                  <button type="button" class="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:opacity-90 dark:bg-white dark:text-zinc-900" @click="emit('save')">保存模型配置</button>
+                <div class="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p
+                    v-if="modelTestStatus !== 'idle'"
+                    role="status"
+                    aria-live="polite"
+                    class="min-w-0 text-[11px]"
+                    :class="modelTestStatus === 'success'
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : modelTestStatus === 'error'
+                        ? 'text-rose-600 dark:text-rose-300'
+                        : 'text-zinc-500 dark:text-zinc-400'"
+                  >
+                    {{ modelTestMessage }}
+                  </p>
+                  <span v-else></span>
+                  <div class="flex shrink-0 justify-end gap-2">
+                    <button
+                      type="button"
+                      :disabled="modelTestStatus === 'testing'"
+                      class="rounded-lg border border-indigo-200 px-4 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60 dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+                      @click="testSelectedModel"
+                    >
+                      {{ modelTestStatus === 'testing' ? '测试中…' : '测试连接' }}
+                    </button>
+                    <button type="button" class="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:opacity-90 dark:bg-white dark:text-zinc-900" @click="emit('save')">保存模型配置</button>
+                  </div>
                 </div>
               </div>
             </div>
