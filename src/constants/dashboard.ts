@@ -6,6 +6,8 @@
  * the tab is hidden or socket is connected (since socket events also drive updates).
  */
 export const DASHBOARD_REFRESH_STREAM_MS = 600
+// 触屏/紧凑布局中避免高频数据替换与卡片重排挤占滚动主线程。
+export const DASHBOARD_REFRESH_MOBILE_STREAM_MS = 1200
 export const DASHBOARD_REFRESH_FAST_MS = 2000
 export const DASHBOARD_REFRESH_NORMAL_MS = 8000
 export const DASHBOARD_REFRESH_HIDDEN_MS = 30000

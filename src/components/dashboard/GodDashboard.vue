@@ -12,6 +12,7 @@ import { PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import {
   DASHBOARD_REFRESH_FAST_MS,
   DASHBOARD_REFRESH_HIDDEN_MS,
+  DASHBOARD_REFRESH_MOBILE_STREAM_MS,
   DASHBOARD_REFRESH_NORMAL_MS,
   DASHBOARD_REFRESH_STREAM_MS,
   UNASSIGNED_PROJECT_ID,
@@ -691,7 +692,9 @@ const hasLiveThinking = computed(() => {
 
 const getDashboardRefreshInterval = () => {
   if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return DASHBOARD_REFRESH_HIDDEN_MS
-  if (hasLiveThinking.value) return DASHBOARD_REFRESH_STREAM_MS
+  if (hasLiveThinking.value) {
+    return isMobile.value ? DASHBOARD_REFRESH_MOBILE_STREAM_MS : DASHBOARD_REFRESH_STREAM_MS
+  }
   if (taskListModalOpen.value) return DASHBOARD_REFRESH_FAST_MS
   return dashboardSocketConnected.value ? DASHBOARD_REFRESH_NORMAL_MS : DASHBOARD_REFRESH_FAST_MS
 }

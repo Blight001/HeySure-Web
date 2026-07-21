@@ -352,10 +352,16 @@ const syncedMcpText = computed(() => {
 const IDLE_THINKING_TEXT = '空闲中'
 const thinkingPreview = ref(IDLE_THINKING_TEXT)
 
+// 手机/平板与“减少动态效果”设备不为每张卡片启动独立的逐帧滚动。
+// 多个 AI 同时流式思考时，每卡一个 rAF 会叠加布局读写，明显拖慢列表滚动。
+const reduceCardMotion = typeof window !== 'undefined'
+  && window.matchMedia('(prefers-reduced-motion: reduce), (hover: none) and (pointer: coarse)').matches
+
 const thinkingViewportRef = ref<HTMLElement | null>(null)
 const thinkingTextRef = ref<HTMLElement | null>(null)
 let thinkingRaf = 0
 let thinkingOffset = 0
+let thinkingMaxScroll = 0
 let thinkingIdleTimer = 0
 let lastLiveThinking = ''
 
@@ -381,20 +387,18 @@ const thinkingScrollSpeed = (textLength: number, maxScroll: number) => {
 
 const stepThinkingMotion = () => {
   const viewport = thinkingViewportRef.value
-  const text = thinkingTextRef.value
-  if (!viewport || !text) return
-  const maxScroll = Math.max(0, text.scrollHeight - viewport.clientHeight)
-  if (maxScroll <= 1) {
+  if (!viewport) return
+  if (thinkingMaxScroll <= 1) {
     thinkingOffset = 0
     viewport.scrollTop = 0
     return
   }
 
-  const speed = thinkingScrollSpeed(thinkingPreview.value.length, maxScroll)
-  thinkingOffset = Math.min(maxScroll, thinkingOffset + speed)
+  const speed = thinkingScrollSpeed(thinkingPreview.value.length, thinkingMaxScroll)
+  thinkingOffset = Math.min(thinkingMaxScroll, thinkingOffset + speed)
   viewport.scrollTop = thinkingOffset
 
-  if (thinkingOffset >= maxScroll - 0.5) {
+  if (thinkingOffset >= thinkingMaxScroll - 0.5) {
     stopThinkingMotion()
     return
   }
@@ -408,12 +412,12 @@ const startThinkingMotion = (reset = true) => {
   const text = thinkingTextRef.value
   if (!viewport || !text) return
 
-  const maxScroll = Math.max(0, text.scrollHeight - viewport.clientHeight)
+  thinkingMaxScroll = Math.max(0, text.scrollHeight - viewport.clientHeight)
   thinkingOffset = reset
     ? 0
-    : Math.max(0, Math.min(viewport.scrollTop, maxScroll))
+    : Math.max(0, Math.min(viewport.scrollTop, thinkingMaxScroll))
   viewport.scrollTop = thinkingOffset
-  if (maxScroll <= 1) return
+  if (thinkingMaxScroll <= 1) return
   thinkingRaf = window.requestAnimationFrame(stepThinkingMotion)
 }
 
@@ -447,6 +451,14 @@ const syncThinkingFromLive = async () => {
     && liveThinking.startsWith(lastLiveThinking)
   thinkingPreview.value = liveThinking
   await nextTick()
+  if (reduceCardMotion) {
+    stopThinkingMotion()
+    const viewport = thinkingViewportRef.value
+    // 只在文本更新时定位到最新内容，避免手机端持续逐帧写 scrollTop。
+    if (viewport) viewport.scrollTop = viewport.scrollHeight
+    lastLiveThinking = liveThinking
+    return
+  }
   if (shouldContinue) {
     const viewport = thinkingViewportRef.value
     const text = thinkingTextRef.value
@@ -556,13 +568,20 @@ const onCardPointerUp = (event: PointerEvent) => {
     @dblclick="onCardDblClick"
     @pointerup="onCardPointerUp"
   >
-    <!-- AI头像作为背景填充（数字生命卡片）：85% 透明 + 虚化处理，让前景内容更清晰 -->
+    <!-- AI 头像背景；触屏端由 scoped CSS 关闭实时模糊，降低滚动时的 GPU 重绘。 -->
     <div 
       v-if="aiAvatarUrl"
-      class="absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0"
-      :style="{ opacity: '0.15' }"
+      class="agent-card-avatar-layer absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0"
     >
-      <img :src="aiAvatarUrl" class="w-full h-full object-cover select-none blur scale-[1.03]" alt="" />
+      <img
+        :src="aiAvatarUrl"
+        class="agent-card-avatar-image w-full h-full object-cover select-none blur scale-[1.03]"
+        alt=""
+        loading="lazy"
+        decoding="async"
+        fetchpriority="low"
+        draggable="false"
+      />
     </div>
 
     <!-- 角色徽章 -->
@@ -588,7 +607,7 @@ const onCardPointerUp = (event: PointerEvent) => {
             class="min-w-0 inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50/60 px-1.5 py-0.5 text-xs font-normal text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400"
             :title="agent.platform"
           >
-            <span class="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title="在线"></span>
+            <span class="agent-card-online-dot inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title="在线"></span>
             <span class="truncate">{{ agent.platform }}</span>
           </span>
         </h3>
@@ -645,7 +664,7 @@ const onCardPointerUp = (event: PointerEvent) => {
       <div class="flex flex-wrap items-start gap-1.5 min-w-0">
         <span
           v-if="showStatusDisplay"
-          class="px-2 py-1 rounded text-xs font-medium border break-words"
+          class="agent-card-status px-2 py-1 rounded text-xs font-medium border break-words"
           :class="statusDisplay.class"
         >
           {{ statusDisplay.text }}
@@ -676,7 +695,7 @@ const onCardPointerUp = (event: PointerEvent) => {
       </div>
       <div class="w-full bg-zinc-100/60 rounded-full h-2 overflow-hidden border border-zinc-100 dark:bg-zinc-800/60 dark:border-zinc-700">
         <div 
-          class="h-full rounded-full transition-all duration-700 ease-out" 
+          class="agent-card-life-fill h-full rounded-full transition-all duration-700 ease-out"
           :class="lifeColorClass" 
           :style="{ width: `${lifePercentage}%` }"
         ></div>
@@ -798,6 +817,10 @@ const onCardPointerUp = (event: PointerEvent) => {
   isolation: isolate;
 }
 
+.agent-card-avatar-layer {
+  opacity: 0.15;
+}
+
 .agent-card-world-focus {
   z-index: 30;
   transform: scale(1.035);
@@ -871,6 +894,48 @@ const onCardPointerUp = (event: PointerEvent) => {
 @media (prefers-reduced-motion: reduce) {
   .agent-card-shell::before {
     animation: none;
+  }
+}
+
+/*
+ * 卡片级触屏降载：全局已关闭 backdrop-filter，但 scoped 的光晕、头像 blur、
+ * 状态脉冲和生命条过渡仍会在每张卡片上独立合成/重绘，这里统一静态化。
+ */
+@media (hover: none) and (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .agent-card-shell {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 22rem;
+    background-image: none;
+    transition: none;
+  }
+
+  .agent-card-shell::before,
+  .agent-card-world-focus::before {
+    inset: -1px;
+    animation: none;
+    filter: none;
+    box-shadow: none;
+    opacity: 0.5;
+    transform: none;
+  }
+
+  .agent-card-avatar-layer {
+    opacity: 0.1;
+  }
+
+  .agent-card-avatar-image {
+    filter: none;
+    transform: none;
+  }
+
+  .agent-card-online-dot,
+  .agent-card-status {
+    animation: none !important;
+  }
+
+  .agent-card-life-fill {
+    transition: none;
+    box-shadow: none;
   }
 }
 
