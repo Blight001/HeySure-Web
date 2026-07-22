@@ -8,7 +8,7 @@ import { useDashboardData } from '@/composables/dashboard/useDashboardData'
 import { useDashboardUi } from '@/composables/dashboard/useDashboardUi'
 import { useDashboardSystemSettings } from '@/composables/dashboard/useDashboardSystemSettings'
 import { useBreakpoint } from '@/composables/useBreakpoint'
-import { PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
+import { BACKGROUND_POPUP_Z_INDEX, PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import {
   DASHBOARD_REFRESH_FAST_MS,
   DASHBOARD_REFRESH_HIDDEN_MS,
@@ -71,8 +71,13 @@ const knowledgeFocusSignal = ref(0)
 const worldArenaPanelRef = ref<{ getBoundingRect: () => DOMRect | null } | null>(null)
 const chatModalOpen = ref(false)
 const chatTarget = ref<Agent | null>(null)
-// 总督对话是常驻操作入口：始终高于页面内其它弹窗，不参与“后开者居上”。
-const agentChatZIndex = PINNED_POPUP_Z_INDEX
+// 大对话是背景工作区，不遮挡普通业务弹窗；悬浮/PiP 小窗仍保持置顶，
+// 设置类弹窗因此自然显示在小窗下方。
+const agentChatZIndex = computed(() =>
+  chatFloating.value || chatPipActive.value
+    ? PINNED_POPUP_Z_INDEX
+    : BACKGROUND_POPUP_Z_INDEX,
+)
 const chatInitialSessionId = ref('')
 const chatCurrentSessionId = ref('')
 const chatTaskPlanRefreshSignal = ref(0)
@@ -1005,7 +1010,7 @@ onUnmounted(() => {
             ref="chatPanelRef"
             class="acrylic-modal shadow-xl flex flex-col"
             :class="chatPipActive
-              ? 'h-full w-full overflow-hidden rounded-none !border-0'
+              ? 'relative h-full w-full overflow-hidden rounded-none !border-0'
               : chatFloating
                 ? 'pointer-events-auto fixed overflow-hidden rounded-2xl'
                 : 'overflow-hidden rounded-none sm:rounded-2xl !border-0 sm:!border w-full h-full max-w-none sm:max-w-[960px] sm:h-[88vh] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:pt-0 sm:pb-0'"
@@ -1097,6 +1102,7 @@ onUnmounted(() => {
                 :initialSessionId="chatInitialSessionId || undefined"
                 :mcpDynamicRule="mcpDynamicRule"
                 :floating-layer="chatFloating && !chatPipActive"
+                :embedded-dialogs="chatFloating || chatPipActive"
                 :selectedFiles="selectedFiles"
                 :allFiles="allFiles"
                 :selectable-file-root="aiWorkspaceDirname(chatTarget)"
@@ -1108,10 +1114,9 @@ onUnmounted(() => {
                 @refreshFiles="loadProjectContext"
               />
             </div>
-            <!-- 桌面置顶（PiP）时，App.vue 里的全局确认/提示框渲染在主窗口文档里，
-                 在 PiP 小窗内看不见；这里再挂一份实例（共享同一全局状态）让它
-                 同时出现在 PiP 文档内，点哪边都能响应 -->
-            <MessageDialog v-if="chatPipActive" />
+            <!-- 悬浮/PiP 对话使用独立的 chat 弹窗宿主：确认、提示和输入框只覆盖
+                 当前聊天面板；页面级设置弹窗仍留在小窗下方。 -->
+            <MessageDialog v-if="chatFloating || chatPipActive" host="chat" inline />
           </div>
           </Teleport>
         </div>

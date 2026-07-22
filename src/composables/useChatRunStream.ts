@@ -44,9 +44,26 @@ export interface RunDonePayload {
   ai_kind?: string
 }
 
+export interface DeviceTaskEventPayload {
+  taskId?: string
+  deviceId?: string
+  sessionId?: string
+  aiConfigId?: number
+  aiKind?: string
+  tool?: string
+  progress?: number
+  message?: string
+  success?: boolean
+  error?: string
+  updatedAt?: number
+}
+
 export interface ChatRunStreamHandlers {
   onLive?: (payload: RunLivePayload) => void
   onDone?: (payload: RunDonePayload) => void
+  onDeviceProgress?: (payload: DeviceTaskEventPayload) => void
+  onDeviceResult?: (payload: DeviceTaskEventPayload) => void
+  onDeviceError?: (payload: DeviceTaskEventPayload) => void
 }
 
 export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
@@ -62,6 +79,18 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     if (!payload || typeof payload !== 'object') return
     handlers.onDone?.(payload)
   }
+  const handleDeviceProgress = (payload: DeviceTaskEventPayload) => {
+    if (!payload || typeof payload !== 'object') return
+    handlers.onDeviceProgress?.(payload)
+  }
+  const handleDeviceResult = (payload: DeviceTaskEventPayload) => {
+    if (!payload || typeof payload !== 'object') return
+    handlers.onDeviceResult?.(payload)
+  }
+  const handleDeviceError = (payload: DeviceTaskEventPayload) => {
+    if (!payload || typeof payload !== 'object') return
+    handlers.onDeviceError?.(payload)
+  }
 
   const disconnect = () => {
     if (!socket) return
@@ -70,6 +99,9 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     socket.off('connect_error')
     socket.off('chat:run_live', handleLive)
     socket.off('chat:run_done', handleDone)
+    socket.off('device:task_progress', handleDeviceProgress)
+    socket.off('device:task_result', handleDeviceResult)
+    socket.off('device:task_error', handleDeviceError)
     socket.disconnect()
     socket = null
     joinedUserId = 0
@@ -95,6 +127,9 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     })
     socket.on('chat:run_live', handleLive)
     socket.on('chat:run_done', handleDone)
+    socket.on('device:task_progress', handleDeviceProgress)
+    socket.on('device:task_result', handleDeviceResult)
+    socket.on('device:task_error', handleDeviceError)
   }
 
   onUnmounted(disconnect)

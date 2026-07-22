@@ -10,7 +10,7 @@ import * as chatApi from '@/api/chat'
 import { listAiConfigs } from '@/api/ai'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
 import { getAuthToken } from '@/api/http'
-import { useChatRunStream, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
+import { useChatRunStream, type DeviceTaskEventPayload, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
 import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { formatDurationMs } from '@/utils/datetime'
 import { copyTextToClipboard } from '@/utils/clipboard'
@@ -21,7 +21,6 @@ import heySureLogo from '@/assets/logo/HeySure.png'
 const BLANK_SESSION_NAME = '新对话'
 const PLACEHOLDER_SESSION_NAMES = new Set(['新对话', '未命名会话', '默认会话', '选择对话'])
 
-const { alert, confirm, prompt } = useMessage()
 interface ChatMessage {
   id?: number
   role: 'user' | 'assistant' | 'system'
@@ -70,6 +69,8 @@ interface Props {
   mcpDynamicRule?: string
   /** 页面内置顶浮窗中启用：将宽下拉层传送到 body，避免被浮窗圆角裁剪。 */
   floatingLayer?: boolean
+  /** 悬浮/PiP 对话把确认、提示和输入框限制在聊天面板内部。 */
+  embeddedDialogs?: boolean
   stripMarkdownSymbols?: boolean
   selectedFiles: string[]
   allFiles: string[]
@@ -77,6 +78,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { alert, confirm, prompt } = useMessage(() => props.embeddedDialogs ? 'chat' : 'global')
 const emit = defineEmits<{
   (e: 'update:selectedFiles', value: string[]): void
   (e: 'update:currentSessionId', value: string): void
@@ -97,6 +99,8 @@ const currentRunId = ref('')
 const currentRunStatus = ref<'idle' | 'queued' | 'running' | 'completed' | 'error' | 'stopped'>('idle')
 const currentRunPhase = ref<'idle' | 'generating' | 'waiting_mcp'>('idle')
 const currentMcpTool = ref('')
+const currentDeviceTaskId = ref('')
+const currentDeviceProgress = ref('')
 const liveThinkingText = ref('')
 const liveAssistantText = ref('')
 const liveTargetText = ref('')
@@ -286,7 +290,10 @@ const runTimingText = computed(() => {
       const label = currentMcpTool.value
         ? `正在执行 MCP：${currentMcpTool.value}`
         : '正在执行 MCP'
-      return `${label} · ${formatDurationMs(liveSegmentMs.value)}`
+      const progress = currentDeviceProgress.value
+        ? ` · ${currentDeviceProgress.value}`
+        : ''
+      return `${label}${progress} · ${formatDurationMs(liveSegmentMs.value)}`
     }
     return `AI 思考中 · ${formatDurationMs(liveSegmentMs.value)}`
   }
@@ -454,7 +461,7 @@ const buildMcpCatalogSection = (groups: McpCatalogToolGroup[]) => {
   return [
     `[${CLIENT_MCP_CATALOG_TITLE}]`,
     '以下是本轮对话勾选携带的 MCP 工具目录（名称 + 简介，`!` 表示有副作用）。',
-    '需要调用时，先用一次 mcp.describe+tool（tool / tools / query）获取参数 schema，再发起调用。',
+    '已提供参数 schema 的工具应直接调用；仅当目标工具未暴露 schema 或参数确实不明确时，才用 mcp.describe+tool（tool / tools / query）查询。不要在任务开始时枚举或摸底全部 MCP。',
     '',
     renderGroupedMcpToolCatalog(groups),
   ].join('\n')
@@ -1048,9 +1055,47 @@ const handleStreamDone = (payload: RunDonePayload) => {
   }
 }
 
+const isCurrentDeviceTaskEvent = (payload: DeviceTaskEventPayload) => {
+  const sessionId = String(payload?.sessionId || '')
+  if (sessionId && sessionId !== currentSessionId.value) return false
+  const aiConfigId = Number(payload?.aiConfigId || 0)
+  if (aiConfigId && aiConfigId !== Number(props.aiConfigId || 0)) return false
+  const aiKind = String(payload?.aiKind || '')
+  if (aiKind && aiKind !== aiKindValue.value) return false
+  const tool = String(payload?.tool || '')
+  if (tool && currentMcpTool.value && tool !== currentMcpTool.value) return false
+  return isRunActive.value && currentRunPhase.value === 'waiting_mcp'
+}
+
+const handleDeviceProgress = (payload: DeviceTaskEventPayload) => {
+  if (!isCurrentDeviceTaskEvent(payload)) return
+  currentDeviceTaskId.value = String(payload.taskId || '')
+  currentDeviceProgress.value = String(payload.message || '').trim() || '设备已接收调用'
+}
+
+const handleDeviceTerminal = (payload: DeviceTaskEventPayload) => {
+  if (!isCurrentDeviceTaskEvent(payload)) return
+  const taskId = String(payload.taskId || '')
+  if (currentDeviceTaskId.value && taskId && taskId !== currentDeviceTaskId.value) return
+  currentDeviceProgress.value = payload.error
+    ? `设备执行失败：${payload.error}`
+    : '设备执行完成，正在返回结果'
+  void fetchRunHistoryIncrementalOnce()
+}
+
 const runStream = useChatRunStream({
   onLive: handleStreamLive,
   onDone: handleStreamDone,
+  onDeviceProgress: handleDeviceProgress,
+  onDeviceResult: handleDeviceTerminal,
+  onDeviceError: handleDeviceTerminal,
+})
+
+watch([currentRunPhase, currentMcpTool], ([phase, tool], [previousPhase, previousTool]) => {
+  if (phase !== 'waiting_mcp' || phase !== previousPhase || tool !== previousTool) {
+    currentDeviceTaskId.value = ''
+    currentDeviceProgress.value = ''
+  }
 })
 
 // Shared run-completion sequence for both the socket (chat:run_done) and the

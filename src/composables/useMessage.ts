@@ -1,7 +1,8 @@
-import { reactive } from 'vue'
+import { reactive, toValue, type MaybeRefOrGetter } from 'vue'
 
 type MessageType = 'info' | 'success' | 'warning' | 'error'
 type DialogType = 'alert' | 'confirm' | 'prompt'
+export type DialogHost = 'global' | 'chat'
 
 interface MessageOptions {
   title?: string
@@ -15,12 +16,14 @@ interface MessageOptions {
 
 interface DialogState extends MessageOptions {
   show: boolean
+  host: DialogHost
   dialogType: DialogType
   resolve: (value: any) => void
 }
 
 const state = reactive<DialogState>({
   show: false,
+  host: 'global',
   dialogType: 'alert',
   title: '',
   message: '',
@@ -32,11 +35,12 @@ const state = reactive<DialogState>({
   resolve: () => {},
 })
 
-export const useMessage = () => {
+export const useMessage = (defaultHost: MaybeRefOrGetter<DialogHost> = 'global') => {
   const alert = (options: string | MessageOptions) => {
     const opts = typeof options === 'string' ? { message: options } : options
     return new Promise<void>((resolve) => {
       state.dialogType = 'alert'
+      state.host = toValue(defaultHost)
       state.title = opts.title || '提示'
       state.message = opts.message
       state.type = opts.type || 'info'
@@ -50,6 +54,7 @@ export const useMessage = () => {
     const opts = typeof options === 'string' ? { message: options } : options
     return new Promise<boolean>((resolve) => {
       state.dialogType = 'confirm'
+      state.host = toValue(defaultHost)
       state.title = opts.title || '确认'
       state.message = opts.message
       state.type = opts.type || 'warning'
@@ -64,6 +69,7 @@ export const useMessage = () => {
     const opts = typeof options === 'string' ? { message: options } : options
     return new Promise<string | null>((resolve) => {
       state.dialogType = 'prompt'
+      state.host = toValue(defaultHost)
       state.title = opts.title || '输入'
       state.message = opts.message
       state.type = opts.type || 'info'

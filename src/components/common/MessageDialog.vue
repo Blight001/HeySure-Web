@@ -1,14 +1,22 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
-import { useMessage } from '@/composables/useMessage'
+import { computed, ref, watch, nextTick } from 'vue'
+import { useMessage, type DialogHost } from '@/composables/useMessage'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 const { state } = useMessage()
-const zIndex = usePopupZIndex(() => state.show)
+const props = withDefaults(defineProps<{
+  host?: DialogHost
+  inline?: boolean
+}>(), {
+  host: 'global',
+  inline: false,
+})
+const visible = computed(() => state.show && state.host === props.host)
+const zIndex = usePopupZIndex(() => visible.value && !props.inline)
 const promptValue = ref('')
 const inputRef = ref<HTMLInputElement | null>(null)
 
-watch(() => state.show, (newVal) => {
+watch(visible, (newVal) => {
   if (newVal) {
     promptValue.value = state.defaultValue || ''
     if (state.dialogType === 'prompt') {
@@ -72,9 +80,14 @@ const getIcon = () => {
     leave-from-class="opacity-100 scale-100"
     leave-to-class="opacity-0 scale-95"
   >
-    <div v-if="state.show" :style="{ zIndex }" class="fixed inset-0 flex items-center justify-center p-4 sm:p-6">
+    <div
+      v-if="visible"
+      :style="{ zIndex: inline ? 200 : zIndex }"
+      :class="inline ? 'absolute' : 'fixed'"
+      class="inset-0 flex items-center justify-center p-4 sm:p-6"
+    >
       <!-- Backdrop -->
-      <div class="fixed inset-0 modal-overlay transition-opacity" @click="handleCancel"></div>
+      <div :class="inline ? 'absolute' : 'fixed'" class="inset-0 modal-overlay transition-opacity" @click="handleCancel"></div>
 
       <!-- Modal Content -->
       <div class="relative acrylic-modal rounded-2xl shadow-2xl w-full max-w-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden">
