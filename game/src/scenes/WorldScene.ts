@@ -156,6 +156,10 @@ export class WorldScene extends Phaser.Scene {
   private camVx = 0
   private camVy = 0
   private camDragging = false
+  /** 双指捏合缩放：按下时记录间距与 zoom，避免与单指拖拽冲突 */
+  private pinching = false
+  private pinchStartDist = 0
+  private pinchStartZoom = 1
   /**
    * 本次按下命中的可交互对象。只有 down 与 up 命中同一对象才算一次有效点击，
    * 防止 iframe 在焦点/可见性变化时补发的“孤立 pointerup”落在悬停对象上误触操作。
@@ -164,7 +168,7 @@ export class WorldScene extends Phaser.Scene {
   /** 拖拽落点高亮 */
   private dragHoveredDeviceId: string | null = null
   private dragHoveredSpawn = false
-  private moveKeys!: Record<string, Phaser.Input.Keyboard.Key>
+  private moveKeys: Record<string, Phaser.Input.Keyboard.Key> | null = null
   private interactPrompt!: Phaser.GameObjects.Text
   private nearestInteractId: number | null = null
   private chatMemberId: number | null = null
@@ -1015,7 +1019,39 @@ export class WorldScene extends Phaser.Scene {
 
     let lastX = 0
     let lastY = 0
+
+    const twoPointersDown = () => {
+      const p1 = this.input.pointer1
+      const p2 = this.input.pointer2
+      return !!(p1?.isDown && p2?.isDown)
+    }
+
+    const pinchDistance = () => {
+      const p1 = this.input.pointer1
+      const p2 = this.input.pointer2
+      return Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y)
+    }
+
+    const beginPinch = () => {
+      this.pinching = true
+      this.camDragging = false
+      this.camVx = 0
+      this.camVy = 0
+      this.pinchStartDist = pinchDistance()
+      this.pinchStartZoom = cam.zoom
+    }
+
+    const endPinch = () => {
+      this.pinching = false
+      this.pinchStartDist = 0
+    }
+
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      // 第二指落下：进入捏合缩放，取消单指拖拽
+      if (twoPointersDown()) {
+        beginPinch()
+        return
+      }
       this.camDragging = true
       this.camVx = 0
       this.camVy = 0
@@ -1023,6 +1059,7 @@ export class WorldScene extends Phaser.Scene {
       lastY = p.y
     })
     this.input.on('pointerup', () => {
+      if (this.pinching && !twoPointersDown()) endPinch()
       this.camDragging = false
       // 释放点不在任何对象上 → 清除按下记录，避免残留命中影响下一次判定
       this.pressedObj = null
@@ -1032,9 +1069,21 @@ export class WorldScene extends Phaser.Scene {
     // 避免回到画布后出现"未按住也在拖动相机 / 残留命中误判点击"。
     this.input.on(Phaser.Input.Events.GAME_OUT, () => {
       this.camDragging = false
+      endPinch()
       this.pressedObj = null
     })
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      // 触屏双指捏合缩放（社会显示移动端主交互）
+      if (twoPointersDown()) {
+        if (!this.pinching) beginPinch()
+        if (this.pinchStartDist > 8) {
+          const scale = pinchDistance() / this.pinchStartDist
+          const next = Phaser.Math.Clamp(this.pinchStartZoom * scale, this.minZoom(), 2)
+          cam.setZoom(next)
+        }
+        return
+      }
+      if (this.pinching) endPinch()
       // 辅助管理员操控模式下相机跟随该角色，拖拽平移让位
       if (!this.camDragging || !p.isDown || this.draggingActor || this.governorMode) return
       const dx = (p.x - lastX) / cam.zoom
@@ -1080,17 +1129,20 @@ export class WorldScene extends Phaser.Scene {
 
   private wireGovernorControls() {
     const kb = this.input.keyboard
-    if (!kb) return
-    // enableCapture=false：不 preventDefault，避免在底部面板输入框里打 WASD 被吞
-    this.moveKeys = kb.addKeys('W,A,S,D', false) as Record<string, Phaser.Input.Keyboard.Key>
-    kb.on('keydown-F', () => this.tryInteract())
-    kb.on('keydown-G', () => {
-      if (!this.isTextInputFocused()) this.setGovernorMode(!this.governorMode)
-    })
-    kb.on('keydown-M', () => {
-      if (!this.isTextInputFocused()) this.overlay.toggleMasterMute()
-    })
+    if (kb) {
+      // enableCapture=false：不 preventDefault，避免在底部面板输入框里打 WASD 被吞
+      this.moveKeys = kb.addKeys('W,A,S,D', false) as Record<string, Phaser.Input.Keyboard.Key>
+      kb.on('keydown-F', () => this.tryInteract())
+      kb.on('keydown-G', () => {
+        if (!this.isTextInputFocused()) this.setGovernorMode(!this.governorMode)
+      })
+      kb.on('keydown-M', () => {
+        if (!this.isTextInputFocused()) this.overlay.toggleMasterMute()
+      })
+    }
+    // 手机无键盘也必须挂上操控按钮 + 虚拟手柄
     this.overlay.initGovernorButton(document.body, this.governorMode, active => this.setGovernorMode(active))
+    this.overlay.initVirtualPad(document.body, () => this.tryInteract())
   }
 
   /** 当前可被操控的辅助管理员对应的 actor */
@@ -1145,7 +1197,7 @@ export class WorldScene extends Phaser.Scene {
     this.playSfx('ui_click', 0.4)
   }
 
-  /** 每帧：把 WSAD 输入喂给辅助管理员 actor，并刷新"按 F 交互"提示 */
+  /** 每帧：把 WSAD / 虚拟摇杆输入喂给辅助管理员 actor，并刷新交互提示 */
   private updateGovernor() {
     const gov = this.governorMode ? this.governorActor() : null
     // 辅助管理员离场（死亡/被删）→ 自动退出操控
@@ -1158,17 +1210,23 @@ export class WorldScene extends Phaser.Scene {
       this.nearestInteractId = null
       return
     }
-    if (!this.isTextInputFocused() && this.moveKeys) {
-      let dx = 0
-      let dy = 0
-      if (this.moveKeys.A?.isDown) dx -= 1
-      if (this.moveKeys.D?.isDown) dx += 1
-      if (this.moveKeys.W?.isDown) dy -= 1
-      if (this.moveKeys.S?.isDown) dy += 1
-      gov.setControlVelocity(dx, dy)
-    } else {
-      gov.setControlVelocity(0, 0)
+    let dx = 0
+    let dy = 0
+    if (!this.isTextInputFocused()) {
+      if (this.moveKeys) {
+        if (this.moveKeys.A?.isDown) dx -= 1
+        if (this.moveKeys.D?.isDown) dx += 1
+        if (this.moveKeys.W?.isDown) dy -= 1
+        if (this.moveKeys.S?.isDown) dy += 1
+      }
+      // 手机虚拟摇杆：有输入时覆盖/叠加到键盘（摇杆优先非零分量）
+      const pad = this.overlay.getPadDirection()
+      if (pad.dx !== 0 || pad.dy !== 0) {
+        dx = pad.dx
+        dy = pad.dy
+      }
     }
+    gov.setControlVelocity(dx, dy)
 
     // 交互提示：高亮最近的存活成员（排除受控辅助管理员自己）
     let best: MemberActor | null = null
@@ -1184,10 +1242,15 @@ export class WorldScene extends Phaser.Scene {
     if (best) {
       this.nearestInteractId = best.memberId
       this.interactPrompt.setPosition(best.x, best.y - 92)
+      // 手机有独立交互按钮，提示文案改为「靠近可交互」
+      const touch = this.overlay.isTouchUi()
+      this.interactPrompt.setText(touch ? '靠近可交互' : '按 F 交互')
       this.interactPrompt.setVisible(true)
+      this.overlay.setPadInteractReady(true)
     } else {
       this.nearestInteractId = null
       this.interactPrompt.setVisible(false)
+      this.overlay.setPadInteractReady(false)
     }
   }
 

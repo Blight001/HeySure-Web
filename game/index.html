@@ -13,9 +13,9 @@
         font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
       }
       /* —— 世界模式：全屏 canvas —— */
-      body.world-mode { overflow: hidden; }
-      body.world-mode #app { position: fixed; inset: 0; }
-      body.world-mode #app canvas { image-rendering: pixelated; }
+      body.world-mode { overflow: hidden; touch-action: none; }
+      body.world-mode #app { position: fixed; inset: 0; touch-action: none; }
+      body.world-mode #app canvas { image-rendering: pixelated; touch-action: none; }
       /* —— 预览模式（?preview=1）—— */
       body.preview-mode { padding: 16px 20px 60px; }
       body.preview-mode h2 {

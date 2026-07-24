@@ -172,12 +172,11 @@ const conversationAutoCompressEnabledValue = computed({
   set: value => emit('update:conversationAutoCompressEnabled', value)
 })
 
-type SettingsCategory = 'model_chat' | 'page' | 'device_test'
+type SettingsCategory = 'model_chat' | 'page'
 const activeSettingsCategory = ref<SettingsCategory>('model_chat')
 const settingsCategories: Array<{ key: SettingsCategory; label: string }> = [
   { key: 'model_chat', label: '模型与对话' },
   { key: 'page', label: '页面设置' },
-  { key: 'device_test', label: '设备端测试' },
 ]
 
 // 系统设置弹窗自动置顶。
@@ -191,10 +190,6 @@ watch(() => props.show, visible => {
 })
 
 watch(selectedModelPresetIndex, resetModelTest)
-
-const openExtensionTestPage = () => {
-  window.open(`${window.location.origin}/extension-test/`, '_blank', 'noopener,noreferrer')
-}
 </script>
 
 <template>
@@ -212,7 +207,7 @@ const openExtensionTestPage = () => {
           </button>
         </div>
 
-        <div class="mb-5 grid grid-cols-3 gap-1 rounded-xl border border-zinc-200 bg-zinc-100/70 p-1 dark:border-zinc-700 dark:bg-zinc-800/70">
+        <div class="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-zinc-200 bg-zinc-100/70 p-1 dark:border-zinc-700 dark:bg-zinc-800/70">
           <button
             v-for="category in settingsCategories"
             :key="category.key"
@@ -316,23 +311,6 @@ const openExtensionTestPage = () => {
                 <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 20-10000，默认 8000。新一轮始终携带工具名和完整参数；普通工具返回跨轮完整保留，仅当单条历史返回超过此上限才会被缩短，防止超大返回撑爆上下文。数据库和聊天界面的原始 MCP 记录不会被截断。</p>
               </div>
             </div>
-          </div>
-
-          <div v-show="activeSettingsCategory === 'device_test'" class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
-            <h4 class="text-sm font-semibold text-zinc-800 mb-3 dark:text-zinc-100 flex items-center gap-2">
-              <AppIcon name="globe" class="w-4 h-4" /> 浏览器插件
-            </h4>
-            <button
-              type="button"
-              class="settings-entry"
-              @click="openExtensionTestPage"
-            >
-              <span>
-                <span class="settings-entry-title">打开插件测试页</span>
-                <span class="settings-entry-desc">在新标签页打开静态测试页，覆盖 observe / 点击 / 输入 / 滚动 / 拖拽 / 等待 / 提取等 MCP 场景</span>
-              </span>
-              <span class="settings-entry-arrow">↗</span>
-            </button>
           </div>
 
           <div v-show="activeSettingsCategory === 'model_chat'" class="order-first rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-800/50">
@@ -461,64 +439,3 @@ const openExtensionTestPage = () => {
     </div>
   </Transition>
 </template>
-
-<style scoped>
-.settings-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid rgb(228 228 231);
-  border-radius: 12px;
-  background: rgb(250 250 250);
-  text-align: left;
-  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
-}
-
-.settings-entry:hover {
-  border-color: rgb(165 180 252);
-  background: rgb(255 255 255);
-  transform: translateY(-1px);
-}
-
-.dark .settings-entry {
-  border-color: rgb(63 63 70);
-  background: rgba(39, 39, 42, 0.5);
-}
-
-.dark .settings-entry:hover {
-  border-color: rgba(129, 140, 248, 0.55);
-  background: rgba(39, 39, 42, 0.85);
-}
-
-.settings-entry-title {
-  display: block;
-  color: rgb(39 39 42);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.dark .settings-entry-title {
-  color: rgb(244 244 245);
-}
-
-.settings-entry-desc {
-  display: block;
-  margin-top: 4px;
-  color: rgb(113 113 122);
-  font-size: 11px;
-}
-
-.dark .settings-entry-desc {
-  color: rgb(161 161 170);
-}
-
-.settings-entry-arrow {
-  flex: 0 0 auto;
-  color: rgb(113 113 122);
-  font-size: 24px;
-  line-height: 1;
-}
-</style>

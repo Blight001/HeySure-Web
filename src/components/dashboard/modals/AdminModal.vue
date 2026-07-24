@@ -2006,14 +2006,16 @@ const avatarFor = (u: AdminUser) =>
           </div>
 
           <!-- ============ Database tab ============ -->
-          <!-- 移动端改为上下分区（避免左右挤压别扭），桌面 lg+ 保持左右 -->
-          <div v-show="tab === 'database'" class="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
-            <!-- Table list -->
-            <div 
-              class="border-b lg:border-b-0 lg:border-r border-zinc-200 dark:border-zinc-800 flex flex-col min-h-0 lg:w-44 lg:shrink-0 max-h-60 lg:max-h-none"
-              :class="{ 'max-h-36': isMobile && !!dbActiveTable }"
+          <!-- 移动端上下分区并占满剩余窗口高度；桌面 lg+ 左右分栏 -->
+          <div v-show="tab === 'database'" class="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0 h-full">
+            <!-- Table list：未选表时占满；已选表时让出下方/右侧给数据行 -->
+            <div
+              class="border-b lg:border-b-0 lg:border-r border-zinc-200 dark:border-zinc-800 flex flex-col min-h-0 lg:w-44 lg:shrink-0 lg:max-h-none lg:flex-none"
+              :class="isMobile
+                ? (dbActiveTable ? 'shrink-0 basis-[min(34vh,280px)] max-h-[min(34vh,280px)]' : 'flex-1')
+                : ''"
             >
-              <div class="flex-1 overflow-y-auto p-2">
+              <div class="flex-1 overflow-y-auto p-2 min-h-0">
                 <div class="flex items-center justify-between px-1 py-1.5">
                   <span class="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">数据表</span>
                   <button
@@ -2058,14 +2060,14 @@ const avatarFor = (u: AdminUser) =>
               </div>
             </div>
 
-            <!-- Rows -->
-            <div class="flex-1 min-w-0 flex flex-col">
+            <!-- Rows：吃掉剩余窗口高度，表格区域可滚动 -->
+            <div class="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
               <div v-if="!dbActiveTable" class="flex-1 flex items-center justify-center text-sm text-zinc-400">
                 请选择数据表
               </div>
               <template v-else>
                 <!-- Toolbar -->
-                <div class="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-zinc-200 dark:border-zinc-800">
+                <div class="shrink-0 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-zinc-200 dark:border-zinc-800">
                   <div class="flex items-center gap-2 min-w-0">
                     <span class="text-sm font-semibold font-mono text-zinc-700 dark:text-zinc-200 truncate">{{ dbActiveTable }}</span>
                     <span class="text-[11px] text-zinc-400">共 {{ dbTotal }} 行</span>
@@ -2089,8 +2091,8 @@ const avatarFor = (u: AdminUser) =>
                 </div>
 
                 <!-- Row table -->
-                <div class="flex-1 overflow-auto">
-                  <table class="text-[10px] sm:text-xs border-collapse">
+                <div class="flex-1 min-h-0 overflow-auto">
+                  <table class="text-[10px] sm:text-xs border-collapse w-full">
                     <thead class="bg-zinc-50 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400 sticky top-0 z-10">
                       <tr>
                         <th class="text-left px-3 py-2 font-medium whitespace-nowrap sticky left-0 bg-zinc-50 dark:bg-zinc-800/60">操作</th>
@@ -2131,7 +2133,7 @@ const avatarFor = (u: AdminUser) =>
                 </div>
 
                 <!-- Pagination -->
-                <div class="flex items-center justify-between px-3 sm:px-4 py-2 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
+                <div class="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2 border-t border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
                   <span>{{ dbPageStart }}–{{ dbPageEnd }} / {{ dbTotal }}</span>
                   <div class="flex items-center gap-2">
                     <button class="px-2 py-1 rounded-lg border border-zinc-200 disabled:opacity-40 hover:border-indigo-200 dark:border-zinc-700" :disabled="dbOffset <= 0" @click="dbPrevPage">上一页</button>

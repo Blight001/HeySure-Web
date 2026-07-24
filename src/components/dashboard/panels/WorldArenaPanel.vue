@@ -90,7 +90,7 @@ onUnmounted(() => {
     <iframe
       ref="gameFrame"
       :src="GAME_URL"
-      class="flex-1 w-full border-0"
+      class="flex-1 w-full border-0 touch-none"
       title="社会显示"
       @load="onFrameLoad"
     />

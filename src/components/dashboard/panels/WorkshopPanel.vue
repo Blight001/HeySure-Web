@@ -511,31 +511,24 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
       </div>
 
       <div class="relative z-10">
+      <!-- 第一行：标题 + 绑定状态 + 操作；第二行：设备说明/编号 + 在线状态标签（离线标签不挤标题） -->
       <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0">
-          <div class="flex items-center gap-1.5">
-            <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="lifecycleClass(device.lifecycle)"></span>
-            <!-- 设备自选图标（注册时上报）；未选择时保持网页默认样式 -->
-            <img
-              v-if="deviceIcon(device)"
-              :src="deviceIcon(device)"
-              class="w-5 h-5 rounded-md object-contain shrink-0 select-none"
-              :class="isOffline(device) ? 'opacity-60 grayscale' : ''"
-              alt=""
-              @error="($event.target as HTMLImageElement).style.display = 'none'"
-            />
-            <h4 class="text-sm font-bold text-zinc-700 dark:text-zinc-200 truncate">{{ deviceDisplayName(device) }}</h4>
-          </div>
-          <div class="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
-            {{ deviceTypeLabel(device) }} · {{ device.platform || 'unknown' }}
-          </div>
+        <div class="min-w-0 flex items-center gap-1.5">
+          <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="lifecycleClass(device.lifecycle)"></span>
+          <!-- 设备自选图标（注册时上报）；未选择时保持网页默认样式 -->
+          <img
+            v-if="deviceIcon(device)"
+            :src="deviceIcon(device)"
+            class="w-5 h-5 rounded-md object-contain shrink-0 select-none"
+            :class="isOffline(device) ? 'opacity-60 grayscale' : ''"
+            alt=""
+            @error="($event.target as HTMLImageElement).style.display = 'none'"
+          />
+          <h4 class="text-sm font-bold text-zinc-700 dark:text-zinc-200 truncate">{{ deviceDisplayName(device) }}</h4>
         </div>
         <div class="flex items-center gap-1 shrink-0">
           <span class="shrink-0 text-[9px] px-1 py-0.5 rounded border font-medium" :class="memberStatusBadgeClass(device)">
             {{ memberStatusLabel(device) }}
-          </span>
-          <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
-            {{ lifecycleLabel(device.lifecycle) }}
           </span>
           <button
             v-if="canCustomizeDevice(device)"
@@ -558,6 +551,14 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
             删除记录
           </button>
         </div>
+      </div>
+      <div class="mt-1 flex items-center justify-between gap-2 min-w-0">
+        <div class="min-w-0 text-[10px] text-zinc-400 dark:text-zinc-500 truncate" :title="`${deviceTypeLabel(device)} · ${device.platform || 'unknown'} · ${device.id}`">
+          {{ deviceTypeLabel(device) }} · {{ device.platform || 'unknown' }} · {{ device.id }}
+        </div>
+        <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
+          {{ lifecycleLabel(device.lifecycle) }}
+        </span>
       </div>
 
       <div class="mt-2 flex gap-1">
@@ -640,9 +641,9 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         />
         <div
           v-else-if="isOffline(device) && (isToolboxDevice(device) || (isEndpointDevice(device) && !isWorkshopDevice(device)))"
-          class="flex-1 flex items-center px-1 text-[10px] text-zinc-400 dark:text-zinc-500"
+          class="flex-1 flex items-center justify-center px-1 text-[10px] text-zinc-400 dark:text-zinc-500"
         >
-          离线，重连后可配置 MCP 权限
+          已离线，无法获取MCP
         </div>
       </div>
       <div v-else-if="device.capabilities.length && !(isWorkshopDevice(device) && device.libraryMcpCatalog)" class="mt-2 flex flex-wrap gap-1">
