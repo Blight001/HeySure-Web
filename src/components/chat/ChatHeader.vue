@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { formatTokenCount } from '@/utils/formatTokenCount'
 
 interface Session {
   id: string
@@ -152,7 +153,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
             @click="normalGroupOpen = !normalGroupOpen"
           >
             <span class="truncate">普通对话 ({{ normalSessions.length }})</span>
-            <span class="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">Token: {{ normalSessionsTokenTotal }}</span>
+            <span class="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">Token: {{ formatTokenCount(normalSessionsTokenTotal) }}</span>
           </button>
           <div v-if="normalGroupOpen" class="px-1 pb-1 space-y-1">
             <button
@@ -179,7 +180,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
               >
                 {{ sessionLineLabel(session) }}
               </button>
-              <span class="shrink-0 text-[10px] text-emerald-700/60 dark:text-emerald-300/70">Token: {{ session.totalTokens || 0 }}</span>
+              <span class="shrink-0 text-[10px] text-emerald-700/60 dark:text-emerald-300/70">Token: {{ formatTokenCount(session.totalTokens) }}</span>
               <button
                 class="shrink-0 text-[11px] px-2 py-0.5 rounded border"
                 :class="session.forwardToBot
@@ -219,7 +220,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
             @click="taskGroupOpen = !taskGroupOpen"
           >
             <span class="truncate">任务 ({{ taskSessions.length }})</span>
-            <span class="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">Token: {{ taskSessionsTokenTotal }}</span>
+            <span class="shrink-0 text-[10px] text-zinc-500 dark:text-zinc-400">Token: {{ formatTokenCount(taskSessionsTokenTotal) }}</span>
           </button>
           <div v-if="taskGroupOpen" class="px-1 pb-1 space-y-1">
             <div
@@ -241,7 +242,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
               >
                 {{ sessionLineLabel(session) }}
               </button>
-              <span class="shrink-0 text-[10px] text-indigo-700/60 dark:text-indigo-300/70">Token: {{ session.totalTokens || 0 }}</span>
+              <span class="shrink-0 text-[10px] text-indigo-700/60 dark:text-indigo-300/70">Token: {{ formatTokenCount(session.totalTokens) }}</span>
               <button
                 class="shrink-0 text-[11px] px-2 py-0.5 rounded border border-indigo-300/60 text-indigo-700/80 hover:bg-indigo-50/50 dark:border-indigo-600/50 dark:text-indigo-300/80 dark:hover:bg-indigo-900/10"
                 @click="emit('rename', session.id)"

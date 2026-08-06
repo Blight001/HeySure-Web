@@ -325,6 +325,15 @@ const openDefaultGovernorChat = () => {
   if (governor) openAgentChat(governor, { floating: true })
 }
 
+const chatSwitchAgents = computed(() => agents.value.filter(agent =>
+  !!agent.aiConfigId && Number(agent.aiConfigId) !== Number(chatTarget.value?.aiConfigId || 0),
+))
+
+const switchChatTarget = (agent: Agent, event: MouseEvent) => {
+  openAgentChat(agent)
+  ;(event.currentTarget as HTMLElement | null)?.closest('details')?.removeAttribute('open')
+}
+
 // 社会显示点击人物：切到数字生命栏目、展开侧栏并定位突出对应成员卡片。
 const onWorldFocusAgent = (aiConfigId: number) => {
   if (!agents.value.some(agent => Number(agent.aiConfigId) === aiConfigId)) return
@@ -1045,10 +1054,37 @@ onUnmounted(() => {
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                   </svg>
                 </button>
-                <div class="min-w-0 flex-1">
-                  <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</div>
-                  <div class="truncate text-[11px] text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</div>
-                </div>
+                <details class="group/member-switch relative min-w-0 flex-1" data-chat-drag-ignore @pointerdown.stop>
+                  <summary
+                    class="flex cursor-pointer list-none items-center gap-1 rounded-md px-1 py-0.5 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 [&::-webkit-details-marker]:hidden"
+                    title="点击切换数字成员"
+                  >
+                    <span class="min-w-0">
+                      <span class="block truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</span>
+                      <span class="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</span>
+                    </span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform group-open/member-switch:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <div class="absolute left-0 top-[calc(100%+6px)] z-[130] w-56 max-w-[70vw] overflow-hidden rounded-lg acrylic-modal p-1 shadow-xl">
+                    <div class="max-h-64 overflow-y-auto">
+                      <button
+                        v-for="agent in chatSwitchAgents"
+                        :key="agent.aiConfigId"
+                        type="button"
+                        class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        @click="switchChatTarget(agent, $event)"
+                      >
+                        <span class="min-w-0 flex-1">
+                          <span class="block truncate text-xs font-medium text-zinc-700 dark:text-zinc-200">{{ agent.name }}</span>
+                          <span class="block truncate text-[10px] text-zinc-400 dark:text-zinc-500">{{ agent.model || '未设置模型' }}</span>
+                        </span>
+                      </button>
+                      <div v-if="chatSwitchAgents.length === 0" class="px-2 py-3 text-center text-xs text-zinc-400">暂无其他成员</div>
+                    </div>
+                  </div>
+                </details>
               </div>
               <div class="min-w-0 max-w-[55%]" data-chat-drag-ignore>
                 <TaskProgressPanel

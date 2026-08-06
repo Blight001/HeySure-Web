@@ -10,6 +10,7 @@ import * as chatApi from '@/api/chat'
 import { listAiConfigs } from '@/api/ai'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
 import { getAuthToken } from '@/api/http'
+import { formatTokenCount } from '@/utils/formatTokenCount'
 import { useChatRunStream, type DeviceTaskEventPayload, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
 import { renderGroupedMcpToolCatalog, shortToolDesc, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { formatDurationMs } from '@/utils/datetime'
@@ -1463,6 +1464,9 @@ const loadTotalTokens = async () => {
     return 0
   }
   emit('totalChatTokensUpdate', data.total_tokens || 0)
+  // The aggregate endpoint does not update the token values stored in the
+  // session-list UI, so refresh those rows after usage changes are persisted.
+  await loadSessions()
   return data.total_tokens || 0
 }
 
@@ -2528,7 +2532,7 @@ onBeforeUnmount(() => {
               >
                 <span class="min-w-0 flex-1 truncate">{{ session.name || BLANK_SESSION_NAME }}</span>
                 <span class="shrink-0 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                  Token {{ session.totalTokens || 0 }}
+                  Token {{ formatTokenCount(session.totalTokens) }}
                 </span>
               </button>
             </div>
