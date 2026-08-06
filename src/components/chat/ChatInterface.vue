@@ -1372,8 +1372,10 @@ const createSession = async (nameInput?: string) => {
   await loadSessions()
   currentSessionId.value = session.id
   chatMessages.value = []
-  // 新会话开场时刷新工具组，让端侧设备目录保持最新。
-  void loadFrontPromptToolSchemas()
+  // 首条消息会在本函数返回后立刻读取 checkedToolGroups；必须等待刷新完成。
+  // 否则 loadFrontPromptToolSchemas 同步清空旧目录后进入异步请求，首发会拿到空工具组，
+  // 只有撤回重发时目录才已加载完成。
+  await loadFrontPromptToolSchemas()
   return session.id
 }
 

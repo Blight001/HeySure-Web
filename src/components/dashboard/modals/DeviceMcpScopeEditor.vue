@@ -17,6 +17,8 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const notice = ref('')
+// Ignore stale scope loads that finish after a newer load or a save.
+let loadRequestId = 0
 const detailOpen = ref(false)
 const detailZIndex = usePopupZIndex(detailOpen)
 
@@ -27,27 +29,24 @@ const aiTestModalDescription = ref('')
 const aiTestModalInputSchema = ref<any>(null)
 
 const load = async () => {
-  if (!props.deviceId) return
+  if (!props.deviceId || saving.value) return
+  const requestId = ++loadRequestId
   loading.value = true
   error.value = ''
   notice.value = ''
   try {
     const data = await getDeviceMcpScope(props.deviceId)
+    if (requestId !== loadRequestId) return
     scope.value = data
-    // selected uses server's `allowed` (reconcile on device:register + dynamic push
-    // now always (re)sets full live capabilities for *any* device type + new MCPs).
-    // For browser_automation plugin devices we explicitly union device-reported
-    // tools (manage_card, save_cookies etc.) with dynamic so 全部勾选 (not just
-    // the dynamic "匹配" subset). Reconnect / new device / added MCPs => auto full-checked in 作坊.
-    // hasRecord becomes true quickly; kept for the ternary + info.
     const caps = data.capabilities || []
     const allowedList = data.allowed || []
     selected.value = new Set(data.hasRecord ? allowedList : caps)
   } catch (err: any) {
+    if (requestId !== loadRequestId) return
     scope.value = null
     error.value = err?.message || 'Agent MCP 权限加载失败'
   } finally {
-    loading.value = false
+    if (requestId === loadRequestId) loading.value = false
   }
 }
 
@@ -137,6 +136,10 @@ const toggleSelectAll = () => {
 
 const save = async () => {
   if (!props.deviceId || !canSave.value) return
+  // Invalidate any earlier GET. A slow initial/refresh load must not overwrite
+  // the authoritative PUT response and briefly show an incorrect 0 selection.
+  ++loadRequestId
+  loading.value = false
   saving.value = true
   error.value = ''
   notice.value = ''
