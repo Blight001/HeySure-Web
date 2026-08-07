@@ -8,6 +8,7 @@ import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
 import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
 import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
+import AutomationCardsPanel from '@/components/workshop/automation/AutomationCardsPanel.vue'
 
 // 远程画面/终端弹窗依赖 @xterm（约 300KB），懒加载避免拖进作坊面板首屏
 const RemoteControlModal = defineAsyncComponent(() => import('@/components/dashboard/RemoteControlModal.vue'))
@@ -486,6 +487,7 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
 
 <template>
   <div ref="panelRootRef" class="relative flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+    <AutomationCardsPanel :devices="devices" />
     <div v-if="devices.length === 0" class="text-center text-zinc-400 text-xs py-10 dark:text-zinc-500">
       暂无已连接设备。
     </div>

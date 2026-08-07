@@ -53,6 +53,7 @@ const MCP_TOOL_TAG_ORDER = [
   '概览',
   'Prompt',
   'MCP',
+  '自动化',
   // 服务端 · 基础能力
   '任务',
   '工作区',
@@ -129,6 +130,7 @@ const getMcpToolFallbackTag = (name: string) => {
   if (hasMcpPrefix(name, 'task')) return '任务'
   if (hasMcpPrefix(name, 'todo')) return '任务'
   if (hasMcpPrefix(name, 'prompt')) return 'Prompt'
+  if (hasMcpPrefix(name, 'automation')) return '自动化'
   // 发消息：message.send+to（to 参数选用户或其他 AI），单独成栏，不再混入「会话管理」。
   if (hasMcpPrefix(name, 'message')) return '发消息'
   if (hasMcpPrefix(name, 'feishu')) return '会话管理'
@@ -163,6 +165,12 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   'prompt.manage': 'Prompt 管理',
   'knowledge.manage': '知识库管理',
   'device+mcp.manage': '管理设备 MCP',
+  'automation.list': '检索自动化卡片',
+  'automation.get': '读取自动化卡片',
+  'automation.run': '运行自动化卡片',
+  'automation.status': '查询自动化状态',
+  'automation.cancel': '取消自动化运行',
+  'automation.manage': '管理自动化卡片',
   'mcp.manage_dynamic_tool': '管理动态 MCP',
   'browser_mcp.manage_dynamic_tool': '管理动态 MCP',
   browser_observe: '页面观察',
@@ -217,6 +225,7 @@ const MCP_NAMESPACE_ZH: Record<string, string> = {
   prompt: 'Prompt',
   file: '文件',
   knowledge: '知识库',
+  automation: '自动化',
   librarian: '图书馆',
   browser: '浏览器',
   mouse: '鼠标',
@@ -361,6 +370,7 @@ const TAG_PARENT: Record<string, string> = {
   '概览': '系统管理',
   'Prompt': '系统管理',
   'MCP': '系统管理',
+  '自动化': '基础能力',
   '任务': '基础能力',
   '工作区': '基础能力',
   '通用': '基础能力',

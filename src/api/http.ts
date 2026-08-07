@@ -79,10 +79,13 @@ const buildUrl = (path: string, query?: RequestOptions['query']) => {
 const parseDetail = async (res: Response, fallback: string): Promise<{ message: string; payload: unknown }> => {
   try {
     const data = await res.json()
-    const detail = (data && typeof data === 'object' ? (data as any).detail : undefined) as
-      | string
-      | undefined
-    return { message: detail ? String(detail) : fallback, payload: data }
+    const detail = data && typeof data === 'object' ? (data as any).detail : undefined
+    const message = typeof detail === 'string'
+      ? detail
+      : detail && typeof detail === 'object'
+        ? String(detail.message || detail.code || (Array.isArray(detail.errors) ? detail.errors.join('；') : '') || fallback)
+        : fallback
+    return { message, payload: data }
   } catch {
     return { message: fallback, payload: null }
   }
