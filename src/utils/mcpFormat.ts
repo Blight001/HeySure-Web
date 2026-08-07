@@ -40,7 +40,21 @@ export interface McpToolBubbleSections {
   params: string
   result: string
   error: string
+  command: McpCommandDetails | null
   copyText: string
+}
+
+export interface McpCommandDetails {
+  command: string
+  cwd: string
+  timeoutSeconds: number | null
+  success: boolean | null
+  summary: string
+  taskId: string
+  exitCode: number | null
+  timedOut: boolean
+  stdout: string
+  stderr: string
 }
 
 const MCP_TOOL_LINE_RE = /^工具[：:]\s*.+$/m
@@ -118,6 +132,58 @@ const buildMcpCopyText = (sections: Pick<McpToolBubbleSections, 'params' | 'resu
   return copyParts.join('\n')
 }
 
+const jsonObject = (raw: string): Record<string, unknown> | null => {
+  try {
+    const value = JSON.parse(raw)
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+const textValue = (value: unknown) => typeof value === 'string' ? value : ''
+
+const numberValue = (value: unknown): number | null => {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+const parseCommandDetails = (params: string, result: string): McpCommandDetails | null => {
+  const args = jsonObject(params)
+  const command = textValue(args?.command).trim()
+  if (!command) return null
+
+  const envelope = jsonObject(result)
+  const nested = envelope?.result && typeof envelope.result === 'object' && !Array.isArray(envelope.result)
+    ? envelope.result as Record<string, unknown>
+    : null
+  const payload = nested || envelope
+  const explicitSuccess = typeof envelope?.success === 'boolean' ? envelope.success : null
+  const exitCode = numberValue(payload?.exit_code)
+
+  return {
+    command,
+    cwd: textValue(args?.cwd) || textValue(payload?.cwd),
+    timeoutSeconds: numberValue(args?.timeout_seconds),
+    success: explicitSuccess ?? (exitCode === null ? null : exitCode === 0),
+    summary: textValue(envelope?.summary),
+    taskId: textValue(envelope?.taskId),
+    exitCode,
+    timedOut: payload?.timed_out === true,
+    stdout: textValue(payload?.stdout) || textValue(payload?.output),
+    stderr: textValue(payload?.stderr),
+  }
+}
+
+const prettyJson = (raw: string) => {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
+  } catch {
+    return raw
+  }
+}
+
 export const parseMcpToolBubbleDetails = (raw?: string, fallbackTool = ''): McpToolBubbleSections => {
   const normalized = String(raw || '')
     .replace(/^\[MCP工具\]\s*/i, '')
@@ -145,7 +211,10 @@ export const parseMcpToolBubbleDetails = (raw?: string, fallbackTool = ''): McpT
     if (!error && stripped.error) error = stripped.error
   }
 
-  const sections = { tool, params, result, error }
+  const command = parseCommandDetails(params, result)
+  params = prettyJson(params)
+  result = prettyJson(result)
+  const sections = { tool, params, result, error, command }
   return {
     ...sections,
     copyText: buildMcpCopyText(sections) || body,
