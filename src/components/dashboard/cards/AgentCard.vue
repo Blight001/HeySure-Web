@@ -4,9 +4,8 @@ import AppIcon from '@/components/common/AppIcon.vue'
 import type { AppIconName } from '@/components/common/AppIcon.vue'
 import { resolveAiAvatarUrl } from '@/utils/aiAvatar'
 
-// 远程画面/终端弹窗依赖 @xterm（约 300KB），懒加载避免拖进侧栏首屏
+// 远程画面弹窗懒加载，避免拖进侧栏首屏
 const RemoteControlModal = defineAsyncComponent(() => import('@/components/dashboard/RemoteControlModal.vue'))
-const RemoteTerminalModal = defineAsyncComponent(() => import('@/components/dashboard/RemoteTerminalModal.vue'))
 
 interface AgentTaskSnapshot {
   jobId: string
@@ -513,8 +512,6 @@ const taskStatusClass = (raw?: string) => {
 }
 
 const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' | 'browser' } | null>(null)
-// 命令行远程（PTY）目标：仅桌面端支持（走服务器 rt:* relay，无需 TURN）。
-const rtTarget = ref<{ deviceId: string; name: string } | null>(null)
 
 const DOUBLE_TAP_DELAY = 320
 let lastTouchTapAt = 0
@@ -783,9 +780,6 @@ const onCardPointerUp = (event: PointerEvent) => {
       <button v-if="agent.desktopAgentConnected" class="text-xs text-sky-600 hover:text-sky-700 px-2 py-1 hover:bg-sky-50 rounded transition-colors dark:text-sky-300 dark:hover:text-sky-200 dark:hover:bg-sky-500/10" title="实时查看并控制该桌面设备" @click.stop="rcTarget = { deviceId: agent.desktopAgentId || '', name: agent.desktopAgentName || agent.name, mode: 'desktop' }">
         桌面控制
       </button>
-      <button v-if="agent.desktopAgentConnected" class="text-xs text-emerald-600 hover:text-emerald-700 px-2 py-1 hover:bg-emerald-50 rounded transition-colors dark:text-emerald-300 dark:hover:text-emerald-200 dark:hover:bg-emerald-500/10" title="打开该桌面设备的远程终端（命令行）" @click.stop="rtTarget = { deviceId: agent.desktopAgentId || '', name: agent.desktopAgentName || agent.name }">
-        命令行
-      </button>
       <button v-if="agent.browserAgentConnected" class="text-xs text-violet-600 hover:text-violet-700 px-2 py-1 hover:bg-violet-50 rounded transition-colors dark:text-violet-300 dark:hover:text-violet-200 dark:hover:bg-violet-500/10" title="实时查看并控制该浏览器" @click.stop="rcTarget = { deviceId: agent.browserAgentId || '', name: agent.browserAgentName || agent.name, mode: 'browser' }">
         浏览器控制
       </button>
@@ -793,13 +787,6 @@ const onCardPointerUp = (event: PointerEvent) => {
         与此 AI 对话
       </button>
     </div>
-
-    <RemoteTerminalModal
-      v-if="rtTarget"
-      :device-id="rtTarget.deviceId"
-      :device-name="rtTarget.name"
-      @close="rtTarget = null"
-    />
 
     <RemoteControlModal
       v-if="rcTarget"

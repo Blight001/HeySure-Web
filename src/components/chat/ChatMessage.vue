@@ -48,10 +48,26 @@ const isFrontPromptMessage = computed(() => {
   return text.startsWith('[前置 Prompt]')
 })
 
+const messageTags = computed(() => new Set(
+  String(props.message.tags || '')
+    .split(',')
+    .map(tag => tag.trim())
+    .filter(Boolean),
+))
+
+const isCompressionNotice = computed(() => {
+  return messageTags.value.has('conversation_summary')
+    || messageTags.value.has('system_notice_compress')
+    || messageTags.value.has('system_notice_compress_started')
+    || messageTags.value.has('system_notice_compress_result')
+})
+
 const isSystemNoticeMessage = computed(() => {
   if (props.message.role !== 'user' && props.message.role !== 'system') return false
   const text = String(props.message.display_text || props.message.content || '').trim()
-  return text.startsWith('[系统提示]') || text.startsWith('【任务完成回执】')
+  return isCompressionNotice.value
+    || text.startsWith('[系统提示]')
+    || text.startsWith('【任务完成回执】')
 })
 
 const isUserMessageBubble = computed(() => {
@@ -61,12 +77,15 @@ const isUserMessageBubble = computed(() => {
 const isCollapsibleSystemNotice = computed(() => {
   if (props.message.role !== 'user' && props.message.role !== 'system') return false
   const text = String(props.message.display_text || props.message.content || '').trim()
-  return text.startsWith('[系统提示]')
+  return isCompressionNotice.value || text.startsWith('[系统提示]')
 })
 
 const systemNoticeBody = computed(() => {
   const text = String(props.message.display_text || props.message.content || '').trim()
-  return text.replace(/^\[系统提示\]\s*/, '').trim()
+  return text
+    .replace(/^\[系统提示\]\s*/, '')
+    .replace(/^\[对话历史摘要\]\s*/, '对话压缩摘要\n\n')
+    .trim()
 })
 
 const systemNoticeTitle = computed(() => {

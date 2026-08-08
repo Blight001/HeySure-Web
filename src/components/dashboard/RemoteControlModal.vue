@@ -22,8 +22,8 @@ const panelRef = ref<HTMLElement | null>(null)
 // drag-resize and by fitPanelToOrientation(), both set imperatively so they are
 // never clobbered by re-renders (e.g. typing in the Android text box).
 const panelConstraints = computed(() => isDesktopLike.value
-  ? { minWidth: '480px', minHeight: '360px', maxWidth: '98vw', maxHeight: '95vh' }
-  : { minWidth: '260px', minHeight: '320px', maxWidth: '96vw', maxHeight: '95vh' })
+  ? { minWidth: 'min(480px, calc(100vw - 16px))', minHeight: 'min(360px, calc(100dvh - 16px))', maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100dvh - 16px)' }
+  : { minWidth: 'min(260px, calc(100vw - 16px))', minHeight: 'min(320px, calc(100dvh - 16px))', maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100dvh - 16px)' })
 
 const {
   status,
@@ -74,7 +74,42 @@ const surfaceRef = ref<HTMLElement | null>(null)
 // natively (down/up), while IME composition is captured invisibly so 中文 still
 // types through without a visible input box.
 const imeRef = ref<HTMLTextAreaElement | null>(null)
+const fullscreenInputRef = ref<HTMLInputElement | null>(null)
 const typing = ref('')
+const fullscreenTyping = ref('')
+const fullscreenInputOpen = ref(false)
+
+const zoomScale = ref(1)
+const zoomX = ref(0)
+const zoomY = ref(0)
+const activeTouches = new Map<number, { x: number; y: number }>()
+let pinchStart: { distance: number; centerX: number; centerY: number; scale: number; x: number; y: number } | null = null
+let twoFingerTap: { x: number; y: number; moved: boolean } | null = null
+let fullscreenSentText = ''
+const keyboardOffset = ref(0)
+const scrollDragging = ref(false)
+let scrollLastY = 0
+const zoomStyle = computed(() => ({
+  transform: `translate3d(${zoomX.value}px, ${zoomY.value - keyboardOffset.value / 2}px, 0) scale(${zoomScale.value})`,
+  transformOrigin: 'center center',
+}))
+const resetZoom = () => { zoomScale.value = 1; zoomX.value = 0; zoomY.value = 0; pinchStart = null; twoFingerTap = null; activeTouches.clear() }
+const touchPair = () => Array.from(activeTouches.values()).slice(0, 2)
+const beginPinch = () => {
+  const [a, b] = touchPair()
+  if (!a || !b) return
+  pinchStart = { distance: Math.hypot(b.x-a.x, b.y-a.y), centerX:(a.x+b.x)/2, centerY:(a.y+b.y)/2, scale:zoomScale.value, x:zoomX.value, y:zoomY.value }
+}
+const updatePinch = () => {
+  const [a,b] = touchPair(); if (!a || !b || !pinchStart) return
+  const distance=Math.max(1,Math.hypot(b.x-a.x,b.y-a.y)); const cx=(a.x+b.x)/2; const cy=(a.y+b.y)/2
+  zoomScale.value=Math.min(4,Math.max(1,pinchStart.scale*distance/Math.max(1,pinchStart.distance)))
+  const moved=Math.hypot(cx-pinchStart.centerX,cy-pinchStart.centerY)>8 || Math.abs(distance-pinchStart.distance)>10
+  if (twoFingerTap && moved) twoFingerTap.moved=true
+  zoomX.value=pinchStart.x+(cx-pinchStart.centerX); zoomY.value=pinchStart.y+(cy-pinchStart.centerY)
+  if (zoomScale.value===1) { zoomX.value=0; zoomY.value=0 }
+}
+
 
 // Live intrinsic resolution of the stream — this is what drives the auto aspect
 // ratio and the window re-fit on rotation. The <video> `resize`/`loadedmetadata`
@@ -239,12 +274,27 @@ const cancelAndroidPointer = () => {
 // ---------------- Pointer ----------------
 const onPointerDown = (event: PointerEvent) => {
   if (status.value !== 'streaming') return
+  if (event.pointerType === 'touch') {
+    activeTouches.set(event.pointerId, { x:event.clientX, y:event.clientY })
+    if (activeTouches.size >= 2) {
+      event.preventDefault(); cancelAndroidPointer()
+      if (isDesktopLike.value) {
+        sendInput({ type:'up', button:'left' })
+        const pos=normalized(event)
+        twoFingerTap=pos ? { ...pos, moved:false } : null
+      }
+      beginPinch(); return
+    }
+  }
   const pos = normalized(event)
   if (!pos) return
   ;(event.target as HTMLElement).setPointerCapture?.(event.pointerId)
   if (isDesktopLike.value) {
-    // Grab keyboard focus into the hidden IME field so typing reaches the remote.
-    imeRef.value?.focus()
+    // Only focus the hidden keyboard sink for an actual mouse/pen. Focusing a
+    // textarea from a touch pointer opens the phone keyboard, causing the brief
+    // keyboard flash seen when controlling a desktop from mobile.
+    if (event.pointerType !== 'touch') imeRef.value?.focus({ preventScroll: true })
+    else imeRef.value?.blur()
     sendInput({ type: 'down', x: pos.x, y: pos.y, button: mouseButton(event.button) })
   } else {
     event.preventDefault()
@@ -266,6 +316,10 @@ const onPointerDown = (event: PointerEvent) => {
 
 const onPointerMove = (event: PointerEvent) => {
   if (status.value !== 'streaming') return
+  if (event.pointerType === 'touch' && activeTouches.has(event.pointerId)) {
+    activeTouches.set(event.pointerId, { x:event.clientX, y:event.clientY })
+    if (activeTouches.size >= 2) { event.preventDefault(); updatePinch(); return }
+  }
   const pos = normalized(event)
   if (!pos) return
   if (isDesktopLike.value) {
@@ -290,6 +344,18 @@ const onPointerMove = (event: PointerEvent) => {
 
 const onPointerUp = (event: PointerEvent) => {
   if (status.value !== 'streaming') return
+  if (event.pointerType === 'touch' && activeTouches.has(event.pointerId)) {
+    const wasPinching=activeTouches.size>=2 || !!pinchStart
+    activeTouches.delete(event.pointerId)
+    if (activeTouches.size<2) pinchStart=null
+    if (wasPinching) {
+      if (isDesktopLike.value && twoFingerTap && !twoFingerTap.moved) {
+        sendInput({ type:'down', x:twoFingerTap.x, y:twoFingerTap.y, button:'right' })
+        sendInput({ type:'up', x:twoFingerTap.x, y:twoFingerTap.y, button:'right' })
+      }
+      twoFingerTap=null; event.preventDefault(); return
+    }
+  }
   const pos = normalized(event) || null
   if (isDesktopLike.value) {
     sendInput({ type: 'up', x: pos?.x, y: pos?.y, button: mouseButton(event.button) })
@@ -412,16 +478,19 @@ const fitPanelToOrientation = () => {
   }
   const w = effectiveWidth.value
   const h = effectiveHeight.value
-  const maxW = window.innerWidth * 0.96
-  const maxH = window.innerHeight * 0.95
+  const viewport = window.visualViewport
+  const viewportWidth = viewport?.width || window.innerWidth
+  const viewportHeight = viewport?.height || window.innerHeight
+  const maxW = Math.max(1, viewportWidth - 16)
+  const maxH = Math.max(1, viewportHeight - 16)
   if (w > 0 && h > 0) {
     // Shape the window after the device aspect, then clamp to the viewport.
     const ratio = w / h
     let height = isPortrait.value ? maxH : Math.min(maxH, window.innerHeight * 0.82)
-    let width = (height - PANEL_CHROME_PX) * ratio + PANEL_SIDE_PAD_PX
+    let width = Math.max(1, height - PANEL_CHROME_PX) * ratio + PANEL_SIDE_PAD_PX
     if (width > maxW) {
       width = maxW
-      height = (width - PANEL_SIDE_PAD_PX) / ratio + PANEL_CHROME_PX
+      height = Math.max(1, width - PANEL_SIDE_PAD_PX) / ratio + PANEL_CHROME_PX
     }
     el.style.width = `${Math.round(Math.min(width, maxW))}px`
     el.style.height = `${Math.round(Math.min(height, maxH))}px`
@@ -446,11 +515,22 @@ watch([effectiveWidth, effectiveHeight], () => {
 // video still letterboxes via object-contain, and clicks stay accurate because
 // normalized() maps against the video's live bounding rect.
 const isMaximized = ref(false)
+const fullscreenMenuOpen = ref(false)
 
 const enterNativeFullscreen = () => {
-  const el = panelRef.value as (HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }) | null
-  const req = el?.requestFullscreen || el?.webkitRequestFullscreen
-  if (el && req) Promise.resolve(req.call(el)).catch(() => { /* fall back to CSS maximize */ })
+  const el = surfaceRef.value as (HTMLElement & {
+    requestFullscreen?: (options?: FullscreenOptions & { navigationUI?: 'auto' | 'show' | 'hide' }) => Promise<void>
+    webkitRequestFullscreen?: () => Promise<void>
+  }) | null
+  if (!el) return
+  // Native fullscreen is required to hide the mobile browser chrome and the
+  // system status bar (time/battery). navigationUI:'hide' asks supporting
+  // browsers to use every available pixel; CSS maximize remains the fallback.
+  if (el.requestFullscreen) {
+    Promise.resolve(el.requestFullscreen({ navigationUI: 'hide' })).catch(() => { /* CSS fallback */ })
+  } else if (el.webkitRequestFullscreen) {
+    Promise.resolve(el.webkitRequestFullscreen()).catch(() => { /* CSS fallback */ })
+  }
 }
 const exitNativeFullscreen = () => {
   const doc = document as Document & {
@@ -462,21 +542,69 @@ const exitNativeFullscreen = () => {
   if (exit) Promise.resolve(exit.call(doc)).catch(() => { /* already exiting */ })
 }
 const toggleMaximize = () => {
+  fullscreenMenuOpen.value = false
+  fullscreenInputOpen.value = false
   isMaximized.value = !isMaximized.value
+  if (!isMaximized.value) resetZoom()
   if (isMaximized.value) enterNativeFullscreen()
   else exitNativeFullscreen()
 }
 // Keep state in sync when the user leaves native fullscreen via ESC / system gesture.
+const openFullscreenInput = () => {
+  fullscreenMenuOpen.value=false; fullscreenInputOpen.value=true
+  fullscreenTyping.value=''; fullscreenSentText=''
+  window.setTimeout(() => fullscreenInputRef.value?.focus({ preventScroll:true }), 0)
+}
+const onFullscreenTextInput = (event: InputEvent) => {
+  if (event.isComposing) return
+  const value=fullscreenTyping.value
+  if (value.startsWith(fullscreenSentText)) {
+    const appended=value.slice(fullscreenSentText.length)
+    if (appended) sendInput({ type:'text', text:appended })
+  } else if (fullscreenSentText.startsWith(value)) {
+    for (let i=0;i<fullscreenSentText.length-value.length;i++) sendInput({ type:'key', action:'down', key:'Backspace' })
+  } else if (value) sendInput({ type:'text', text:value })
+  fullscreenSentText=value
+}
+const onFullscreenCompositionEnd = () => {
+  const appended=fullscreenTyping.value.slice(fullscreenSentText.length)
+  if (appended) sendInput({ type:'text', text:appended })
+  fullscreenSentText=fullscreenTyping.value
+}
+const closeFullscreenInput = () => { fullscreenInputOpen.value=false; keyboardOffset.value=0; fullscreenInputRef.value?.blur() }
+const onScrollStart = (event: PointerEvent) => { scrollDragging.value=true; scrollLastY=event.clientY; (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId); event.preventDefault() }
+const onScrollMove = (event: PointerEvent) => { if (!scrollDragging.value) return; const dy=event.clientY-scrollLastY; if (Math.abs(dy)>=2) { sendInput({ type:'scroll', dx:0, dy:dy*3 }); scrollLastY=event.clientY } event.preventDefault() }
+const onScrollEnd = () => { scrollDragging.value=false }
+const shrinkFromFullscreen = () => {
+  fullscreenMenuOpen.value = false
+  if (isMaximized.value) toggleMaximize()
+}
+const exitRemoteControl = () => {
+  fullscreenMenuOpen.value = false
+  close()
+}
+const onViewportResize = () => {
+  const viewport=window.visualViewport
+  keyboardOffset.value=fullscreenInputOpen.value && viewport ? Math.max(0,window.innerHeight-viewport.height-viewport.offsetTop) : 0
+  if (!isMaximized.value) fitPanelToOrientation()
+}
+
 const onFullscreenChange = () => {
   const doc = document as Document & { webkitFullscreenElement?: Element }
   const active = !!(doc.fullscreenElement || doc.webkitFullscreenElement)
-  if (!active && isMaximized.value) isMaximized.value = false
+  // Some mobile browsers leave native fullscreen when the soft keyboard opens.
+  // Keep CSS fullscreen active so the input and shifted remote picture remain
+  // usable instead of collapsing the controller underneath the keyboard.
+  if (!active && isMaximized.value && !fullscreenInputOpen.value) isMaximized.value = false
 }
 
 onMounted(() => {
   fitPanelToOrientation()
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+  window.addEventListener('resize', onViewportResize)
+  window.addEventListener('orientationchange', onViewportResize)
+  window.visualViewport?.addEventListener('resize', onViewportResize)
   // Safety net for rotation: the <video> resize event isn't reliable on a
   // rotating WebRTC stream, so poll the intrinsic size too. Cheap — the refs
   // (and thus the re-fit watcher) only react when the dimensions truly change.
@@ -489,6 +617,9 @@ onBeforeUnmount(() => {
   if (dimensionPoll) window.clearInterval(dimensionPoll)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  window.removeEventListener('resize', onViewportResize)
+  window.removeEventListener('orientationchange', onViewportResize)
+  window.visualViewport?.removeEventListener('resize', onViewportResize)
   exitNativeFullscreen()
   cancelAndroidPointer()
   stop()
@@ -497,7 +628,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-[120] flex items-center justify-center modal-overlay p-4" @click.self="close">
+    <div class="fixed inset-0 z-[120] flex items-center justify-center modal-overlay p-2 sm:p-4" @click.self="close">
       <div
         ref="panelRef"
         class="flex flex-col rounded-2xl border border-zinc-700/70 bg-zinc-900/80 backdrop-blur-xl shadow-2xl overflow-hidden resize"
@@ -506,7 +637,7 @@ onBeforeUnmount(() => {
         @click.stop
       >
         <!-- 头部 -->
-        <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+        <div v-if="!isMaximized" class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-100 truncate">
               远程控制{{ modeLabel }} · {{ deviceName || deviceId }}
@@ -544,7 +675,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Edge 风格浏览器外壳（仅浏览器控制） -->
-        <div v-if="isBrowser" class="border-b border-zinc-800 bg-zinc-950/60">
+        <div v-if="isBrowser && !isMaximized" class="border-b border-zinc-800 bg-zinc-950/60">
           <!-- 标签栏 -->
           <div class="flex items-end gap-1 px-2 pt-2 overflow-x-auto rc-tabstrip">
             <button
@@ -584,9 +715,35 @@ onBeforeUnmount(() => {
         <div class="relative flex-1 min-h-0 overflow-auto bg-black flex items-center justify-center p-3">
           <div
             ref="surfaceRef"
-            class="relative w-full max-h-full outline-none"
+            class="rc-surface relative w-full max-h-full outline-none overflow-hidden"
+            :class="{ 'rc-surface-fullscreen': isMaximized }"
             :style="aspectStyle"
           >
+            <div v-if="isMaximized" class="rc-fullscreen-actions">
+              <div v-if="fullscreenMenuOpen" class="rc-fullscreen-menu">
+                <button type="button" @click="openFullscreenInput">输入</button>
+                <button type="button" @click="resetZoom">重置画面</button>
+                <button type="button" @click="shrinkFromFullscreen">恢复窗口</button>
+                <button type="button" class="danger" @click="exitRemoteControl">退出远程控制</button>
+              </div>
+              <button type="button" class="rc-fullscreen-bubble" :aria-expanded="fullscreenMenuOpen" aria-label="远程控制菜单" @click="fullscreenMenuOpen=!fullscreenMenuOpen">
+                <span class="rc-bubble-dot"></span><span class="rc-bubble-dot"></span><span class="rc-bubble-dot"></span>
+              </button>
+            </div>
+            <div
+              v-if="isMaximized && isDesktopLike"
+              class="rc-scroll-slider"
+              aria-label="鼠标滚轮"
+              @pointerdown="onScrollStart"
+              @pointermove="onScrollMove"
+              @pointerup="onScrollEnd"
+              @pointercancel="onScrollEnd"
+            ><span></span></div>
+            <form v-if="isMaximized && fullscreenInputOpen" class="rc-fullscreen-input" :style="{ bottom: `${keyboardOffset + 12}px` }" @submit.prevent>
+              <input ref="fullscreenInputRef" v-model="fullscreenTyping" type="text" autocomplete="off" placeholder="输入内容将自动发送" @input="onFullscreenTextInput" @compositionend="onFullscreenCompositionEnd" @keydown.stop />
+              <button type="button" @click="closeFullscreenInput">完成</button>
+            </form>
+            <div class="rc-zoom-layer" :style="zoomStyle">
             <!-- Invisible keyboard/IME sink (desktop). pointer-events:none so it
                  never blocks the mouse; focused programmatically on click. -->
             <textarea
@@ -595,6 +752,8 @@ onBeforeUnmount(() => {
               class="absolute inset-0 z-10 opacity-0 resize-none pointer-events-none"
               autocomplete="off"
               autocapitalize="off"
+              inputmode="none"
+              enterkeyhint="done"
               spellcheck="false"
               @keydown="onKeyDown"
               @keyup="onKeyUp"
@@ -611,10 +770,11 @@ onBeforeUnmount(() => {
               @pointerdown="onPointerDown"
               @pointermove="onPointerMove"
               @pointerup="onPointerUp"
-              @pointercancel="cancelAndroidPointer"
+              @pointercancel="activeTouches.delete($event.pointerId); pinchStart=null; cancelAndroidPointer()"
               @wheel="onWheel"
               @contextmenu.prevent
             ></video>
+            </div>
             <div v-if="status !== 'streaming'" class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400">
               <span v-if="status === 'error'" class="px-3 text-center text-rose-300">{{ errorMessage }}</span>
               <span v-else-if="status === 'ended'">会话已结束</span>
@@ -641,7 +801,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 文本输入（仅安卓：手机无逐键注入，靠整段文本写入聚焦框） -->
-        <div v-if="!isDesktopLike" class="flex items-center gap-2 px-3 py-2 border-t border-zinc-800">
+        <div v-if="!isDesktopLike && !isMaximized" class="flex items-center gap-2 px-3 py-2 border-t border-zinc-800">
           <input
             v-model="typing"
             type="text"
@@ -661,12 +821,12 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 导航键（安卓）/ 操作提示（桌面、浏览器） -->
-        <div v-if="!isDesktopLike" class="grid grid-cols-3 gap-2 px-3 py-3 border-t border-zinc-800">
+        <div v-if="!isDesktopLike && !isMaximized" class="grid grid-cols-3 gap-2 px-3 py-3 border-t border-zinc-800">
           <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="sendKey('back')">返回</button>
           <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="sendKey('home')">主页</button>
           <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="sendKey('recents')">最近</button>
         </div>
-        <div v-else class="px-3 py-2 border-t border-zinc-800 text-[11px] text-zinc-500 leading-relaxed">
+        <div v-else-if="!isMaximized" class="px-3 py-2 border-t border-zinc-800 text-[11px] text-zinc-500 leading-relaxed">
           左键点击/拖拽 · 右键、中键 · 滚轮滚动 · 点击画面后直接用键盘输入（支持 Ctrl/Alt 组合键与中文输入法）
         </div>
       </div>
@@ -688,6 +848,69 @@ onBeforeUnmount(() => {
   max-height: none !important;
   border-radius: 0 !important;
   resize: none !important;
+}
+
+
+.rc-surface:fullscreen, .rc-surface:-webkit-full-screen, .rc-surface-fullscreen {
+  width: 100vw !important; height: 100vh !important; height: 100dvh !important;
+  max-width: none !important; max-height: none !important; aspect-ratio: auto !important;
+  background: #000; display: flex; align-items: center; justify-content: center;
+}
+.rc-zoom-layer { width:100%; height:100%; display:flex; align-items:center; justify-content:center; will-change:transform; }
+.rc-surface:fullscreen .rc-zoom-layer, .rc-surface:-webkit-full-screen .rc-zoom-layer { position:absolute; inset:0; }
+.rc-fullscreen-input { position:absolute; z-index:45; left:max(12px,env(safe-area-inset-left)); right:max(70px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); display:flex; gap:8px; padding:10px; border-radius:14px; background:rgba(24,24,27,.94); }
+.rc-fullscreen-input input { min-width:0; flex:1; border:1px solid #52525b; border-radius:9px; background:#27272a; color:white; padding:9px 11px; font-size:16px; }
+.rc-fullscreen-input button { border-radius:9px; background:#4f46e5; color:white; padding:8px 12px; font-size:13px; }
+.rc-fullscreen-input button:last-child { background:#3f3f46; }
+.rc-scroll-slider { position:absolute; z-index:42; right:max(10px,env(safe-area-inset-right)); top:50%; transform:translateY(-50%); width:42px; height:132px; border:1px solid rgba(255,255,255,.24); border-radius:999px; background:rgba(24,24,27,.68); backdrop-filter:blur(8px); touch-action:none; display:flex; align-items:center; justify-content:center; }
+.rc-scroll-slider::before { content:'↕'; color:rgba(255,255,255,.7); font-size:18px; }
+.rc-scroll-slider span { position:absolute; width:28px; height:38px; border-radius:999px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.25); }
+
+.rc-fullscreen-actions {
+  position: absolute;
+  z-index: 40;
+  right: max(12px, env(safe-area-inset-right));
+  top: max(18px, env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rc-fullscreen-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 9999px;
+  color: white;
+  background: rgba(24,24,27,.76);
+  box-shadow: 0 8px 24px rgba(0,0,0,.38);
+  backdrop-filter: blur(10px);
+  touch-action: manipulation;
+}
+.rc-bubble-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.rc-fullscreen-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 12px;
+  background: rgba(24,24,27,.92);
+  box-shadow: 0 12px 30px rgba(0,0,0,.45);
+  backdrop-filter: blur(12px);
+}
+.rc-fullscreen-menu button { padding: 11px 14px; color: #f4f4f5; font-size: 13px; text-align: left; white-space: nowrap; }
+.rc-fullscreen-menu button + button { border-top: 1px solid rgba(255,255,255,.1); }
+.rc-fullscreen-menu button:active { background: rgba(255,255,255,.12); }
+.rc-fullscreen-menu .danger { color: #fda4af; }
+
+@media (max-width: 900px), (max-height: 520px) {
+  .rc-panel-maximized > div:nth-of-type(2) { padding: 0 !important; overflow: hidden !important; }
+  .rc-panel-maximized video { border-radius: 0 !important; }
 }
 
 .rc-navbtn {

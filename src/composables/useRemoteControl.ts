@@ -4,11 +4,12 @@ import { getAuthToken } from '@/api/http'
 import { fetchIceServers, DEFAULT_ICE_SERVERS, type IceServer } from '@/api/rtc'
 
 /**
- * Drives one human-operated remote-control session against an Android device.
+ * Drives one human-operated remote-control session against an Android, desktop,
+ * or browser device.
  *
  * Transport split (see server ``connector_runtime/dispatch/remote_control.py``):
- *   - Signaling rides a Socket.IO connection to the same gateway the dashboard
- *     uses. The browser is the **answerer**; the device offers.
+ *   - Signaling rides a Socket.IO connection to connector-runtime, where endpoint
+ *     agents are registered. The browser is the **answerer**; the device offers.
  *   - Media (the live screen) and input (taps/swipes over a ``control``
  *     DataChannel) ride a peer-to-peer WebRTC link — they never touch the server.
  *
@@ -17,6 +18,18 @@ import { fetchIceServers, DEFAULT_ICE_SERVERS, type IceServer } from '@/api/rtc'
  */
 
 export type RcStatus = 'idle' | 'connecting' | 'streaming' | 'error' | 'ended'
+
+// Endpoint agents live on connector-runtime (:3002), not the API gateway used by
+// the rest of the dashboard. Both peers must use the same Socket.IO process
+// because remote-control sessions and live agent sockets are held in memory.
+const connectorSocketUrl = () => {
+  const url = new URL(window.location.href)
+  url.port = '3002'
+  url.pathname = ''
+  url.search = ''
+  url.hash = ''
+  return url.origin
+}
 
 export type RcMode = 'android' | 'desktop' | 'browser'
 export type RcMouseButton = 'left' | 'right' | 'middle'
@@ -168,7 +181,7 @@ export const useRemoteControl = () => {
     if (status.value === 'connecting' || status.value === 'streaming') return
     status.value = 'connecting'
     errorMessage.value = ''
-    socket = io('/', { transports: ['websocket', 'polling'] })
+    socket = io(connectorSocketUrl(), { transports: ['websocket', 'polling'] })
 
     socket.on('connect', () => {
       socket?.emit('rc:start', { deviceId, token: getAuthToken() })
