@@ -29,6 +29,7 @@ const SystemSettingsPanel = defineAsyncComponent(() => import('./panels/SystemSe
 const LeftSidebarPanel = defineAsyncComponent(() => import('./panels/LeftSidebarPanel.vue'))
 const WorldArenaPanel = defineAsyncComponent(() => import('./panels/WorldArenaPanel.vue'))
 const ChatInterface = defineAsyncComponent(() => import('@/components/chat/ChatInterface.vue'))
+const FloatingAgentChatWindow = defineAsyncComponent(() => import('./FloatingAgentChatWindow.vue'))
 const TaskProgressPanel = defineAsyncComponent(() => import('@/components/chat/TaskProgressPanel.vue'))
 const McpToolsModal = defineAsyncComponent(() => import('./modals/McpToolsModal.vue'))
 const DeviceDynamicToolsModal = defineAsyncComponent(() => import('./modals/DeviceDynamicToolsModal.vue'))
@@ -81,6 +82,15 @@ const agentChatZIndex = computed(() =>
 const chatInitialSessionId = ref('')
 const chatCurrentSessionId = ref('')
 const chatTaskPlanRefreshSignal = ref(0)
+type FloatingAgentChat = {
+  windowId: string
+  agent: Agent
+  initialSessionId: string
+  zIndex: number
+}
+const floatingAgentChats = ref<FloatingAgentChat[]>([])
+let floatingChatSequence = 0
+let floatingChatZIndex = PINNED_POPUP_Z_INDEX + 10
 let defaultGovernorChatHandled = false
 const adminModalOpen = ref(false)
 const deviceDocOpen = ref(false)
@@ -267,6 +277,10 @@ const findFreshAgent = (agent: Agent | null) => {
 const syncOpenAgentReferences = () => {
   chatTarget.value = findFreshAgent(chatTarget.value)
   taskListTarget.value = findFreshAgent(taskListTarget.value)
+  floatingAgentChats.value = floatingAgentChats.value.map(window => ({
+    ...window,
+    agent: findFreshAgent(window.agent) || window.agent,
+  }))
 }
 
 const refreshDashboardAfterSave = async () => {
@@ -315,8 +329,51 @@ const resolveActiveRunSessionId = (agent: Agent) => {
   return ''
 }
 
+const focusFloatingAgentChat = (windowId: string) => {
+  const target = floatingAgentChats.value.find(window => window.windowId === windowId)
+  if (!target) return
+  floatingChatZIndex += 1
+  target.zIndex = floatingChatZIndex
+}
+
+const closeFloatingAgentChat = (windowId: string) => {
+  floatingAgentChats.value = floatingAgentChats.value.filter(window => window.windowId !== windowId)
+}
+
+const openFloatingAgentChat = (agent: Agent, initialSessionId = resolveActiveRunSessionId(agent)) => {
+  const configId = Number(agent.aiConfigId)
+  if (!Number.isFinite(configId) || configId <= 0) return
+  const existing = floatingAgentChats.value.find(window => Number(window.agent.aiConfigId) === configId)
+  if (existing) {
+    focusFloatingAgentChat(existing.windowId)
+    return
+  }
+  floatingChatSequence += 1
+  floatingChatZIndex += 1
+  floatingAgentChats.value.push({
+    windowId: `ai-${configId}-${floatingChatSequence}`,
+    agent,
+    initialSessionId,
+    zIndex: floatingChatZIndex,
+  })
+}
+
 const openAgentChat = (agent: Agent, options: { floating?: boolean } = {}) => {
   if (!agent.aiConfigId) return
+  const targetConfigId = Number(agent.aiConfigId)
+  const existingFloating = floatingAgentChats.value.find(window => Number(window.agent.aiConfigId) === targetConfigId)
+  if (existingFloating) {
+    focusFloatingAgentChat(existingFloating.windowId)
+    return
+  }
+  if (
+    chatModalOpen.value
+    && chatFloating.value
+    && Number(chatTarget.value?.aiConfigId || 0) !== targetConfigId
+  ) {
+    openFloatingAgentChat(agent)
+    return
+  }
   defaultGovernorChatHandled = true
   chatTarget.value = agent
   selectedFiles.value = []
@@ -328,6 +385,23 @@ const openAgentChat = (agent: Agent, options: { floating?: boolean } = {}) => {
   }
   chatModalOpen.value = true
   if (chatFloating.value) void positionChatFloatAtBottomRight()
+}
+
+const expandFloatingAgentChat = (windowId: string) => {
+  const target = floatingAgentChats.value.find(window => window.windowId === windowId)
+  if (!target) return
+  if (chatModalOpen.value && chatTarget.value?.aiConfigId && Number(chatTarget.value.aiConfigId) !== Number(target.agent.aiConfigId)) {
+    openFloatingAgentChat(chatTarget.value, chatCurrentSessionId.value || chatInitialSessionId.value)
+  }
+  closeFloatingAgentChat(windowId)
+  chatFloating.value = false
+  closeChatPip()
+  chatTarget.value = target.agent
+  selectedFiles.value = []
+  chatInitialSessionId.value = target.initialSessionId
+  chatCurrentSessionId.value = ''
+  chatTaskPlanRefreshSignal.value = 0
+  chatModalOpen.value = true
 }
 
 const openDefaultGovernorChat = () => {
@@ -1152,6 +1226,7 @@ onUnmounted(() => {
                 :mcp-catalog-refresh-key="chatMcpCatalogRefreshKey"
                 :floating-layer="chatFloating && !chatPipActive"
                 :embedded-dialogs="chatFloating || chatPipActive"
+                dialog-host="chat-main"
                 :selectedFiles="selectedFiles"
                 :allFiles="allFiles"
                 :selectable-file-root="aiWorkspaceDirname(chatTarget)"
@@ -1165,12 +1240,33 @@ onUnmounted(() => {
             </div>
             <!-- 悬浮/PiP 对话使用独立的 chat 弹窗宿主：确认、提示和输入框只覆盖
                  当前聊天面板；页面级设置弹窗仍留在小窗下方。 -->
-            <MessageDialog v-if="chatFloating || chatPipActive" host="chat" inline />
+            <MessageDialog v-if="chatFloating || chatPipActive" host="chat-main" inline />
           </div>
           </Teleport>
         </div>
       </Transition>
     </Teleport>
+
+    <FloatingAgentChatWindow
+      v-for="(window, index) in floatingAgentChats"
+      :key="window.windowId"
+      :window-id="window.windowId"
+      :agent="window.agent"
+      :initial-session-id="window.initialSessionId || undefined"
+      :current-user-id="Number(currentUser?.id) || undefined"
+      :mcp-dynamic-rule="mcpDynamicRule"
+      :mcp-catalog-refresh-key="chatMcpCatalogRefreshKey"
+      :all-files="allFiles"
+      :selectable-file-root="aiWorkspaceDirname(window.agent)"
+      :cascade-index="index + 1"
+      :z-index="window.zIndex"
+      @focus="focusFloatingAgentChat(window.windowId)"
+      @close="closeFloatingAgentChat(window.windowId)"
+      @expand="expandFloatingAgentChat(window.windowId)"
+      @open-settings="openAgentSettings(window.agent)"
+      @refresh-files="loadProjectContext"
+      @total-chat-tokens-update="syncChatTokensToAgents"
+    />
 
     <AiConfigModal
       :show="aiConfigModalOpen"

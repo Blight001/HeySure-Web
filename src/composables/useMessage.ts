@@ -2,7 +2,7 @@ import { reactive, toValue, type MaybeRefOrGetter } from 'vue'
 
 type MessageType = 'info' | 'success' | 'warning' | 'error'
 type DialogType = 'alert' | 'confirm' | 'prompt'
-export type DialogHost = 'global' | 'chat'
+export type DialogHost = string
 
 interface MessageOptions {
   title?: string

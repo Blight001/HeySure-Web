@@ -74,6 +74,8 @@ interface Props {
   floatingLayer?: boolean
   /** 悬浮/PiP 对话把确认、提示和输入框限制在聊天面板内部。 */
   embeddedDialogs?: boolean
+  /** 独立悬浮聊天使用唯一宿主，避免多个窗口重复显示同一确认框。 */
+  dialogHost?: string
   stripMarkdownSymbols?: boolean
   selectedFiles: string[]
   allFiles: string[]
@@ -81,7 +83,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const { alert, confirm, prompt } = useMessage(() => props.embeddedDialogs ? 'chat' : 'global')
+const { alert, confirm, prompt } = useMessage(() => props.embeddedDialogs ? (props.dialogHost || 'chat') : 'global')
 const emit = defineEmits<{
   (e: 'update:selectedFiles', value: string[]): void
   (e: 'update:currentSessionId', value: string): void
