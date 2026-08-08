@@ -8,6 +8,7 @@ import { useDashboardData } from '@/composables/dashboard/useDashboardData'
 import { useDashboardUi } from '@/composables/dashboard/useDashboardUi'
 import { useDashboardSystemSettings } from '@/composables/dashboard/useDashboardSystemSettings'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
 import { BACKGROUND_POPUP_Z_INDEX, PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import {
   DASHBOARD_REFRESH_FAST_MS,
@@ -54,6 +55,9 @@ const emit = defineEmits<{
 }>()
 
 const { isMobile } = useBreakpoint()
+// Automatic chat opening is decided from the initial viewport only. Resizing a
+// desktop browser later must not unexpectedly open a conversation.
+const autoOpenGovernorChatOnLoad = isMobile.value
 // 移动端单窗格 Tab：console = 左侧控制台面板，arena = 社会显示（游戏画面）
 const mobileTab = ref<'console' | 'arena'>('console')
 // 社会显示 iframe 较重，移动端懒加载：首次切到该 Tab 才挂载，之后用 v-show 保活避免重载
@@ -405,7 +409,7 @@ const expandFloatingAgentChat = (windowId: string) => {
 }
 
 const openDefaultGovernorChat = () => {
-  if (defaultGovernorChatHandled || chatModalOpen.value) return
+  if (!autoOpenGovernorChatOnLoad || defaultGovernorChatHandled || chatModalOpen.value) return
   const governor = agents.value.find(agent =>
     agent.aiRole === 'assistant_admin' || String(agent.name || '').trim() === '总督',
   )
@@ -416,9 +420,51 @@ const chatSwitchAgents = computed(() => agents.value.filter(agent =>
   !!agent.aiConfigId && Number(agent.aiConfigId) !== Number(chatTarget.value?.aiConfigId || 0),
 ))
 
-const switchChatTarget = (agent: Agent, event: MouseEvent) => {
+const chatMemberSwitcherRef = ref<HTMLElement | null>(null)
+const chatMemberMenuRef = ref<HTMLElement | null>(null)
+const chatMemberMenuOpen = ref(false)
+const chatMemberMenuStyle = ref<Record<string, string | number>>({})
+
+const closeChatMemberMenu = () => {
+  chatMemberMenuOpen.value = false
+}
+
+const positionChatMemberMenu = () => {
+  const trigger = chatMemberSwitcherRef.value
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
+  const view = trigger.ownerDocument.defaultView || window
+  const width = Math.min(224, Math.max(180, view.innerWidth - 24))
+  const left = Math.max(12, Math.min(rect.left, view.innerWidth - width - 12))
+  const spaceBelow = view.innerHeight - rect.bottom - 12
+  const openUpward = spaceBelow < 180 && rect.top > spaceBelow
+  chatMemberMenuStyle.value = {
+    left: `${left}px`,
+    width: `${width}px`,
+    top: openUpward ? 'auto' : `${rect.bottom + 6}px`,
+    bottom: openUpward ? `${view.innerHeight - rect.top + 6}px` : 'auto',
+    zIndex: (chatFloating.value || chatPipActive.value)
+      ? PINNED_POPUP_Z_INDEX + 300
+      : BACKGROUND_POPUP_Z_INDEX + 300,
+  }
+}
+
+const toggleChatMemberMenu = async () => {
+  chatMemberMenuOpen.value = !chatMemberMenuOpen.value
+  if (!chatMemberMenuOpen.value) return
+  await nextTick()
+  positionChatMemberMenu()
+}
+
+useDismissibleLayer({
+  open: chatMemberMenuOpen,
+  roots: [chatMemberSwitcherRef, chatMemberMenuRef],
+  onDismiss: closeChatMemberMenu,
+})
+
+const switchChatTarget = (agent: Agent) => {
+  closeChatMemberMenu()
   openAgentChat(agent)
-  ;(event.currentTarget as HTMLElement | null)?.closest('details')?.removeAttribute('open')
 }
 
 // 社会显示点击人物：切到数字生命栏目、展开侧栏并定位突出对应成员卡片。
@@ -448,6 +494,7 @@ const onWorldFocusDevice = (deviceId: string) => {
 }
 
 const closeAgentChat = () => {
+  closeChatMemberMenu()
   chatModalOpen.value = false
   chatInitialSessionId.value = ''
   chatCurrentSessionId.value = ''
@@ -824,6 +871,11 @@ const handleDashboardVisibilityChange = () => {
   void refreshDashboardLive(refreshOpenTaskPanel)
 }
 
+const handleDashboardResize = () => {
+  clampChatFloatIntoView()
+  if (chatMemberMenuOpen.value) positionChatMemberMenu()
+}
+
 watch(
   () => dashboardSocketConnected.value,
   (connected, previous) => {
@@ -854,13 +906,13 @@ onMounted(async () => {
   openDefaultGovernorChat()
   startDashboardRefreshLoop()
   document.addEventListener('visibilitychange', handleDashboardVisibilityChange)
-  window.addEventListener('resize', clampChatFloatIntoView)
+  window.addEventListener('resize', handleDashboardResize)
 })
 
 onUnmounted(() => {
   stopDashboardRefreshLoop()
   document.removeEventListener('visibilitychange', handleDashboardVisibilityChange)
-  window.removeEventListener('resize', clampChatFloatIntoView)
+  window.removeEventListener('resize', handleDashboardResize)
   chatResizeObserver?.disconnect()
   chatResizeObserver = null
   endChatDrag()
@@ -1140,27 +1192,44 @@ onUnmounted(() => {
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                   </svg>
                 </button>
-                <details class="group/member-switch relative w-fit min-w-0 max-w-[clamp(7rem,28vw,18rem)] shrink-0" data-chat-drag-ignore @pointerdown.stop>
-                  <summary
-                    class="flex w-fit max-w-full cursor-pointer list-none items-center gap-1 rounded-md px-1 py-0.5 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 [&::-webkit-details-marker]:hidden"
+                <div
+                  ref="chatMemberSwitcherRef"
+                  class="relative w-fit min-w-0 max-w-[clamp(7rem,28vw,18rem)] shrink-0"
+                  data-chat-drag-ignore
+                  @pointerdown.stop
+                >
+                  <button
+                    type="button"
+                    class="flex w-fit max-w-full cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-left hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80"
                     title="点击切换数字成员"
+                    :aria-expanded="chatMemberMenuOpen"
+                    @click.stop="toggleChatMemberMenu"
                   >
                     <span class="min-w-0">
                       <span class="block truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</span>
                       <span class="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">{{ chatTarget.model || '未设置' }}</span>
                     </span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform group-open/member-switch:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform" :class="chatMemberMenuOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
-                  </summary>
-                  <div class="absolute left-0 top-[calc(100%+6px)] z-[130] w-56 max-w-[70vw] overflow-hidden rounded-lg acrylic-modal p-1 shadow-xl">
+                  </button>
+                </div>
+                <Teleport :to="chatPipContainer ?? 'body'">
+                  <div
+                    v-if="chatMemberMenuOpen"
+                    ref="chatMemberMenuRef"
+                    class="fixed max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg acrylic-modal p-1 shadow-2xl"
+                    :style="chatMemberMenuStyle"
+                    data-chat-drag-ignore
+                    @pointerdown.stop
+                  >
                     <div class="max-h-64 overflow-y-auto">
                       <button
                         v-for="agent in chatSwitchAgents"
                         :key="agent.aiConfigId"
                         type="button"
                         class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        @click="switchChatTarget(agent, $event)"
+                        @click="switchChatTarget(agent)"
                       >
                         <span class="min-w-0 flex-1">
                           <span class="block truncate text-xs font-medium text-zinc-700 dark:text-zinc-200">{{ agent.name }}</span>
@@ -1170,7 +1239,7 @@ onUnmounted(() => {
                       <div v-if="chatSwitchAgents.length === 0" class="px-2 py-3 text-center text-xs text-zinc-400">暂无其他成员</div>
                     </div>
                   </div>
-                </details>
+                </Teleport>
               </div>
               <div class="min-w-0 flex-1 self-center" data-chat-drag-ignore>
                 <TaskProgressPanel

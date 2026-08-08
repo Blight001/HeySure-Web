@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { formatTokenCount } from '@/utils/formatTokenCount'
+import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
 
 interface Session {
   id: string
@@ -122,16 +123,16 @@ const toggleOpen = () => {
   else clearSessionSelection()
 }
 
-const onDocumentClick = (event: MouseEvent) => {
-  if (!open.value) return
-  if (!rootRef.value) return
-  if (rootRef.value.contains(event.target as Node)) return
+const closeDropdown = () => {
   open.value = false
   clearSessionSelection()
 }
 
-onMounted(() => document.addEventListener('click', onDocumentClick))
-onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick))
+useDismissibleLayer({
+  open,
+  roots: [rootRef],
+  onDismiss: closeDropdown,
+})
 </script>
 
 <template>

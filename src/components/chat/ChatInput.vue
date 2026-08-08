@@ -2,6 +2,7 @@
 import FileSelector from './FileSelector.vue'
 import type { McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
 
 const props = defineProps<{
   modelValue: string
@@ -43,6 +44,7 @@ const hasContent = computed(() => !!inputValue.value.trim())
 const showStop = computed(() => props.isTyping && !hasContent.value)
 const canSend = computed(() => hasContent.value)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const rootRef = ref<HTMLElement | null>(null)
 const TEXTAREA_MIN_HEIGHT = 36
 const TEXTAREA_MAX_HEIGHT = 146
 
@@ -90,6 +92,12 @@ const handleInput = (e: Event) => {
 
 onMounted(() => resizeTextarea())
 
+useDismissibleLayer({
+  open: () => props.isFileSelectorOpen,
+  roots: [rootRef],
+  onDismiss: () => emit('closeFileSelector'),
+})
+
 watch(() => props.modelValue, async () => {
   await nextTick()
   resizeTextarea()
@@ -97,7 +105,7 @@ watch(() => props.modelValue, async () => {
 </script>
 
 <template>
-  <div class="pt-2">
+  <div ref="rootRef" class="pt-2">
     <div
       class="relative flex items-end gap-1.5 rounded-2xl acrylic-input px-1.5 py-1.5 shadow-sm transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900/60"
     >
