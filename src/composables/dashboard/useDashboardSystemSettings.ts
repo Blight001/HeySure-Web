@@ -43,11 +43,9 @@ const clampMcpHistoryResultChars = (value: unknown) => {
 
 const DEFAULT_MCP_NAMESPACE_HINTS = JSON.stringify({
   mcp: 'MCP 自省入口。使用 mcp.describe+tool 的 tool、tools 或 query 参数发现工具并查询参数。',
-  task: '后台任务系统。task.manage 用于查看、创建、更新和删除定时/无人值守任务，需要绑定图书馆。',
+  member: 'AI 数字成员管理。member.manage 用于查询、创建和编辑成员及其任务、Token 上限和设备绑定，需要绑定图书馆；成员删除只允许人在控制台确认。',
   todo: '统一计划管理。todo.manage 用 create/get/edit/delete 创建、查看、推进或删除计划；阶段完成用 edit，最后阶段更新后系统自动收尾。',
   workspace: '工作区与命令执行。用于检查文件、运行只读诊断命令或执行用户明确要求的工作区操作。',
-  admin: '系统与 Agent 总览。用于查看在线智能体、运行状态和系统概况。',
-  prompt: 'Prompt 管理。用于读取或按权限修改 AI / 系统 prompt。',
   conversation: '会话管理。用于查找、新建、删除会话或按请求清理上下文。',
   ai: 'AI 间通信。用于向其他 AI 发送询问、回复、通知或协作消息。',
   user: '用户通知。用于向用户发送异步消息。',

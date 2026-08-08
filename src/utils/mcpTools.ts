@@ -157,12 +157,10 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   'mcp.describe+tool': '工具说明',
   'workspace.search': '联网搜索',
   'workspace.run+command': '执行命令',
-  'admin.manage': '系统总览',
-  'task.manage': '任务管理',
+  'member.manage': 'AI 数字成员管理',
   'todo.manage': '计划管理',
   'message.send+to': '发消息',
   'conversation.manage': '会话管理',
-  'prompt.manage': 'Prompt 管理',
   'knowledge.manage': '知识库管理',
   'device+mcp.manage': '管理设备 MCP',
   'automation.list': '检索自动化卡片',
@@ -218,6 +216,7 @@ const MCP_NAMESPACE_ZH: Record<string, string> = {
   mcp: 'MCP',
   workspace: '工作区',
   admin: '管理',
+  member: 'AI 成员',
   task: '任务',
   todo: '计划',
   message: '消息',
@@ -308,7 +307,7 @@ const getMcpToolZhTag = (name: string) => getMcpToolFallbackTag(name)
 
 const MEMORY_PREFIX_ORDER = ['memory']
 const TASK_TOOL_ORDER = [
-  'task.manage',
+  'member.manage',
   'todo.manage',
 ]
 

@@ -53,7 +53,7 @@ export interface KnowledgeEntryItem {
   intrinsic_properties?: IntrinsicMcpView
   // 工具箱：每个 AI 默认即可用的系统固定 MCP（无需绑定图书馆）。
   toolbox?: IntrinsicMcpView
-  // 完整图书馆 MCP：任务管理与治理类注册表工具（含 task.manage / knowledge.manage）。
+  // 完整图书馆 MCP：成员管理与治理类注册表工具（含 member.manage / knowledge.manage）。
   library_mcp?: LibraryMcpFullView
   intrinsic_personas?: {
     description: string
