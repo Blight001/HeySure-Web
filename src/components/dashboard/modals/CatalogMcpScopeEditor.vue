@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import McpScopeToolTable from './McpScopeToolTable.vue'
 
 export interface CatalogMcpTool {
   name: string
@@ -68,6 +69,14 @@ const toolParams = (name: string) => getMcpToolParamRows({
   inputSchema: toolByName(name)?.inputSchema || {},
   destructive: !!toolByName(name)?.destructive,
 })
+
+const toolListItems = computed(() => capabilities.value.map(name => ({
+  name,
+  label: label(name),
+  description: toolDescription(name),
+  params: toolParams(name),
+  destructive: !!toolByName(name)?.destructive,
+})))
 
 const toggle = (tool: string) => {
   if (props.readonly) return
@@ -142,9 +151,11 @@ const closeDetail = () => { detailOpen.value = false }
           >
             <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
               <div class="min-w-0">
-                <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">MCP 权限详情</div>
+                <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                  {{ readonly ? 'MCP 权限详情' : '设置 MCP 权限范围' }}
+                </div>
                 <div class="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
-                  {{ subtitle || title }} · {{ capabilities.length }} 个工具
+                  {{ subtitle || title }} · {{ capabilities.length }} 个工具 · 悬浮预览，点击固定详情
                 </div>
               </div>
               <button
@@ -157,67 +168,18 @@ const closeDetail = () => { detailOpen.value = false }
             </div>
 
             <div class="min-h-0 flex-1 overflow-y-auto p-4">
-              <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <component
-                  :is="readonly ? 'div' : 'label'"
-                  v-for="tool in capabilities"
-                  :key="tool"
-                  class="flex h-full items-start gap-2 rounded-lg border px-2.5 py-2 transition-colors"
-                  :class="[
-                    readonly
-                      ? 'border-zinc-200 bg-white/75 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300'
-                      : selectedSet.has(tool)
-                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700 cursor-pointer select-none dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-200'
-                        : 'border-zinc-200 bg-white/75 text-zinc-600 cursor-pointer select-none dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300',
-                  ]"
-                >
-                  <input
-                    v-if="!readonly"
-                    type="checkbox"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-indigo-500"
-                    :checked="selectedSet.has(tool)"
-                    @change="toggle(tool)"
-                  />
-                  <span class="min-w-0">
-                    <span class="flex items-center gap-1.5 text-[10px] font-mono font-semibold break-all" :title="`${label(tool)} (${tool})`">
-                      {{ label(tool) }}
-                      <span
-                        v-if="toolByName(tool)?.destructive"
-                        class="rounded bg-amber-100 px-1 py-0.5 font-sans text-[9px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                      >
-                        写入/变更
-                      </span>
-                    </span>
-                    <span class="mt-1 block text-[10px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-                      {{ toolDescription(tool) }}
-                    </span>
-                    <span v-if="toolParams(tool).length" class="mt-1.5 block border-t border-zinc-200/80 pt-1.5 dark:border-zinc-700/80">
-                      <span class="mb-1 block text-[9px] font-medium text-zinc-400">参数</span>
-                      <span
-                        v-for="param in toolParams(tool)"
-                        :key="param.name"
-                        class="mb-1 block text-[9px] leading-relaxed text-zinc-500 last:mb-0 dark:text-zinc-400"
-                      >
-                        <span class="font-mono font-semibold text-zinc-700 dark:text-zinc-200">{{ param.name }}</span>
-                        <span> · {{ param.type }} · {{ param.required ? '必填' : '选填' }}</span>
-                        <span v-if="param.description">：{{ param.description }}</span>
-                      </span>
-                    </span>
-                  </span>
-                </component>
-              </div>
+              <McpScopeToolTable
+                :tools="toolListItems"
+                :selected="selectedSet"
+                :disabled="readonly"
+                :show-test="false"
+                @toggle="toggle"
+                @toggle-all="toggleSelectAll"
+              />
             </div>
 
             <div v-if="!readonly" class="border-t border-zinc-200 px-4 py-3 dark:border-zinc-700">
               <div class="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  class="text-[10px] px-2 py-0.5 rounded border border-zinc-200 text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  :disabled="capabilities.length === 0"
-                  @click="toggleSelectAll"
-                >
-                  {{ allSelected ? '全不选' : '全选' }}
-                </button>
                 <button
                   type="button"
                   :disabled="saving || !dirty"

@@ -6,6 +6,7 @@ import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
 import { useMcpScopeDraft } from '@/composables/useMcpScopeDraft'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import McpAiTestModal from './McpAiTestModal.vue'
+import McpScopeToolTable from './McpScopeToolTable.vue'
 import type { CatalogMcpTool } from '@/components/dashboard/modals/CatalogMcpScopeEditor.vue'
 
 const props = withDefaults(defineProps<{
@@ -59,7 +60,6 @@ const {
   selected: governanceAllowed,
   dirty,
   selectedCount,
-  allSelected,
   remoteUpdatePending,
   applyRemote,
   commit,
@@ -147,6 +147,14 @@ const toolParams = (name: string) => getMcpToolParamRows({
   destructive: !!(toolDefs.value[name]?.destructive || toolRow(name)?.destructive),
 })
 
+const toolListItems = computed(() => capabilities.value.map(name => ({
+  name,
+  label: label(name),
+  description: toolDescription(name),
+  params: toolParams(name),
+  destructive: !!(toolDefs.value[name]?.destructive || toolRow(name)?.destructive),
+})))
+
 const save = async () => {
   if (!capabilities.value.length) return
   saving.value = true
@@ -229,9 +237,9 @@ const startTest = (name: string) => {
           >
             <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3 dark:border-zinc-700">
               <div class="min-w-0">
-                <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">MCP 权限详情</div>
+                <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">设置 MCP 权限范围</div>
                 <div class="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
-                  {{ subtitle }} · {{ capabilities.length }} 个工具
+                  {{ subtitle }} · {{ capabilities.length }} 个工具 · 悬浮预览，点击固定详情
                 </div>
               </div>
               <button
@@ -244,52 +252,14 @@ const startTest = (name: string) => {
             </div>
 
             <div class="min-h-0 flex-1 overflow-y-auto p-5">
-              <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <label
-                  v-for="tool in capabilities"
-                  :key="tool"
-                  class="flex items-start gap-2 rounded-lg border px-2.5 py-2 cursor-pointer select-none transition-colors"
-                  :class="governanceAllowed.has(tool)
-                    ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-200'
-                    : 'border-zinc-200 bg-white/50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/40 dark:text-zinc-300'"
-                >
-                  <input
-                    type="checkbox"
-                    class="mt-0.5 h-3.5 w-3.5 shrink-0 accent-indigo-500"
-                    :checked="governanceAllowed.has(tool)"
-                    :disabled="!canEditGovernance"
-                    @change="toggle(tool)"
-                  />
-                  <span class="min-w-0">
-                    <span class="flex items-center gap-1.5 text-[10px] font-mono font-semibold break-all" :title="`${label(tool)} (${tool})`">
-                      {{ label(tool) }}
-                      <span
-                        v-if="toolRow(tool)?.destructive || toolDefs[tool]?.destructive"
-                        class="rounded bg-amber-100 px-1 py-0.5 font-sans text-[9px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                      >
-                        写入/变更
-                      </span>
-                    </span>
-                    <button type="button" class="mt-0.5 text-[9px] px-1 py-0 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-700/60 dark:text-emerald-300" @click.stop="startTest(tool)">测试</button>
-                    <span class="mt-1 block text-[10px] leading-relaxed text-zinc-600 dark:text-zinc-300">
-                      {{ toolDescription(tool) }}
-                    </span>
-                    <span v-if="toolParams(tool).length" class="mt-1.5 block border-t border-zinc-200/80 pt-1.5 dark:border-zinc-700/80">
-                      <span class="mb-1 block text-[9px] font-medium text-zinc-400">参数</span>
-                      <span
-                        v-for="param in toolParams(tool)"
-                        :key="param.name"
-                        class="mb-1 block text-[9px] leading-relaxed text-zinc-500 last:mb-0 dark:text-zinc-400"
-                      >
-                        <span class="font-mono font-semibold text-zinc-700 dark:text-zinc-200">{{ param.name }}</span>
-                        <span> · {{ param.type }} · {{ param.required ? '必填' : '选填' }}</span>
-                        <span v-if="param.description">：{{ param.description }}</span>
-                      </span>
-                    </span>
-                  </span>
-                </label>
-              </div>
-
+              <McpScopeToolTable
+                :tools="toolListItems"
+                :selected="governanceAllowed"
+                :disabled="!canEditGovernance"
+                @toggle="toggle"
+                @toggle-all="toggleSelectAll"
+                @test="startTest"
+              />
               <!-- Reusable full popup matching 复用传承技能 display -->
               <McpAiTestModal
                 v-model:show="aiTestModalOpen"
@@ -307,14 +277,6 @@ const startTest = (name: string) => {
                 设备状态已刷新，当前未保存的勾选已保留
               </div>
               <div class="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  class="text-[10px] px-2 py-0.5 rounded border border-zinc-200 text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  :disabled="capabilities.length === 0 || !canEditGovernance"
-                  @click="toggleSelectAll"
-                >
-                  {{ allSelected ? '全不选' : '全选' }}
-                </button>
                 <button
                   type="button"
                   :disabled="saving || !dirty || !canEditGovernance"
