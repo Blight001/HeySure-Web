@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { LibraryMcpFullView } from '@/api/librarian'
-import { updateAiConfigFields } from '@/api/ai'
+import { getLibraryMcpScope, setLibraryMcpScope } from '@/api/workshop'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import McpAiTestModal from './McpAiTestModal.vue'
@@ -54,6 +54,7 @@ const error = ref('')
 const notice = ref('')
 const detailOpen = ref(false)
 const detailZIndex = usePopupZIndex(detailOpen)
+let loadRequestId = 0
 
 // AI test modal for details (reuses inheritance display)
 const aiTestModalOpen = ref(false)
@@ -70,6 +71,8 @@ const syncGovernance = () => {
 }
 
 const load = async () => {
+  if (saving.value) return
+  const requestId = ++loadRequestId
   loading.value = true
   error.value = ''
   notice.value = ''
@@ -83,12 +86,22 @@ const load = async () => {
       }
     }
     toolDefs.value = defs
-    syncGovernance()
+    const cfgId = Number(props.boundAiConfigId)
+    if (Number.isFinite(cfgId) && cfgId > 0) {
+      const data = await getLibraryMcpScope(cfgId)
+      if (requestId !== loadRequestId) return
+      governanceAllowed.value = new Set(
+        (data.allowed || []).filter(name => governanceNames.value.has(name)),
+      )
+    } else {
+      syncGovernance()
+    }
     initialGovernance.value = new Set(governanceAllowed.value)
   } catch (err: any) {
+    if (requestId !== loadRequestId) return
     error.value = err?.message || '图书馆 MCP 权限加载失败'
   } finally {
-    loading.value = false
+    if (requestId === loadRequestId) loading.value = false
   }
 }
 
@@ -157,31 +170,19 @@ const save = async () => {
   try {
     const cfgId = Number(props.boundAiConfigId)
     if (Number.isFinite(cfgId) && cfgId > 0) {
-      const base = new Set(
-        (props.governanceMcpTools || []).map(name => String(name || '').trim()).filter(Boolean),
-      )
-      for (const name of governanceNames.value) base.delete(name)
-      for (const name of governanceAllowed.value) base.add(name)
-      const merged = [...base].sort((a, b) => a.localeCompare(b))
-      const savedCfg = await updateAiConfigFields(cfgId, { mcp_tools: JSON.stringify(merged) })
-      let persisted = merged
-      try {
-        const parsed = JSON.parse(String(savedCfg?.mcp_tools || '[]'))
-        if (Array.isArray(parsed)) {
-          persisted = parsed.map(item => String(item || '').trim()).filter(Boolean)
-        }
-      } catch {
-        persisted = merged
-      }
+      // Invalidate any load started before this save. The dedicated endpoint
+      // returns the authoritative persisted subset, so stale parent/card data
+      // can never overwrite the just-saved selection.
+      loadRequestId += 1
+      const saved = await setLibraryMcpScope(cfgId, Array.from(governanceAllowed.value))
       governanceAllowed.value = new Set(
-        persisted.filter(name => governanceNames.value.has(name)),
+        (saved.allowed || []).filter(name => governanceNames.value.has(name)),
       )
       initialGovernance.value = new Set(governanceAllowed.value)
-      emit('governance-saved', persisted)
+      emit('governance-saved', saved.mcpTools || [])
     }
 
     notice.value = '已保存'
-    detailOpen.value = false
   } catch (err: any) {
     error.value = err?.message || '保存失败'
   } finally {

@@ -1,4 +1,4 @@
-import { get, post } from './http'
+import { get, post, put } from './http'
 
 // 服务端内置图书馆 Agent 的专用绑定管理。
 // 当前工具集为空，绑定关系保留给后续 MCP 能力使用。
@@ -37,3 +37,22 @@ export const setWorkshopBinding = (aiConfigId: number, deviceId: string, bound: 
     { ai_config_id: aiConfigId, device_id: deviceId, bound },
     { fallbackError: '更新图书馆绑定失败' },
   )
+
+export interface LibraryMcpScope {
+  aiConfigId: number
+  capabilities: string[]
+  allowed: string[]
+  mcpTools: string[]
+}
+
+export const getLibraryMcpScope = (aiConfigId: number) =>
+  get<LibraryMcpScope>('/api/workshop/mcp-scope', {
+    query: { ai_config_id: aiConfigId },
+    fallbackError: '图书馆 MCP 权限加载失败',
+  })
+
+export const setLibraryMcpScope = (aiConfigId: number, tools: string[]) =>
+  put<LibraryMcpScope>('/api/workshop/mcp-scope', {
+    ai_config_id: aiConfigId,
+    tools,
+  }, { fallbackError: '图书馆 MCP 权限保存失败' })
