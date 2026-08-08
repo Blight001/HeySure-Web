@@ -68,6 +68,8 @@ interface Props {
   initialSessionId?: string
   mcpIcon?: string
   mcpDynamicRule?: string
+  /** Changes whenever live device bindings/presence/capabilities change. */
+  mcpCatalogRefreshKey?: string | number
   /** 页面内置顶浮窗中启用：将宽下拉层传送到 body，避免被浮窗圆角裁剪。 */
   floatingLayer?: boolean
   /** 悬浮/PiP 对话把确认、提示和输入框限制在聊天面板内部。 */
@@ -2269,6 +2271,12 @@ watch(() => [props.aiConfigId, preferredInitialSessionId.value] as const, async 
   clearLiveAssistantView()
   await initializeSessions()
 }, { immediate: false })
+
+watch(() => props.mcpCatalogRefreshKey, async (nextKey, previousKey) => {
+  if (nextKey === previousKey) return
+  await loadFrontPromptToolSchemas()
+  await loadEffectiveSystemPromptPreview()
+})
 
 watch(currentSessionId, async (sid, oldSid) => {
   emit('update:currentSessionId', sid || '')

@@ -149,6 +149,19 @@ const {
   getCurrentUserId: () => Number(props.currentUser?.id),
 })
 
+// Keep an already-open chat's MCP device groups in sync with live binding,
+// presence and capability changes without remounting the conversation.
+const chatMcpCatalogRefreshKey = computed(() => connectedDevices.value
+  .map(device => [
+    device.id,
+    device.aiConfigId ?? '',
+    ...(device.boundAiConfigIds || []),
+    device.online === false ? 'offline' : 'online',
+    ...(device.capabilities || []),
+  ].join(':'))
+  .sort()
+  .join('|'))
+
 const {
   settingsOpen,
   leftCollapsed,
@@ -1136,6 +1149,7 @@ onUnmounted(() => {
                 :currentUserId="Number(currentUser?.id) || undefined"
                 :initialSessionId="chatInitialSessionId || undefined"
                 :mcpDynamicRule="mcpDynamicRule"
+                :mcp-catalog-refresh-key="chatMcpCatalogRefreshKey"
                 :floating-layer="chatFloating && !chatPipActive"
                 :embedded-dialogs="chatFloating || chatPipActive"
                 :selectedFiles="selectedFiles"
