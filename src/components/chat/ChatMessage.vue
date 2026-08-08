@@ -139,14 +139,23 @@ const DOMESTIC_SERVER_TOOL_NAMESPACES = new Set([
 
 const getMcpProviderName = (tool: string) => {
   const namespace = String(tool || '').trim().split(/[.+]/, 1)[0]?.toLowerCase() || ''
-  return DOMESTIC_SERVER_TOOL_NAMESPACES.has(namespace) ? '国内 HeySure 服务器' : '工具箱'
+  // Legacy bubbles do not identify the dispatch target. Multiple endpoint
+  // devices may expose the same tool, so never guess a specific device name.
+  return DOMESTIC_SERVER_TOOL_NAMESPACES.has(namespace) ? '端侧设备' : '工具箱'
 }
+
+const mcpToolSections = computed(() => {
+  const text = String(props.message.display_text || props.message.content || '').trim()
+  return parseMcpToolBubbleDetails(text, 'MCP 工具')
+})
 
 const mcpToolSummary = computed(() => {
   const text = String(props.message.display_text || props.message.content || '').trim()
-  const tool = String(text.match(/^工具[：:]\s*(.+)$/m)?.[1] || 'MCP 工具').trim()
+  const tool = mcpToolSections.value.tool
   const status = String(text.match(/^状态[：:]\s*(.+)$/m)?.[1] || '').trim()
-  return { tool, status, provider: getMcpProviderName(tool) }
+  const provider = mcpToolSections.value.deviceName
+    || (mcpToolSections.value.deviceId ? `设备 ${mcpToolSections.value.deviceId}` : getMcpProviderName(tool))
+  return { tool, status, provider, deviceId: mcpToolSections.value.deviceId }
 })
 
 // Trailing "[截图] <url>" marker the backend appends to screenshot MCP bubbles.
@@ -155,11 +164,6 @@ const SCREENSHOT_MARKER_RE = /\n*\[截图\]\s*\n\s*(\S+)\s*$/
 const mcpImageUrl = computed(() => {
   const text = String(props.message.display_text || props.message.content || '')
   return String(text.match(SCREENSHOT_MARKER_RE)?.[1] || '').trim()
-})
-
-const mcpToolSections = computed(() => {
-  const text = String(props.message.display_text || props.message.content || '').trim()
-  return parseMcpToolBubbleDetails(text, mcpToolSummary.value.tool)
 })
 
 const isTaskStart = computed(() => {
@@ -415,7 +419,10 @@ const attachedPathLabel = (path: string) =>
                 :class="mcpToolSummary.status === '失败' ? 'bg-rose-500' : 'bg-emerald-500'"
               ></span>
               <span class="shrink-0 text-[11px] font-medium text-inherit">{{ mcpToolSummary.status === '失败' ? '调用失败' : '调用' }}</span>
-              <span class="shrink-0 text-[11px] font-medium text-inherit">{{ mcpToolSummary.provider }}</span>
+              <span
+                class="max-w-28 shrink-0 truncate text-[11px] font-medium text-inherit sm:max-w-44"
+                :title="mcpToolSummary.deviceId ? `${mcpToolSummary.provider} · 设备号 ${mcpToolSummary.deviceId}` : mcpToolSummary.provider"
+              >{{ mcpToolSummary.provider }}</span>
               <span class="min-w-0 truncate font-mono text-[11px] text-inherit">{{ mcpToolSummary.tool }}</span>
               <span v-if="segmentTimeLabel" class="segment-time-badge ml-auto">{{ segmentTimeLabel }}</span>
               </template>

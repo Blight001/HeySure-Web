@@ -37,6 +37,8 @@ export const stripMcpCallBlocks = (raw?: string) => {
 
 export interface McpToolBubbleSections {
   tool: string
+  deviceId: string
+  deviceName: string
   params: string
   result: string
   error: string
@@ -191,10 +193,14 @@ export const parseMcpToolBubbleDetails = (raw?: string, fallbackTool = ''): McpT
     .trim()
 
   const tool = String(normalized.match(/^工具[：:]\s*(.+)$/m)?.[1] || fallbackTool).trim()
+  const headerDeviceId = String(normalized.match(/^设备号[：:]\s*(.+)$/m)?.[1] || '').trim()
+  const deviceName = String(normalized.match(/^设备[：:]\s*(.+)$/m)?.[1] || '').trim()
 
   let body = normalized
     .replace(/^工具[：:][^\n]*\n?/m, '')
     .replace(/^状态[：:][^\n]*\n?/m, '')
+    .replace(/^设备[：:][^\n]*\n?/m, '')
+    .replace(/^设备号[：:][^\n]*\n?/m, '')
     .trim()
 
   let params = extractBracketSection(body, '参数')
@@ -211,6 +217,9 @@ export const parseMcpToolBubbleDetails = (raw?: string, fallbackTool = ''): McpT
     if (!error && stripped.error) error = stripped.error
   }
 
+  const resultEnvelope = jsonObject(result)
+  const resultDeviceId = textValue(resultEnvelope?.deviceId) || textValue(resultEnvelope?.device_id)
+  const deviceId = headerDeviceId || resultDeviceId
   const command = parseCommandDetails(params, result)
   // Tool payloads sometimes arrive with escaped line breaks. Display them as
   // actual lines inside the preformatted detail panel instead of showing `\n`.
@@ -219,7 +228,7 @@ export const parseMcpToolBubbleDetails = (raw?: string, fallbackTool = ''): McpT
   result = restoreEscapedLineBreaks(prettyJson(result))
   error = restoreEscapedLineBreaks(error)
 
-  const sections = { tool, params, result, error, command }
+  const sections = { tool, deviceId, deviceName, params, result, error, command }
   return {
     ...sections,
     copyText: buildMcpCopyText(sections) || body,
