@@ -4,6 +4,7 @@ import { useMessage } from '@/composables/useMessage'
 import ChatHeader from './ChatHeader.vue'
 import ChatConversationView from './ChatConversationView.vue'
 import ChatInput from './ChatInput.vue'
+import FrontPromptPreview from './FrontPromptPreview.vue'
 import { parseChatResponseInline, type ActionBlock, type InlineContent as InlineContentType } from '@/utils/chatParser'
 import { isSameAssistantVisibleReply, normalizeAssistantReplyText } from '@/utils/chatReplyCompare'
 import * as chatApi from '@/api/chat'
@@ -2498,7 +2499,16 @@ onBeforeUnmount(() => {
                   {{ frontPromptCopied ? '已复制' : '复制' }}
                 </button>
               </div>
-              <pre class="max-h-[24rem] overflow-auto whitespace-pre-wrap break-words p-3 text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">{{ frontPromptPreviewText }}</pre>
+              <div class="max-h-[24rem] overflow-auto">
+                <FrontPromptPreview
+                  :prompt-text="frontPromptBaseText"
+                  :prompt-error="frontPromptPreviewError"
+                  :tool-groups="frontPromptToolGroups"
+                  :available-tools="frontPromptAvailableTools"
+                  :mcp-enabled="frontPromptToolMcpEnabled"
+                  :tool-schema-error="frontPromptToolSchemaError"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -2521,7 +2531,16 @@ onBeforeUnmount(() => {
                 {{ frontPromptCopied ? '已复制' : '复制' }}
               </button>
             </div>
-            <pre class="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 text-[11px] leading-relaxed text-zinc-700 dark:text-zinc-300">{{ frontPromptPreviewText }}</pre>
+            <div class="min-h-0 flex-1 overflow-auto">
+              <FrontPromptPreview
+                :prompt-text="frontPromptBaseText"
+                :prompt-error="frontPromptPreviewError"
+                :tool-groups="frontPromptToolGroups"
+                :available-tools="frontPromptAvailableTools"
+                :mcp-enabled="frontPromptToolMcpEnabled"
+                :tool-schema-error="frontPromptToolSchemaError"
+              />
+            </div>
           </div>
         </Teleport>
         <button
