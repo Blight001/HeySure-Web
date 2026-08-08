@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { getDeviceMcpScope, setDeviceMcpScope, type DeviceMcpScope } from '@/api/devices'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
+import { useMcpScopeDraft } from '@/composables/useMcpScopeDraft'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import McpAiTestModal from './McpAiTestModal.vue'
 
@@ -12,7 +13,6 @@ const props = defineProps<{
 }>()
 
 const scope = ref<DeviceMcpScope | null>(null)
-const selected = ref<Set<string>>(new Set())
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -21,6 +21,19 @@ const notice = ref('')
 let loadRequestId = 0
 const detailOpen = ref(false)
 const detailZIndex = usePopupZIndex(detailOpen)
+const capabilities = computed(() => scope.value?.capabilities || [])
+const {
+  selected,
+  dirty,
+  allSelected,
+  remoteUpdatePending,
+  applyRemote,
+  commit,
+  beginEditing,
+  endEditing,
+  toggle,
+  toggleAll: toggleSelectAll,
+} = useMcpScopeDraft(capabilities)
 
 // AI test modal trigger for details
 const aiTestModalOpen = ref(false)
@@ -40,10 +53,9 @@ const load = async () => {
     scope.value = data
     const caps = data.capabilities || []
     const allowedList = data.allowed || []
-    selected.value = new Set(data.hasRecord ? allowedList : caps)
+    applyRemote(data.hasRecord ? allowedList : caps)
   } catch (err: any) {
     if (requestId !== loadRequestId) return
-    scope.value = null
     error.value = err?.message || 'Agent MCP 权限加载失败'
   } finally {
     if (requestId === loadRequestId) loading.value = false
@@ -52,21 +64,10 @@ const load = async () => {
 
 watch(() => [props.deviceId, props.refreshKey], load, { immediate: true })
 
-const capabilities = computed(() => scope.value?.capabilities || [])
-
 // Scope is keyed per individual agent, so it can be configured even before the
 // device is assigned an AI. Saving only needs a connected agent that reports
 // tools.
 const canSave = computed(() => capabilities.value.length > 0)
-const allSelected = computed(() =>
-  capabilities.value.length > 0 && capabilities.value.every(t => selected.value.has(t)),
-)
-const dirty = computed(() => {
-  const base = new Set(scope.value?.allowed || [])
-  if (base.size !== selected.value.size) return true
-  for (const t of selected.value) if (!base.has(t)) return true
-  return false
-})
 
 // 分类与扩展端 BROWSER_TOOL_CATEGORIES 保持一致。页面交互类已合并为 browser_action
 // （点击/双击/右键/滚动/输入/按键），页面级导航（跳转 URL/前进后退/列出标签）并入
@@ -123,17 +124,6 @@ const toolParams = (tool: string) => getMcpToolParamRows({
   destructive: !!toolDefinition(tool).destructive,
 })
 
-const toggle = (tool: string) => {
-  const next = new Set(selected.value)
-  if (next.has(tool)) next.delete(tool)
-  else next.add(tool)
-  selected.value = next
-}
-
-const toggleSelectAll = () => {
-  selected.value = allSelected.value ? new Set() : new Set(capabilities.value)
-}
-
 const save = async () => {
   if (!props.deviceId || !canSave.value) return
   // Invalidate any earlier GET. A slow initial/refresh load must not overwrite
@@ -146,7 +136,7 @@ const save = async () => {
   try {
     const data = await setDeviceMcpScope(props.deviceId, Array.from(selected.value))
     scope.value = data
-    selected.value = new Set(data.allowed || [])
+    commit(data.allowed || [])
     notice.value = '已保存'
   } catch (err: any) {
     error.value = err?.message || 'Agent MCP 权限保存失败'
@@ -158,12 +148,14 @@ const save = async () => {
 const label = (tool: string) => getMcpToolZhLabel(tool)
 
 const openDetail = () => {
+  beginEditing()
   detailOpen.value = true
 }
 
 const closeDetail = () => {
   detailOpen.value = false
   aiTestModalOpen.value = false
+  endEditing()
 }
 
 const startTestTool = (tool: string) => {
@@ -286,6 +278,9 @@ const startTestTool = (tool: string) => {
             />
 
             <div class="border-t border-zinc-200 px-5 py-3 dark:border-zinc-700">
+              <div v-if="remoteUpdatePending" class="mb-2 text-[10px] text-amber-600 dark:text-amber-300">
+                设备状态已刷新，当前未保存的勾选已保留
+              </div>
               <div class="flex items-center justify-end gap-2">
                 <button
                   type="button"

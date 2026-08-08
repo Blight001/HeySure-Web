@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { LibraryMcpFullView } from '@/api/librarian'
 import { getLibraryMcpScope, setLibraryMcpScope } from '@/api/workshop'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
+import { useMcpScopeDraft } from '@/composables/useMcpScopeDraft'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import McpAiTestModal from './McpAiTestModal.vue'
 import type { CatalogMcpTool } from '@/components/dashboard/modals/CatalogMcpScopeEditor.vue'
@@ -44,9 +45,8 @@ const flattenTools = (view: LibraryMcpFullView['governance'] | undefined): Catal
 
 const governanceToolRows = computed(() => flattenTools(props.catalog?.governance))
 const governanceNames = computed(() => new Set(governanceToolRows.value.map(tool => tool.name)))
+const capabilities = computed(() => governanceToolRows.value.map(tool => tool.name))
 
-const governanceAllowed = ref<Set<string>>(new Set())
-const initialGovernance = ref<Set<string>>(new Set())
 const toolDefs = ref<Record<string, { description?: string; input_schema?: Record<string, any>; destructive?: boolean }>>({})
 const loading = ref(false)
 const saving = ref(false)
@@ -55,6 +55,19 @@ const notice = ref('')
 const detailOpen = ref(false)
 const detailZIndex = usePopupZIndex(detailOpen)
 let loadRequestId = 0
+const {
+  selected: governanceAllowed,
+  dirty,
+  selectedCount,
+  allSelected,
+  remoteUpdatePending,
+  applyRemote,
+  commit,
+  beginEditing,
+  endEditing,
+  toggle: toggleDraft,
+  toggleAll,
+} = useMcpScopeDraft(capabilities)
 
 // AI test modal for details (reuses inheritance display)
 const aiTestModalOpen = ref(false)
@@ -67,7 +80,7 @@ const governanceSelected = computed(() =>
 )
 
 const syncGovernance = () => {
-  governanceAllowed.value = new Set(governanceSelected.value)
+  applyRemote(governanceSelected.value)
 }
 
 const load = async () => {
@@ -90,13 +103,12 @@ const load = async () => {
     if (Number.isFinite(cfgId) && cfgId > 0) {
       const data = await getLibraryMcpScope(cfgId)
       if (requestId !== loadRequestId) return
-      governanceAllowed.value = new Set(
+      applyRemote(
         (data.allowed || []).filter(name => governanceNames.value.has(name)),
       )
     } else {
       syncGovernance()
     }
-    initialGovernance.value = new Set(governanceAllowed.value)
   } catch (err: any) {
     if (requestId !== loadRequestId) return
     error.value = err?.message || '图书馆 MCP 权限加载失败'
@@ -111,40 +123,13 @@ watch(
   { immediate: true },
 )
 
-const capabilities = computed(() => governanceToolRows.value.map(tool => tool.name))
-
-const selectedCount = computed(() =>
-  capabilities.value.filter(name => governanceAllowed.value.has(name)).length,
-)
-
-const allSelected = computed(() =>
-  capabilities.value.length > 0 && capabilities.value.every(name => governanceAllowed.value.has(name)),
-)
-
-const setsEqual = (a: Set<string>, b: Set<string>) => {
-  if (a.size !== b.size) return false
-  for (const name of a) if (!b.has(name)) return false
-  return true
-}
-
-const dirty = computed(() => !setsEqual(governanceAllowed.value, initialGovernance.value))
-
 const toggle = (name: string) => {
   if (!props.boundAiConfigId) return
-  const next = new Set(governanceAllowed.value)
-  if (next.has(name)) next.delete(name)
-  else next.add(name)
-  governanceAllowed.value = next
+  toggleDraft(name)
 }
 
 const toggleSelectAll = () => {
-  if (allSelected.value) {
-    governanceAllowed.value = new Set()
-    return
-  }
-  if (props.boundAiConfigId) {
-    governanceAllowed.value = new Set(governanceToolRows.value.map(tool => tool.name))
-  }
+  if (props.boundAiConfigId) toggleAll()
 }
 
 const toolRow = (name: string) => governanceToolRows.value.find(tool => tool.name === name)
@@ -175,10 +160,8 @@ const save = async () => {
       // can never overwrite the just-saved selection.
       loadRequestId += 1
       const saved = await setLibraryMcpScope(cfgId, Array.from(governanceAllowed.value))
-      governanceAllowed.value = new Set(
-        (saved.allowed || []).filter(name => governanceNames.value.has(name)),
-      )
-      initialGovernance.value = new Set(governanceAllowed.value)
+      const allowed = (saved.allowed || []).filter(name => governanceNames.value.has(name))
+      commit(allowed)
       emit('governance-saved', saved.mcpTools || [])
     }
 
@@ -193,6 +176,17 @@ const save = async () => {
 const label = (name: string) => getMcpToolZhLabel(name)
 const subtitle = computed(() => props.boundAiName || props.workshopDeviceId)
 const canEditGovernance = computed(() => !!props.boundAiConfigId)
+
+const openDetail = () => {
+  beginEditing()
+  detailOpen.value = true
+}
+
+const closeDetail = () => {
+  detailOpen.value = false
+  aiTestModalOpen.value = false
+  endEditing()
+}
 
 const startTest = (name: string) => {
   aiTestModalToolName.value = name
@@ -209,7 +203,7 @@ const startTest = (name: string) => {
       v-if="!loading && capabilities.length"
       type="button"
       class="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
-      @click="detailOpen = true"
+      @click="openDetail"
     >
       配置MCP权限范围 {{ selectedCount }} / {{ capabilities.length }}
     </button>
@@ -227,7 +221,7 @@ const startTest = (name: string) => {
           v-if="detailOpen"
           :style="{ zIndex: detailZIndex }"
           class="fixed inset-0 modal-overlay flex items-center justify-center p-4"
-          @click="detailOpen = false"
+          @click="closeDetail"
         >
           <div
             class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-5xl max-h-[86vh] flex flex-col overflow-hidden"
@@ -243,7 +237,7 @@ const startTest = (name: string) => {
               <button
                 type="button"
                 class="rounded border border-zinc-200 px-2 py-1 text-[10px] text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                @click="detailOpen = false; aiTestModalOpen = false"
+                @click="closeDetail"
               >
                 关闭
               </button>
@@ -309,6 +303,9 @@ const startTest = (name: string) => {
             </div>
 
             <div class="border-t border-zinc-200 px-5 py-3 dark:border-zinc-700">
+              <div v-if="remoteUpdatePending" class="mb-2 text-[10px] text-amber-600 dark:text-amber-300">
+                设备状态已刷新，当前未保存的勾选已保留
+              </div>
               <div class="flex items-center justify-end gap-2">
                 <button
                   type="button"
