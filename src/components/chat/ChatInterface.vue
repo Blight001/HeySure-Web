@@ -16,6 +16,7 @@ import { formatDurationMs } from '@/utils/datetime'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
+import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
 import heySureLogo from '@/assets/logo/HeySure.png'
 
 /** 新建空白对话的默认标题；首条消息发出后会自动改成摘要标题。 */
@@ -203,8 +204,14 @@ const effectiveSystemPromptPreview = ref('')
 const frontPromptPreviewError = ref('')
 const frontPromptCopied = ref(false)
 const frontPromptButtonRef = ref<HTMLElement | null>(null)
+const frontPromptPopupRef = ref<HTMLElement | null>(null)
 const frontPromptPopupOpen = ref(false)
 const frontPromptPopupStyle = ref<CSSProperties>({})
+const frontPromptPopupTarget = ref<HTMLElement | string>('body')
+const compactFrontPromptViewport = ref(
+  typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
+)
+const frontPromptUsesPortal = computed(() => props.floatingLayer || compactFrontPromptViewport.value)
 let frontPromptPopupCloseTimer: number | null = null
 const frontPromptAvailableTools = ref<any[]>([])
 const frontPromptToolGroups = ref<McpCatalogToolGroup[]>([])
@@ -256,18 +263,28 @@ const clearFrontPromptPopupClose = () => {
 
 const updateFrontPromptPopupPosition = () => {
   const button = frontPromptButtonRef.value
-  if (!button || !props.floatingLayer) return
+  if (!button || !frontPromptUsesPortal.value) return
   const view = button.ownerDocument.defaultView || window
+  const visualViewport = view.visualViewport
   const rect = button.getBoundingClientRect()
-  const margin = 16
+  const viewportLeft = visualViewport?.offsetLeft || 0
+  const viewportTop = visualViewport?.offsetTop || 0
+  const viewportWidth = visualViewport?.width || view.innerWidth
+  const viewportHeight = visualViewport?.height || view.innerHeight
+  const viewportRight = viewportLeft + viewportWidth
+  const viewportBottom = viewportTop + viewportHeight
+  const margin = compactFrontPromptViewport.value ? 12 : 16
   const gap = 8
-  const width = Math.min(672, view.innerWidth - margin * 2)
-  const belowSpace = view.innerHeight - rect.bottom - gap - margin
-  const aboveSpace = rect.top - gap - margin
+  const width = Math.min(672, viewportWidth - margin * 2)
+  const belowSpace = viewportBottom - rect.bottom - gap - margin
+  const aboveSpace = rect.top - viewportTop - gap - margin
   const placeAbove = belowSpace < 220 && aboveSpace > belowSpace
   const availableHeight = Math.max(120, placeAbove ? aboveSpace : belowSpace)
   const style: CSSProperties = {
-    left: `${Math.min(Math.max(rect.right - width, margin), view.innerWidth - width - margin)}px`,
+    left: `${Math.min(
+      Math.max(rect.right - width, viewportLeft + margin),
+      viewportRight - width - margin,
+    )}px`,
     width: `${width}px`,
     maxHeight: `${Math.min(448, availableHeight)}px`,
     zIndex: PINNED_POPUP_Z_INDEX + 1,
@@ -278,8 +295,9 @@ const updateFrontPromptPopupPosition = () => {
 }
 
 const openFrontPromptPopup = async () => {
-  if (!props.floatingLayer) return
+  if (!frontPromptUsesPortal.value) return
   clearFrontPromptPopupClose()
+  frontPromptPopupTarget.value = frontPromptButtonRef.value?.ownerDocument.body || 'body'
   updateFrontPromptPopupPosition()
   frontPromptPopupOpen.value = true
   await nextTick()
@@ -287,6 +305,8 @@ const openFrontPromptPopup = async () => {
 }
 
 const scheduleFrontPromptPopupClose = () => {
+  // Touch/mobile portals are click-controlled. Desktop floating windows retain
+  // the existing hover-preview behavior.
   if (!props.floatingLayer) return
   clearFrontPromptPopupClose()
   frontPromptPopupCloseTimer = window.setTimeout(() => {
@@ -295,12 +315,36 @@ const scheduleFrontPromptPopupClose = () => {
   }, 120)
 }
 
-watch(() => props.floatingLayer, enabled => {
+const toggleFrontPromptPopup = () => {
+  if (!frontPromptUsesPortal.value) return
+  if (frontPromptPopupOpen.value) {
+    clearFrontPromptPopupClose()
+    frontPromptPopupOpen.value = false
+    return
+  }
+  void openFrontPromptPopup()
+}
+
+useDismissibleLayer({
+  open: frontPromptPopupOpen,
+  roots: [frontPromptButtonRef, frontPromptPopupRef],
+  onDismiss: () => {
+    clearFrontPromptPopupClose()
+    frontPromptPopupOpen.value = false
+  },
+})
+
+watch(frontPromptUsesPortal, enabled => {
   if (!enabled) {
     clearFrontPromptPopupClose()
     frontPromptPopupOpen.value = false
   }
 })
+
+const syncFrontPromptViewportMode = () => {
+  compactFrontPromptViewport.value = window.matchMedia('(max-width: 767px)').matches
+  if (frontPromptPopupOpen.value) updateFrontPromptPopupPosition()
+}
 // Live elapsed of the CURRENT segment only, updated by timeTick every 200 ms.
 const liveSegmentMs = computed(() => {
   if (phaseEnterTs.value == null) return 0
@@ -2353,7 +2397,8 @@ watch(chatScrollRef, (newEl, oldEl) => {
 })
 
 onMounted(async () => {
-  window.addEventListener('resize', updateFrontPromptPopupPosition)
+  window.addEventListener('resize', syncFrontPromptViewportMode)
+  window.visualViewport?.addEventListener('resize', updateFrontPromptPopupPosition)
   window.visualViewport?.addEventListener('resize', syncVisualViewport)
   window.visualViewport?.addEventListener('scroll', syncVisualViewport)
   syncVisualViewport()
@@ -2374,7 +2419,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearFrontPromptPopupClose()
-  window.removeEventListener('resize', updateFrontPromptPopupPosition)
+  window.removeEventListener('resize', syncFrontPromptViewportMode)
+  window.visualViewport?.removeEventListener('resize', updateFrontPromptPopupPosition)
   window.visualViewport?.removeEventListener('resize', syncVisualViewport)
   window.visualViewport?.removeEventListener('scroll', syncVisualViewport)
   if (visualViewportFrame !== null) {
@@ -2424,19 +2470,21 @@ onBeforeUnmount(() => {
         >待发送 {{ pendingQueue.length }} 条</span>
         <div
           class="relative"
-          :class="{ 'group/front-prompt': !props.floatingLayer }"
-          @mouseenter="openFrontPromptPopup"
+          :class="{ 'group/front-prompt': !frontPromptUsesPortal }"
+          @mouseenter="props.floatingLayer ? openFrontPromptPopup() : undefined"
           @mouseleave="scheduleFrontPromptPopupClose"
         >
           <button
             ref="frontPromptButtonRef"
             class="shrink-0 text-xs px-2 py-1 rounded border border-violet-200 text-violet-600 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-300 dark:hover:bg-violet-900/20"
             type="button"
+            :aria-expanded="frontPromptUsesPortal ? frontPromptPopupOpen : undefined"
+            @click.stop="toggleFrontPromptPopup"
           >
             前置 Prompt
           </button>
           <div
-            v-if="!props.floatingLayer"
+            v-if="!frontPromptUsesPortal"
             class="absolute right-0 top-full z-[120] hidden w-[min(42rem,calc(100vw-2rem))] pt-2 group-hover/front-prompt:block"
           >
             <div class="max-h-[28rem] overflow-hidden rounded-lg acrylic-modal shadow-xl">
@@ -2454,9 +2502,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
-        <Teleport to="body">
+        <Teleport :to="frontPromptPopupTarget">
           <div
-            v-if="props.floatingLayer && frontPromptPopupOpen"
+            v-if="frontPromptUsesPortal && frontPromptPopupOpen"
+            ref="frontPromptPopupRef"
             :style="frontPromptPopupStyle"
             class="fixed pointer-events-auto flex flex-col overflow-hidden rounded-lg acrylic-modal shadow-xl"
             @mouseenter="clearFrontPromptPopupClose"
