@@ -692,10 +692,11 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
     />
 
     <!-- Device display customization modal -->
+    <Teleport to="body">
     <Transition name="fade">
       <div
         v-if="deviceSettingsTarget"
-        class="absolute inset-0 modal-overlay flex items-center justify-center p-4 z-50"
+        class="fixed inset-0 modal-overlay flex items-center justify-center p-4 z-[120]"
         @click="closeDeviceSettings"
       >
         <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[430px] p-4" @click.stop>
@@ -768,12 +769,14 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         </div>
       </div>
     </Transition>
+    </Teleport>
 
-    <!-- Member selection modal for assign (contained within workshop column) -->
+    <!-- Member selection modal for assign -->
+    <Teleport to="body">
     <Transition name="fade">
       <div
         v-if="assignMemberModal"
-        class="absolute inset-0 modal-overlay flex items-center justify-center p-4 z-50"
+        class="fixed inset-0 modal-overlay flex items-center justify-center p-4 z-[120]"
         @click="closeAssignMember"
       >
         <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[420px] p-4" @click.stop>
@@ -815,12 +818,14 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         </div>
       </div>
     </Transition>
+    </Teleport>
 
-    <!-- Delete-record confirmation, scoped to the workshop panel like the assign modal above -->
+    <!-- Delete-record confirmation -->
+    <Teleport to="body">
     <Transition name="fade">
       <div
         v-if="deleteConfirmTarget"
-        class="absolute inset-0 modal-overlay flex items-center justify-center p-4 z-50"
+        class="fixed inset-0 modal-overlay flex items-center justify-center p-4 z-[120]"
         @click="closeDeleteConfirm"
       >
         <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[380px] p-4" @click.stop>
@@ -850,6 +855,7 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         </div>
       </div>
     </Transition>
+    </Teleport>
   </div>
 </template>
 

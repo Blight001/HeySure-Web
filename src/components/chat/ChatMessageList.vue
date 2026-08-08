@@ -90,6 +90,49 @@ const messageTimeLabels = computed<Record<number, string>>(() => {
   return labels
 })
 
+const messageText = (message?: Message) =>
+  String(message?.display_text || message?.content || '').trim()
+
+const messageTimeMs = (message?: Message) => {
+  const timestamp = Number(message?.created_at || 0)
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null
+  return timestamp > 1e12 ? timestamp : timestamp * 1000
+}
+
+const isTaskStartMessage = (message?: Message) => {
+  const text = messageText(message)
+  return message?.role === 'system'
+    && text.startsWith('[MCP工具]')
+    && /^工具[：:]\s*todo\.manage\s*$/m.test(text)
+    && /^状态[：:]\s*(?!失败).+$/m.test(text)
+    && /["']?action["']?\s*[:=]\s*["']create["']/.test(text)
+}
+
+const isTaskEndMessage = (message?: Message) => {
+  const text = messageText(message)
+  return message?.role === 'system'
+    && (text.startsWith('【任务完成回执】') || text.startsWith('【计划完成 ·'))
+}
+
+const taskDurationLabels = computed<Record<number, string>>(() => {
+  const labels: Record<number, string> = {}
+  let taskStartedAt: number | null = null
+  for (let idx = 0; idx < props.messages.length; idx += 1) {
+    const message = props.messages[idx]
+    if (isTaskStartMessage(message)) {
+      taskStartedAt = messageTimeMs(message)
+      continue
+    }
+    if (!isTaskEndMessage(message)) continue
+    const endedAt = messageTimeMs(message)
+    if (taskStartedAt != null && endedAt != null && endedAt >= taskStartedAt) {
+      labels[idx] = formatDurationMs(endedAt - taskStartedAt)
+    }
+    taskStartedAt = null
+  }
+  return labels
+})
+
 const emit = defineEmits<{
   (e: 'delete', idx: number): void
   (e: 'recall', idx: number): void
@@ -137,7 +180,8 @@ const emit = defineEmits<{
           :readonly="readonly"
           :plain-text-mode="stripMarkdownSymbols"
           :mcp-icon="mcpIcon"
-          :time-label="messageTimeLabels[item.index] || ''"
+          :time-label="String(messages[item.index]?.display_text || messages[item.index]?.content || '').startsWith('[前置 Prompt]') ? '' : (messageTimeLabels[item.index] || '')"
+          :task-duration-label="taskDurationLabels[item.index] || ''"
           :hide-think="item.hideThink"
           @delete="(i) => emit('delete', i)"
           @recall="(i) => emit('recall', i)"

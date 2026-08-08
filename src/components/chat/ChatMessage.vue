@@ -39,6 +39,7 @@ const props = defineProps<{
   thinkOnly?: boolean
   hideThink?: boolean
   timeLabel?: string
+  taskDurationLabel?: string
 }>()
 
 const isFrontPromptMessage = computed(() => {
@@ -57,11 +58,56 @@ const isUserMessageBubble = computed(() => {
   return props.message.role === 'user' && !isSystemNoticeMessage.value
 })
 
-const isTaskCompleteNotice = computed(() => {
+const isCollapsibleSystemNotice = computed(() => {
+  if (props.message.role !== 'user' && props.message.role !== 'system') return false
   const text = String(props.message.display_text || props.message.content || '').trim()
+  return text.startsWith('[系统提示]')
+})
+
+const systemNoticeBody = computed(() => {
+  const text = String(props.message.display_text || props.message.content || '').trim()
+  return text.replace(/^\[系统提示\]\s*/, '').trim()
+})
+
+const systemNoticeTitle = computed(() => {
+  const firstLine = systemNoticeBody.value
+    .split(/\r?\n/)
+    .map(line => line.replace(/^[-#>*\s]+/, '').trim())
+    .find(Boolean) || '通知详情'
+  const normalized = firstLine
+    .replace(/^\[(?:系统提示|提示|通知)\]\s*/, '')
+    .replace(/[：:]$/, '')
+  return normalized.length > 42 ? `${normalized.slice(0, 42)}…` : normalized
+})
+
+const phaseSummaryMatch = computed(() => {
+  const text = String(props.message.display_text || props.message.content || '').trim()
+  return text.match(/^\[系统提示\s*·\s*阶段\s*(\d+)\s+(?:已完成|未达成(?:\(failed\))?)\]\s*(.*)$/m)
+})
+
+const isPhaseSummary = computed(() => props.message.role === 'system' && !!phaseSummaryMatch.value)
+
+const phaseSummaryNumber = computed(() => String(phaseSummaryMatch.value?.[1] || ''))
+const phaseSummaryTitle = computed(() => String(phaseSummaryMatch.value?.[2] || '').trim() || `阶段 ${phaseSummaryNumber.value}`)
+
+const phaseSummaryMarkdown = computed(() => {
+  const text = String(props.message.display_text || props.message.content || '').trim()
+  const match = phaseSummaryMatch.value
+  if (!match) return text
+  const title = String(match[2] || '').trim()
+  const body = text.slice(match[0].length).trim()
+  return [`### ${title || `阶段 ${phaseSummaryNumber.value} 小结`}`, body]
+    .filter(Boolean)
+    .join('\n\n')
+})
+
+const isTaskCompleteNotice = computed(() => {
+  if (props.message.role !== 'system') return false
+  const text = String(props.message.display_text || props.message.content || '').trim()
+  // Only dedicated terminal receipts may close a task. Never infer completion
+  // from phrases inside MCP parameters/results or an intermediate phase summary.
   return text.startsWith('【任务完成回执】')
-    || text.includes('所有阶段已完成，计划已自动收尾')
-    || text.includes('本任务对话已自动锁定')
+    || text.startsWith('【计划完成 ·')
 })
 
 const isRunErrorNotice = computed(() => {
@@ -78,11 +124,29 @@ const isPlainAssistantMessage = computed(() => {
   return props.message.role === 'assistant'
 })
 
+const DOMESTIC_SERVER_TOOL_NAMESPACES = new Set([
+  'console',
+  'disk',
+  'file',
+  'journal',
+  'network',
+  'package',
+  'process',
+  'service',
+  'shell',
+  'system',
+])
+
+const getMcpProviderName = (tool: string) => {
+  const namespace = String(tool || '').trim().split(/[.+]/, 1)[0]?.toLowerCase() || ''
+  return DOMESTIC_SERVER_TOOL_NAMESPACES.has(namespace) ? '国内 HeySure 服务器' : '工具箱'
+}
+
 const mcpToolSummary = computed(() => {
   const text = String(props.message.display_text || props.message.content || '').trim()
   const tool = String(text.match(/^工具[：:]\s*(.+)$/m)?.[1] || 'MCP 工具').trim()
   const status = String(text.match(/^状态[：:]\s*(.+)$/m)?.[1] || '').trim()
-  return { tool, status }
+  return { tool, status, provider: getMcpProviderName(tool) }
 })
 
 // Trailing "[截图] <url>" marker the backend appends to screenshot MCP bubbles.
@@ -96,6 +160,12 @@ const mcpImageUrl = computed(() => {
 const mcpToolSections = computed(() => {
   const text = String(props.message.display_text || props.message.content || '').trim()
   return parseMcpToolBubbleDetails(text, mcpToolSummary.value.tool)
+})
+
+const isTaskStart = computed(() => {
+  if (!isMcpToolMessage.value || mcpToolSummary.value.status === '失败') return false
+  if (mcpToolSummary.value.tool !== 'todo.manage') return false
+  return /["']?action["']?\s*[:=]\s*["']create["']/.test(mcpToolSections.value.params)
 })
 
 const copiedTarget = ref('')
@@ -139,6 +209,9 @@ const copyText = async (text: string, target: string, event?: Event) => {
 }
 
 const normalizedInlineContent = computed<InlineContentType[]>(() => {
+  if (isPhaseSummary.value) {
+    return [{ type: 'text', content: phaseSummaryMarkdown.value }]
+  }
   if (Array.isArray(props.message.inlineContent) && props.message.inlineContent.length > 0) {
     return props.message.inlineContent
   }
@@ -218,18 +291,28 @@ const attachedPathLabel = (path: string) =>
         </ChatCollapsible>
       </div>
       
+      <div
+        v-if="isTaskStart"
+        class="task-boundary mb-2"
+        aria-label="任务开始"
+      >
+        <span class="task-boundary-wave"></span>
+        <strong>任务开始</strong>
+        <span class="task-boundary-wave"></span>
+      </div>
+
       <!-- Main Content -->
       <div
         v-if="!props.thinkOnly"
         :class="[
-          isPlainAssistantMessage
+          (isPlainAssistantMessage || isPhaseSummary)
             ? 'px-0 py-1 border-0 bg-transparent text-zinc-800 shadow-none hover:shadow-none dark:text-zinc-200'
           : (props.message.role === 'user' && !isSystemNoticeMessage)
-            ? 'bg-indigo-600 border-indigo-500 text-white rounded-tr-sm shadow-indigo-200/50 dark:shadow-none'
+            ? 'bg-transparent border-indigo-500 text-indigo-700 rounded-tr-sm shadow-none dark:border-indigo-400 dark:text-indigo-300'
             : isTaskCompleteNotice
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 rounded-xl dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-200'
+              ? 'bg-transparent border-emerald-500 text-emerald-700 rounded-xl shadow-none dark:border-emerald-400 dark:text-emerald-300'
             : isSystemNoticeMessage
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 rounded-tl-sm dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-200'
+              ? 'bg-transparent border-slate-400 text-slate-700 rounded-tl-sm shadow-none dark:border-slate-500 dark:text-slate-300'
             : isFrontPromptMessage
               ? 'bg-violet-50 border-violet-200 text-zinc-800 dark:bg-violet-500/15 dark:border-violet-500/40 dark:text-zinc-100'
             : isRunErrorNotice
@@ -239,7 +322,7 @@ const attachedPathLabel = (path: string) =>
             : props.message.role === 'system'
                 ? 'bg-zinc-100/60 border-zinc-200 text-zinc-700 font-mono text-xs dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300'
                 : 'bg-white/75 border-zinc-200 text-zinc-800 rounded-tl-sm shadow-sm dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-200',
-          (isPlainAssistantMessage || isMcpToolMessage) ? '' : 'px-4 py-3 rounded-2xl border hover:shadow-md',
+          (isPlainAssistantMessage || isMcpToolMessage || isPhaseSummary) ? '' : 'px-4 py-3 rounded-2xl border hover:shadow-md',
           isFrontPromptMessage ? 'front-prompt-bubble' : '',
           isUserMessageBubble ? 'user-message-bubble' : ''
         ]"
@@ -291,8 +374,24 @@ const attachedPathLabel = (path: string) =>
           </button>
         </div>
         
+        <ChatCollapsible
+          v-if="isCollapsibleSystemNotice"
+          details-class="group/system-notice"
+          summary-class="flex items-center gap-2 cursor-pointer select-none text-[12px] font-medium leading-5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+          body-class="mt-2 border-t border-slate-300/70 pt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600 dark:border-slate-600/70 dark:text-slate-400"
+        >
+          <template #summary>
+            <span class="chat-collapsible-arrow text-[10px] leading-none">➣</span>
+            <span class="shrink-0">系统提示</span>
+            <span class="text-slate-300 dark:text-slate-600">·</span>
+            <span class="min-w-0 truncate font-normal text-slate-500 dark:text-slate-400" :title="systemNoticeTitle">{{ systemNoticeTitle }}</span>
+            <span v-if="segmentTimeLabel" class="segment-time-badge ml-auto">{{ segmentTimeLabel }}</span>
+          </template>
+          {{ systemNoticeBody }}
+        </ChatCollapsible>
+
         <div
-          v-if="isMcpToolMessage"
+          v-else-if="isMcpToolMessage"
           class="text-[13px] leading-snug"
         >
           <button
@@ -315,10 +414,11 @@ const attachedPathLabel = (path: string) =>
                 class="chat-collapsible-status-dot shrink-0 h-1.5 w-1.5 rounded-full"
                 :class="mcpToolSummary.status === '失败' ? 'bg-rose-500' : 'bg-emerald-500'"
               ></span>
-              <span class="shrink-0 text-[11px] font-medium text-inherit">{{ mcpToolSummary.status === '失败' ? '调用失败' : '已调用' }}</span>
+              <span class="shrink-0 text-[11px] font-medium text-inherit">{{ mcpToolSummary.status === '失败' ? '调用失败' : '调用' }}</span>
+              <span class="shrink-0 text-[11px] font-medium text-inherit">{{ mcpToolSummary.provider }}</span>
               <span class="min-w-0 truncate font-mono text-[11px] text-inherit">{{ mcpToolSummary.tool }}</span>
               <span v-if="segmentTimeLabel" class="segment-time-badge ml-auto">{{ segmentTimeLabel }}</span>
-            </template>
+              </template>
               <button
                 class="absolute right-0 top-0 w-6 h-6 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 flex items-center justify-center transition-colors"
                 :title="copiedTarget === `mcp-${props.idx}` ? '已复制' : '复制全部 MCP 信息'"
@@ -403,7 +503,7 @@ const attachedPathLabel = (path: string) =>
           v-else
           class="whitespace-pre-wrap text-[13px] leading-relaxed"
           :class="[
-            (props.message.role === 'user' && !isSystemNoticeMessage) ? 'text-white' : '',
+            (props.message.role === 'user' && !isSystemNoticeMessage) ? 'text-indigo-700 dark:text-indigo-300' : '',
             isFrontPromptMessage ? 'text-left w-full front-prompt-content' : '',
             isUserMessageBubble ? 'user-message-text' : ''
           ]"
@@ -422,6 +522,28 @@ const attachedPathLabel = (path: string) =>
             />
           </template>
         </div>
+      </div>
+
+      <div
+        v-if="isPhaseSummary"
+        class="mt-3 flex w-full items-center gap-3 text-[10px] font-medium tracking-[0.16em] text-zinc-400 dark:text-zinc-500"
+        :aria-label="`${phaseSummaryTitle} · 阶段 ${phaseSummaryNumber} 末`"
+      >
+        <span class="h-px flex-1 bg-zinc-200 dark:bg-zinc-700"></span>
+        <span class="min-w-0 truncate" :title="phaseSummaryTitle">{{ phaseSummaryTitle }}</span>
+        <span class="shrink-0">· 阶段 {{ phaseSummaryNumber }} 末</span>
+        <span class="h-px flex-1 bg-zinc-200 dark:bg-zinc-700"></span>
+      </div>
+
+      <div
+        v-if="isTaskCompleteNotice"
+        class="task-boundary mt-3"
+        aria-label="任务结束"
+      >
+        <span class="task-boundary-wave"></span>
+        <strong>任务结束</strong>
+        <span v-if="props.taskDurationLabel" class="task-boundary-duration">{{ props.taskDurationLabel }}</span>
+        <span class="task-boundary-wave"></span>
       </div>
 
       <div
@@ -500,6 +622,40 @@ const attachedPathLabel = (path: string) =>
 </template>
 
 <style scoped>
+.task-boundary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgb(113 113 122);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+.task-boundary strong {
+  flex: none;
+  font-weight: 700;
+  color: rgb(63 63 70);
+}
+
+
+
+.task-boundary-wave {
+  height: 7px;
+  flex: 1;
+  min-width: 2rem;
+  opacity: 0.45;
+  background: radial-gradient(circle at 4px -1px, transparent 4px, currentColor 4.5px, transparent 5px) 0 0 / 10px 7px repeat-x;
+}
+
+.dark .task-boundary {
+  color: rgb(113 113 122);
+}
+
+.dark .task-boundary strong {
+  color: rgb(212 212 216);
+}
+
 .front-prompt-bubble {
   position: relative;
   height: 14rem;

@@ -21,6 +21,9 @@ const showSplash = ref(true)
 const revealContent = ref(false)
 // 登录成功 / 会话恢复后需等待控制台数据就绪，避免直接显示空白界面
 const dashboardLoading = ref(false)
+const startupProgress = ref(42)
+const startupDetail = ref('正在恢复登录状态与用户偏好')
+const startupElapsed = ref('0.0')
 
 const showStartupOverlay = computed(() => showSplash.value || dashboardLoading.value)
 
@@ -34,18 +37,24 @@ const revealClass = computed(() => {
     return 'opacity-100 translate-y-0 blur-0 transition-[opacity,transform,filter] duration-700 ease-out'
   return ''
 })
-const startupHint = computed(() =>
-  dashboardLoading.value && !showSplash.value ? '正在载入控制台与成员数据' : '正在初始化界面与资源',
-)
+const startupHint = computed(() => startupDetail.value)
+
+const updateStartup = (progress: number, detail: string) => {
+  startupProgress.value = Math.max(startupProgress.value, progress)
+  startupDetail.value = detail
+  window.__HEYSURE_STARTUP__?.update(startupProgress.value, detail)
+}
 
 let revealTimer: number | undefined
 let preloadRemovalTimer: number | undefined
 let startupFallbackTimer: number | undefined
 let dashboardLoadingFallbackTimer: number | undefined
 let removeLoadListener: (() => void) | undefined
+let startupElapsedTimer: number | undefined
 
 const startDashboardLoading = () => {
   dashboardLoading.value = true
+  updateStartup(68, '正在加载控制台代码与成员数据')
   if (dashboardLoadingFallbackTimer !== undefined) {
     window.clearTimeout(dashboardLoadingFallbackTimer)
   }
@@ -56,6 +65,7 @@ const startDashboardLoading = () => {
 }
 
 const onDashboardReady = () => {
+  updateStartup(100, '控制台数据加载完成，即将进入')
   dashboardLoading.value = false
   if (dashboardLoadingFallbackTimer !== undefined) {
     window.clearTimeout(dashboardLoadingFallbackTimer)
@@ -66,6 +76,7 @@ const onDashboardReady = () => {
 const hideStaticPreload = () => {
   const preload = document.getElementById('startup-preload')
   if (!preload) return
+  window.__HEYSURE_STARTUP__?.stop()
   preload.classList.add('is-hidden')
   preloadRemovalTimer = window.setTimeout(() => {
     preload.remove()
@@ -100,6 +111,13 @@ const onUpdateSuccess = (userData: User) => {
 }
 
 onMounted(() => {
+  const startedAt = window.__HEYSURE_STARTUP__?.startedAt ?? performance.now()
+  startupElapsedTimer = window.setInterval(() => {
+    startupElapsed.value = ((performance.now() - startedAt) / 1000).toFixed(1)
+  }, 100)
+  updateStartup(52, user.value ? '登录状态已恢复，正在准备控制台' : '登录状态检查完成，正在准备首页')
+  if (user.value) startDashboardLoading()
+
   startupFallbackTimer = window.setTimeout(() => {
     hideStaticPreload()
     revealApp()
@@ -110,6 +128,7 @@ onMounted(() => {
   })
 
   if (document.readyState === 'complete') {
+    updateStartup(user.value ? 76 : 100, user.value ? '静态资源已就绪，正在请求项目、成员、设备与知识数据' : '首页资源加载完成，即将进入')
     requestAnimationFrame(() => {
       revealApp()
     })
@@ -117,6 +136,7 @@ onMounted(() => {
   }
 
   const handleLoad = () => {
+    updateStartup(user.value ? 76 : 100, user.value ? '静态资源已就绪，正在请求项目、成员、设备与知识数据' : '首页资源加载完成，即将进入')
     revealApp()
   }
 
@@ -139,6 +159,9 @@ onBeforeUnmount(() => {
   }
   if (dashboardLoadingFallbackTimer !== undefined) {
     window.clearTimeout(dashboardLoadingFallbackTimer)
+  }
+  if (startupElapsedTimer !== undefined) {
+    window.clearInterval(startupElapsedTimer)
   }
 })
 </script>
@@ -236,11 +259,26 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="mt-8">
-              <div class="h-1 overflow-hidden rounded-full" :class="isDarkStartup ? 'bg-zinc-800/80' : 'bg-zinc-200/80'">
-                <div class="startup-progress h-full rounded-full"></div>
+              <div
+                class="h-1 overflow-hidden rounded-full"
+                :class="isDarkStartup ? 'bg-zinc-800/80' : 'bg-zinc-200/80'"
+                role="progressbar"
+                aria-label="网页加载进度"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                :aria-valuenow="startupProgress"
+              >
+                <div
+                  class="h-full rounded-full bg-gradient-to-r from-indigo-400 to-indigo-600 shadow-[0_0_12px_rgba(99,102,241,0.45)] transition-[width] duration-500 ease-out"
+                  :style="{ width: `${startupProgress}%` }"
+                ></div>
               </div>
-              <p class="mt-4 text-sm" :class="isDarkStartup ? 'text-zinc-500' : 'text-zinc-500'">
-                {{ startupHint }}
+              <div class="mt-3 flex items-start justify-between gap-4 text-left text-xs" :class="isDarkStartup ? 'text-zinc-400' : 'text-zinc-500'">
+                <span>{{ startupHint }}</span>
+                <span class="shrink-0 tabular-nums">{{ startupProgress }}% · {{ startupElapsed }}s</span>
+              </div>
+              <p class="mt-2 text-left text-[11px]" :class="isDarkStartup ? 'text-zinc-600' : 'text-zinc-400'">
+                当前说明停留时间较长，通常就是对应加载阶段较慢
               </p>
             </div>
           </div>

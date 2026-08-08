@@ -149,6 +149,19 @@ const endTitleClass = computed(() => {
 })
 
 const flowRunning = computed(() => ['planning', 'executing', 'finishing'].includes(stage.value))
+const completedPhaseCount = computed(() => phases.value.filter(phase => phase.status === 'completed').length)
+const progressPercent = computed(() => {
+  if (finished.value) return 100
+  const totalSteps = phases.value.length + 2
+  if (totalSteps <= 2) return stage.value === 'planning' ? 8 : 0
+  const completedSteps = (planningDone.value ? 1 : 0) + completedPhaseCount.value
+  const activeFraction = phases.value.some(phase => phase.status === 'active') ? 0.5 : 0
+  return Math.min(99, Math.max(0, Math.round(((completedSteps + activeFraction) / totalSteps) * 100)))
+})
+const progressRingStyle = computed(() => ({
+  background: `conic-gradient(rgb(59 130 246) ${progressPercent.value}%, rgb(228 228 231) 0)`,
+}))
+
 
 // Hover details state (for header mode tooltips)
 const hovered = ref<null | { kind: 'arrange' | 'phase' | 'finish'; phase?: TaskPlanPhase }>(null)
@@ -235,15 +248,17 @@ const scrollActiveToCenter = () => {
   const el = active ? phaseEls.value[active.seq] : undefined
   let target: number
   if (el) {
-    target = Math.max(0, el.offsetLeft + el.offsetWidth / 2 - container.clientWidth / 2)
+    target = Math.max(0, el.offsetTop + el.offsetHeight / 2 - container.clientHeight / 2)
   } else if (finished.value || stage.value === 'finishing') {
-    target = container.scrollWidth
+    target = container.scrollHeight
   } else {
     target = 0
   }
-  // 已经基本就位就不再滚动，避免轮询期间反复重启 smooth 滚动造成抖动
-  if (Math.abs(container.scrollLeft - Math.min(target, container.scrollWidth - container.clientWidth)) < 8) return
-  container.scrollTo({ left: target, behavior: 'smooth' })
+  const maxTop = Math.max(0, container.scrollHeight - container.clientHeight)
+  const boundedTarget = Math.min(target, maxTop)
+  // 状态轮询不重复打断用户滚动；仅在当前任务变化时平滑居中。
+  if (Math.abs(container.scrollTop - boundedTarget) < 4) return
+  container.scrollTo({ top: boundedTarget, behavior: 'smooth' })
 }
 
 const requestAutoCenterIfIdle = () => {
@@ -309,6 +324,8 @@ const onFlowMouseLeave = () => {
 
 // 流程条尺寸变化（弹窗缩放 / 悬浮窗拖拽调整）时刷新边缘渐隐状态
 let stripResizeObserver: ResizeObserver | null = null
+void [onStripScroll, onStripWheel, startEdgeScroll, jumpScroll]
+
 watch(flowScrollRef, (el) => {
   stripResizeObserver?.disconnect()
   stripResizeObserver = null
@@ -373,140 +390,98 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <!-- Header mode: minimal horizontal flow placed next to title at top of dialog.
-       Status is shown purely via title color (no badges or "完成" labels).
-       Hover any item (安排 / 阶段 / 结束) to see details. -->
+  <!-- Header mode: vertical task flow beside the model name. -->
   <div
     v-if="visible && props.header"
-    class="relative flex w-full min-w-0 justify-center"
+    class="relative flex h-11 min-w-0 items-center gap-1.5 sm:gap-2"
     :class="{ 'task-flow-running': flowRunning }"
     @mouseenter="onFlowMouseEnter"
     @mouseleave="onFlowMouseLeave"
   >
-    <div class="relative flex min-w-0 max-w-full">
+    <div
+      class="task-progress-ring relative h-7 w-7 shrink-0 rounded-full p-[2px] sm:h-8 sm:w-8"
+      :style="progressRingStyle"
+      role="progressbar"
+      aria-label="任务完成进度"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      :aria-valuenow="progressPercent"
+    >
+      <div class="flex h-full w-full items-center justify-center rounded-full bg-white text-[8px] font-medium tabular-nums text-blue-600 dark:bg-zinc-900 dark:text-blue-400">
+        {{ progressPercent }}%
+      </div>
+    </div>
+
+    <div class="relative min-w-0 flex-1">
       <div
         ref="flowScrollRef"
-        class="task-flow-strip flex w-fit min-w-0 max-w-[320px] items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 sm:max-w-[680px] sm:text-xs"
-        :class="{ 'task-flow-fade-l': canScrollLeft, 'task-flow-fade-r': canScrollRight }"
-        @scroll.passive="onStripScroll"
-        @wheel.passive="onStripWheel"
-        @mousedown="markUserInteraction"
+        class="task-flow-vertical min-w-0 w-full overflow-y-auto pr-1 text-[10px] font-medium sm:pr-2 sm:text-[11px]"
+        @scroll.passive="markUserInteraction"
+        @wheel.passive="markUserInteraction"
         @touchstart.passive="markUserInteraction"
       >
-        <!-- 安排（蓝色） -->
-        <span
-          class="font-medium text-blue-600 dark:text-blue-400 cursor-help hover:underline decoration-dotted"
+        <button
+          type="button"
+          class="task-flow-step text-blue-600 dark:text-blue-400"
           @mouseenter="showHover('arrange')"
           @mouseleave="scheduleHoverClear"
           @pointerdown.stop
           @click.stop="toggleHover('arrange')"
-        >安排</span>
-        <span class="task-flow-arrow text-zinc-400">→</span>
+        ><span class="task-flow-dot bg-blue-500"></span><span>安排</span></button>
 
-        <!-- 各阶段（颜色即状态） -->
-        <template v-for="phase in phases" :key="phase.seq">
-          <span
-            class="font-medium cursor-help hover:underline decoration-dotted"
-            :class="phaseTitleClass(phase)"
-            :ref="el => setPhaseEl(phase.seq, el)"
-            @mouseenter="showHover('phase', phase)"
-            @mouseleave="scheduleHoverClear"
-            @pointerdown.stop
-            @click.stop="toggleHover('phase', phase)"
-          >{{ phase.title }}</span>
-          <span class="task-flow-arrow text-zinc-400">→</span>
-        </template>
+        <button
+          v-for="phase in phases"
+          :key="phase.seq"
+          type="button"
+          class="task-flow-step"
+          :class="phaseTitleClass(phase)"
+          :ref="el => setPhaseEl(phase.seq, el)"
+          @mouseenter="showHover('phase', phase)"
+          @mouseleave="scheduleHoverClear"
+          @pointerdown.stop
+          @click.stop="toggleHover('phase', phase)"
+        ><span class="task-flow-dot border" :class="phaseDotClass(phase)"></span><span class="truncate">{{ phase.title }}</span></button>
 
-        <!-- 结束（成功绿 / 失败红） -->
-        <span
-          class="font-medium cursor-help hover:underline decoration-dotted"
+        <button
+          type="button"
+          class="task-flow-step"
           :class="endTitleClass"
           @mouseenter="showHover('finish')"
           @mouseleave="scheduleHoverClear"
           @pointerdown.stop
           @click.stop="toggleHover('finish')"
-        >结束</span>
+        ><span class="task-flow-dot border" :class="finished ? (outcome === 'failure' ? 'bg-rose-500 border-rose-500' : 'bg-emerald-500 border-emerald-500') : 'bg-transparent border-zinc-300 dark:border-zinc-600'"></span><span>结束</span></button>
       </div>
 
-      <!-- 左右边缘快速定位：悬浮连续滚动，点按翻页；配合渐隐遮罩提示还有更多内容 -->
-      <button
-        v-show="canScrollLeft"
-        type="button"
-        class="task-flow-edge task-flow-edge-l"
-        title="查看前面的阶段"
-        @mouseenter="startEdgeScroll(-1)"
-        @mouseleave="stopEdgeScroll"
-        @pointerdown.stop
-        @click.stop="jumpScroll(-1)"
-      >‹</button>
-      <button
-        v-show="canScrollRight"
-        type="button"
-        class="task-flow-edge task-flow-edge-r"
-        title="查看后面的阶段"
-        @mouseenter="startEdgeScroll(1)"
-        @mouseleave="stopEdgeScroll"
-        @pointerdown.stop
-        @click.stop="jumpScroll(1)"
-      >›</button>
-
-      <!-- 共享悬停详情卡片（鼠标移到阶段上显示）：实底背景保证可读 -->
       <div
         v-if="hovered"
-        class="absolute left-1/2 top-full z-[90] mt-1.5 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white shadow-xl p-2 text-[11px] leading-snug text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 min-w-[210px] max-w-[280px] max-h-[60vh] overflow-y-auto overscroll-contain max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh] max-sm:translate-x-0"
+        class="absolute left-1/2 top-full z-[130] mt-2 min-w-[210px] max-w-[min(280px,80vw)] max-h-[60vh] -translate-x-1/2 overflow-y-auto overscroll-contain rounded-lg border border-zinc-200 bg-white p-2 text-[11px] leading-snug text-zinc-700 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
         @mouseenter="cancelHoverClear"
         @mouseleave="scheduleHoverClear"
         @pointerdown.stop
       >
-      <!-- 安排详情 -->
-      <template v-if="hovered.kind === 'arrange'">
-        <div class="font-semibold text-blue-700 dark:text-blue-400 mb-1">安排</div>
-        <div v-if="plan?.goal">目标：{{ plan.goal }}</div>
-        <div class="mt-0.5">共 {{ plan?.phase_count ?? phases.length }} 个阶段</div>
-        <div v-if="stage === 'planning'" class="mt-1 text-amber-600 dark:text-amber-400 text-[10px]">
-          正在制定分阶段计划…
-        </div>
-      </template>
-
-      <!-- 单个阶段详情 -->
-      <template v-else-if="hovered.kind === 'phase' && hovered.phase">
-        <div class="font-semibold mb-1">
-          阶段 {{ hovered.phase.seq + 1 }}：{{ hovered.phase.title }}
-        </div>
-        <div v-if="hovered.phase.goal" class="mt-0.5">目标：{{ hovered.phase.goal }}</div>
-        <div v-if="hovered.phase.done_signal" class="mt-0.5 text-zinc-500 dark:text-zinc-400">
-          结束标志：{{ hovered.phase.done_signal }}
-        </div>
-
-        <ul v-if="hovered.phase.actions?.length" class="mt-1 ml-3 list-disc space-y-0.5 text-[10px] text-zinc-600 dark:text-zinc-400">
-          <li v-for="(action, i) in hovered.phase.actions" :key="i">
-            {{ action.goal }}
-            <span v-if="action.done_signal" class="text-[9px] text-zinc-400">（{{ action.done_signal }}）</span>
-          </li>
-        </ul>
-
-        <div v-if="hovered.phase.summary" class="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400 line-clamp-2">
-          {{ hovered.phase.summary }}
-        </div>
-
-        <div class="mt-1 text-[10px]" :class="{
-          'text-blue-600 dark:text-blue-400': hovered.phase.status === 'active',
-          'text-emerald-600 dark:text-emerald-400': hovered.phase.status === 'completed',
-          'text-rose-600 dark:text-rose-400': hovered.phase.status === 'failed'
-        }">
-          状态：{{ phaseStatusLabel[hovered.phase.status] || hovered.phase.status }}
-        </div>
-      </template>
-
-      <!-- 结束详情 -->
-      <template v-else-if="hovered.kind === 'finish'">
-        <div class="font-semibold mb-1">结束</div>
-        <div v-if="finished">
-          {{ outcome === 'failure' ? '任务失败，已写入失败日志' : '任务完成，已写入成功日志' }}
-        </div>
-        <div v-else-if="stage === 'finishing'">所有阶段完成，正在总结收尾…</div>
-        <div v-else>待所有阶段完成后总结</div>
-      </template>
+        <template v-if="hovered.kind === 'arrange'">
+          <div class="mb-1 font-semibold text-blue-700 dark:text-blue-400">安排</div>
+          <div v-if="plan?.goal">目标：{{ plan.goal }}</div>
+          <div class="mt-0.5">共 {{ plan?.phase_count ?? phases.length }} 个阶段</div>
+          <div v-if="stage === 'planning'" class="mt-1 text-[10px] text-amber-600 dark:text-amber-400">正在制定分阶段计划…</div>
+        </template>
+        <template v-else-if="hovered.kind === 'phase' && hovered.phase">
+          <div class="mb-1 font-semibold">阶段 {{ hovered.phase.seq + 1 }}：{{ hovered.phase.title }}</div>
+          <div v-if="hovered.phase.goal" class="mt-0.5">目标：{{ hovered.phase.goal }}</div>
+          <div v-if="hovered.phase.done_signal" class="mt-0.5 text-zinc-500 dark:text-zinc-400">结束标志：{{ hovered.phase.done_signal }}</div>
+          <ul v-if="hovered.phase.actions?.length" class="mt-1 ml-3 list-disc space-y-0.5 text-[10px] text-zinc-600 dark:text-zinc-400">
+            <li v-for="(action, i) in hovered.phase.actions" :key="i">{{ action.goal }}<span v-if="action.done_signal" class="text-[9px] text-zinc-400">（{{ action.done_signal }}）</span></li>
+          </ul>
+          <div v-if="hovered.phase.summary" class="mt-1 line-clamp-2 text-[10px] text-zinc-500 dark:text-zinc-400">{{ hovered.phase.summary }}</div>
+          <div class="mt-1 text-[10px]" :class="phaseTitleClass(hovered.phase)">状态：{{ phaseStatusLabel[hovered.phase.status] || hovered.phase.status }}</div>
+        </template>
+        <template v-else-if="hovered.kind === 'finish'">
+          <div class="mb-1 font-semibold">结束</div>
+          <div v-if="finished">{{ outcome === 'failure' ? '任务失败，已写入失败日志' : '任务完成，已写入成功日志' }}</div>
+          <div v-else-if="stage === 'finishing'">所有阶段完成，正在总结收尾…</div>
+          <div v-else>待所有阶段完成后总结</div>
+        </template>
       </div>
     </div>
   </div>
@@ -620,6 +595,63 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.task-progress-ring {
+  box-shadow: 0 0 0 1px rgb(59 130 246 / 0.12), 0 2px 8px rgb(59 130 246 / 0.16);
+  transition: background 300ms ease;
+}
+
+.task-flow-vertical {
+  /* 固定展示约三行；其余阶段可上下滚动查看。 */
+  height: 2.7rem;
+  max-height: 2.7rem;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  /* 上下边缘轻微渐隐，提示仍有前后任务，同时避免硬裁切。 */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 86%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14%, #000 86%, transparent 100%);
+  scroll-behavior: smooth;
+}
+
+.task-flow-vertical::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+.task-flow-step {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  min-height: 1.35rem;
+  position: relative;
+  text-align: left;
+  width: 100%;
+}
+
+.task-flow-step:not(:last-child)::after {
+  background: rgb(212 212 216);
+  content: '';
+  height: calc(100% - 0.6rem);
+  left: 0.22rem;
+  position: absolute;
+  top: calc(50% + 0.3rem);
+  width: 1px;
+}
+
+.dark .task-flow-step:not(:last-child)::after {
+  background: rgb(82 82 91);
+}
+
+.task-flow-dot {
+  border-radius: 9999px;
+  display: inline-block;
+  height: 0.5rem;
+  position: relative;
+  width: 0.5rem;
+  z-index: 1;
+  flex: 0 0 auto;
+}
+
 .task-flow-strip {
   scrollbar-width: none;
 }

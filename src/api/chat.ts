@@ -84,11 +84,14 @@ export const getChatHistory = (
 
 export const getSystemPromptPreview = (
   ctx: AiContext,
-  options: { sessionId?: string } = {},
+  options: { sessionId?: string; selectedMcpTools?: string[] } = {},
 ) =>
   get<{ prompt: string; prompt_source?: string }>('/api/chat/system-prompt-preview', {
     query: queryForAi(ctx, {
       session_id: options.sessionId,
+      selected_mcp_tools: options.selectedMcpTools === undefined
+        ? undefined
+        : JSON.stringify(options.selectedMcpTools),
     }),
     fallbackError: 'Prompt 预览加载失败',
   })
@@ -112,6 +115,7 @@ export const startRun = (payload: {
   visible_content: string
   model_content: string
   visible_tags?: string
+  selected_mcp_tools?: string[]
   session_id: string
   session_name: string
   ai_config_id?: number

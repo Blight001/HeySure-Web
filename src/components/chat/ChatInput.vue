@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FileSelector from './FileSelector.vue'
+import type { McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -10,6 +11,8 @@ const props = defineProps<{
   selectedFiles: string[]
   currentPath: string
   selectableFileRoot?: string
+  toolGroups?: McpCatalogToolGroup[]
+  selectedToolGroups?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +26,7 @@ const emit = defineEmits<{
   (e: 'toggleFile', file: string): void
   (e: 'clearFiles'): void
   (e: 'refreshFiles'): void
+  (e: 'toggleToolGroup', groupKey: string): void
 }>()
 
 const inputValue = computed({
@@ -30,7 +34,7 @@ const inputValue = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
-const attachCount = computed(() => props.selectedFiles.length)
+const attachCount = computed(() => props.selectedFiles.length + (props.selectedToolGroups?.length || 0))
 
 const hasContent = computed(() => !!inputValue.value.trim())
 // 参考 Claude Code：AI 生成中且输入框有内容时，发送按钮保持「发送」——点击会把这条
@@ -97,14 +101,14 @@ watch(() => props.modelValue, async () => {
     <div
       class="relative flex items-end gap-1.5 rounded-2xl acrylic-input px-1.5 py-1.5 shadow-sm transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900/60"
     >
-      <!-- 加号：附加文件 -->
+      <!-- 加号：附加文件 / 动态 MCP 范围 -->
       <button
         @click="emit('toggleFileSelector')"
         class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200"
         :class="isFileSelectorOpen
           ? 'rotate-45 bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
           : 'text-zinc-400 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-zinc-800 dark:hover:text-indigo-300'"
-        :title="isFileSelectorOpen ? '关闭附加面板' : '附加文件'"
+        :title="isFileSelectorOpen ? '关闭附加面板' : '附加文件与选择 MCP 范围'"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -121,12 +125,15 @@ watch(() => props.modelValue, async () => {
         :selectedFiles="selectedFiles"
         :currentPath="currentPath"
         :selectable-file-root="selectableFileRoot"
+        :toolGroups="toolGroups"
+        :selectedToolGroups="selectedToolGroups"
         @close="emit('closeFileSelector')"
         @navigate="emit('navigateTo', $event)"
         @navigateBack="emit('navigateBack')"
         @toggle="emit('toggleFile', $event)"
         @clear="emit('clearFiles')"
         @refresh="emit('refreshFiles')"
+        @toggleToolGroup="emit('toggleToolGroup', $event)"
       />
 
       <textarea

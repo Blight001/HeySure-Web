@@ -756,11 +756,10 @@ watch(
 )
 
 onMounted(async () => {
+  // MCP 完整目录只用于配置弹窗，不阻塞控制台首屏；进入后在后台预取。
+  void loadMcpTools()
   try {
-    await Promise.all([
-      createSeedData(),
-      loadMcpTools(),
-    ])
+    await createSeedData()
   } finally {
     // 即使初始化部分失败，也通知外层撤下加载遮罩，避免界面卡在加载态
     emit('ready')
@@ -1038,12 +1037,12 @@ onUnmounted(() => {
               <span class="absolute left-0 top-0 z-[101] h-3 w-3 cursor-nw-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('nw', $event)" />
             </template>
             <div
-              class="flex items-center gap-2 sm:gap-3 border-b border-zinc-200/60 bg-white/40 px-2 py-2 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:px-3 sm:py-2.5"
+              class="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-200/60 bg-white/40 px-2 py-1 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:gap-3 sm:px-3"
               :class="chatFloating ? 'cursor-move select-none' : ''"
               @pointerdown="onChatHeaderPointerDown"
             >
-              <!-- 左侧组：脱出按钮 + 标题（与右侧按钮组等宽，保证任务流程条居中） -->
-              <div class="flex min-w-0 flex-1 basis-0 items-center gap-2 sm:gap-3">
+              <!-- 左侧组优先保留成员名称空间；任务进度使用独立紧凑宽度，不再强制左右等宽。 -->
+              <div class="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
                 <!-- 脱出按钮：左上角，返回上一页面 -->
                 <button
                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
@@ -1054,14 +1053,14 @@ onUnmounted(() => {
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                   </svg>
                 </button>
-                <details class="group/member-switch relative min-w-0 flex-1" data-chat-drag-ignore @pointerdown.stop>
+                <details class="group/member-switch relative w-fit min-w-0 max-w-[clamp(7rem,28vw,18rem)] shrink-0" data-chat-drag-ignore @pointerdown.stop>
                   <summary
-                    class="flex cursor-pointer list-none items-center gap-1 rounded-md px-1 py-0.5 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 [&::-webkit-details-marker]:hidden"
+                    class="flex w-fit max-w-full cursor-pointer list-none items-center gap-1 rounded-md px-1 py-0.5 hover:bg-zinc-100/80 dark:hover:bg-zinc-800/80 [&::-webkit-details-marker]:hidden"
                     title="点击切换数字成员"
                   >
                     <span class="min-w-0">
                       <span class="block truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ chatTarget.name }}</span>
-                      <span class="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">模型: {{ chatTarget.model || '未设置' }}</span>
+                      <span class="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">{{ chatTarget.model || '未设置' }}</span>
                     </span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform group-open/member-switch:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
@@ -1086,7 +1085,7 @@ onUnmounted(() => {
                   </div>
                 </details>
               </div>
-              <div class="min-w-0 max-w-[55%]" data-chat-drag-ignore>
+              <div class="min-w-0 flex-1 self-center" data-chat-drag-ignore>
                 <TaskProgressPanel
                   :configId="chatTarget.aiConfigId"
                   :sessionId="chatCurrentSessionId"
@@ -1094,8 +1093,8 @@ onUnmounted(() => {
                   header
                 />
               </div>
-              <!-- 右侧组：与左侧组等宽，保证任务流程条居中 -->
-              <div class="flex flex-1 basis-0 items-center justify-end gap-2 sm:gap-3">
+              <!-- 右侧操作按钮按实际宽度占位，避免反向挤压成员名称。 -->
+              <div class="flex shrink-0 items-center justify-end gap-2 sm:gap-3">
                 <!-- 悬浮小窗切换：仅桌面端（移动端聊天固定全屏）；桌面置顶时隐藏 -->
                 <button
                   v-if="!chatPipActive"

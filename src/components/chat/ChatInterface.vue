@@ -142,6 +142,29 @@ let sessionSyncPollEpoch = 0
 let lastRealtimeTokenSyncAt = 0
 let lastExternalRunCheckAt = 0
 const chatScrollRef = ref<HTMLElement | null>(null)
+const chatRootRef = ref<HTMLElement | null>(null)
+let visualViewportFrame: number | null = null
+
+// Mobile virtual keyboards animate the visual viewport before many browsers
+// update the layout viewport. Mirror that changing inset into the chat flex box
+// so the composer follows the keyboard instead of jumping after it fully opens.
+const syncVisualViewport = () => {
+  if (visualViewportFrame !== null) return
+  visualViewportFrame = window.requestAnimationFrame(() => {
+    visualViewportFrame = null
+    const root = chatRootRef.value
+    const viewport = window.visualViewport
+    if (!root || !viewport) return
+
+    const isMobileWidth = window.matchMedia('(max-width: 767px)').matches
+    const keyboardInset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+    // Ignore small browser-toolbar fluctuations; they are not an on-screen keyboard.
+    const inset = isMobileWidth && keyboardInset > 80 ? keyboardInset : 0
+    root.style.setProperty('--chat-keyboard-inset', `${Math.round(inset)}px`)
+
+    if (inset > 0 && stickToBottom.value) scrollToBottom(false)
+  })
+}
 // Re-pins the view to the bottom whenever async content (markdown / images / code
 // blocks) grows the scroll height after the initial scrollToBottom. Without this,
 // the one-shot scroll lands above the latest message and the user can't catch the
@@ -275,9 +298,6 @@ watch(() => props.floatingLayer, enabled => {
   }
 })
 // Live elapsed of the CURRENT segment only, updated by timeTick every 200 ms.
-// The segment restarts on every phase change and on every MCP tool switch (see
-// resetSegmentTimer); per-phase totals still accumulate into mcpElapsedMs /
-// thinkElapsedMs for the post-run summary.
 const liveSegmentMs = computed(() => {
   if (phaseEnterTs.value == null) return 0
   return Math.max(0, timeTick.value - phaseEnterTs.value)
@@ -295,13 +315,6 @@ const runTimingText = computed(() => {
       return `${label}${progress} · ${formatDurationMs(liveSegmentMs.value)}`
     }
     return `AI 思考中 · ${formatDurationMs(liveSegmentMs.value)}`
-  }
-  if (lastRunDurations.value) {
-    const d = lastRunDurations.value
-    const parts = [`总计 ${formatDurationMs(d.total)}`]
-    if (d.think > 100) parts.push(`思考 ${formatDurationMs(d.think)}`)
-    if (d.mcp > 100) parts.push(`MCP ${formatDurationMs(d.mcp)}`)
-    return parts.join(' · ')
   }
   return ''
 })
@@ -406,8 +419,36 @@ function resetSegmentTimer() {
 
 const STATE_PREFIX = '__HS_MCP_STATE__='
 const ATTACHMENTS_PREFIX = '__HS_ATTACHMENTS__='
+// MCP 工具组仅控制本轮真实 allowlist；目录本身进入系统 Prompt，
+// 不再写入用户正文或消息 tags。
+const uncheckedToolGroupKeys = ref<string[]>([])
+const attachableToolGroups = computed<McpCatalogToolGroup[]>(() => {
+  if (frontPromptToolMcpEnabled.value === false) return []
+  return frontPromptToolGroups.value.filter(group => group.tools.length > 0)
+})
+const selectedToolGroupKeys = computed(() => attachableToolGroups.value
+  .filter(group => !group.disabled && !uncheckedToolGroupKeys.value.includes(group.groupKey))
+  .map(group => group.groupKey))
+const checkedToolGroups = computed(() => attachableToolGroups.value
+  .filter(group => selectedToolGroupKeys.value.includes(group.groupKey)))
+const selectedMcpToolNames = computed(() => Array.from(new Set(
+  checkedToolGroups.value.flatMap(group => group.tools.map(tool => String(tool.name || '').trim()).filter(Boolean))
+)))
+const toggleToolGroup = (groupKey: string) => {
+  const group = attachableToolGroups.value.find(item => item.groupKey === groupKey)
+  if (group?.disabled) return
+  const next = [...uncheckedToolGroupKeys.value]
+  const idx = next.indexOf(groupKey)
+  if (idx >= 0) next.splice(idx, 1)
+  else next.push(groupKey)
+  uncheckedToolGroupKeys.value = next
+  void loadEffectiveSystemPromptPreview()
+}
+
 const clearAttachments = () => {
   emit('update:selectedFiles', [])
+  uncheckedToolGroupKeys.value = attachableToolGroups.value.map(group => group.groupKey)
+  void loadEffectiveSystemPromptPreview()
 }
 
 const normalizedAllFiles = computed(() => props.allFiles.map(file => file.replace(/\\/g, '/')))
@@ -1414,6 +1455,7 @@ const loadEffectiveSystemPromptPreview = async () => {
   try {
     const data = await chatApi.getSystemPromptPreview(chatCtx.value, {
       sessionId: currentSessionId.value || undefined,
+      selectedMcpTools: selectedMcpToolNames.value,
     })
     effectiveSystemPromptPreview.value = String(data?.prompt || '').trim()
   } catch (error: any) {
@@ -2144,6 +2186,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       visible_content: visibleUserContent,
       model_content: fullContentWithContext,
       visible_tags: visibleTags,
+      selected_mcp_tools: selectedMcpToolNames.value,
       session_id: currentSessionId.value,
       session_name: shouldAutoTitle ? buildAutoSessionTitle(visibleUserContent) : currentSessionName,
       ai_config_id: props.aiConfigId,
@@ -2208,8 +2251,9 @@ const initializeSessions = async () => {
     currentSessionId.value = ''
     chatMessages.value = []
   }
-  // Setting currentSessionId above triggers the session-change watcher, which
-  // loads the system-prompt preview — no separate call needed here.
+  // 空白新对话没有 session id，session watcher 不一定触发；这里也加载一次，
+  // 让用户在发送首条消息前就能看到当前勾选工具对应的动态 MCP 说明。
+  void loadEffectiveSystemPromptPreview()
 }
 
 watch(() => [props.aiConfigId, preferredInitialSessionId.value] as const, async () => {
@@ -2228,7 +2272,10 @@ watch(() => [props.aiConfigId, preferredInitialSessionId.value] as const, async 
 
 watch(currentSessionId, async (sid, oldSid) => {
   emit('update:currentSessionId', sid || '')
-  if (!sid || sid === oldSid) return
+  if (sid === oldSid) return
+  // 新建空白对话时 sid 为空，也必须立即刷新预览，不能沿用上一段对话的 Prompt。
+  void loadEffectiveSystemPromptPreview()
+  if (!sid) return
   stopRunPolling()
   stopSessionSyncPolling()
   stopTimeTicker()
@@ -2250,6 +2297,12 @@ watch(currentSessionId, async (sid, oldSid) => {
     // 进行中→等本轮完成后 finishRun 续发；已结束→重开即把排队消息续发出去。
     if (!isRunActive.value && !isTyping.value) void drainPendingQueue()
   })
+  void loadEffectiveSystemPromptPreview()
+})
+
+// 工具目录是后台异步加载的；勾选范围一旦就绪或发生变化，就同步刷新前置 Prompt。
+// 这样新建对话无需先发送消息，也能看到准确的动态 MCP 目录。
+watch(selectedMcpToolNames, () => {
   void loadEffectiveSystemPromptPreview()
 })
 
@@ -2291,6 +2344,9 @@ watch(chatScrollRef, (newEl, oldEl) => {
 
 onMounted(async () => {
   window.addEventListener('resize', updateFrontPromptPopupPosition)
+  window.visualViewport?.addEventListener('resize', syncVisualViewport)
+  window.visualViewport?.addEventListener('scroll', syncVisualViewport)
+  syncVisualViewport()
   if (props.currentUserId) runStream.connect(props.currentUserId)
   await initializeSessions()
   emit('update:currentSessionId', currentSessionId.value || '')
@@ -2309,6 +2365,12 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   clearFrontPromptPopupClose()
   window.removeEventListener('resize', updateFrontPromptPopupPosition)
+  window.visualViewport?.removeEventListener('resize', syncVisualViewport)
+  window.visualViewport?.removeEventListener('scroll', syncVisualViewport)
+  if (visualViewportFrame !== null) {
+    window.cancelAnimationFrame(visualViewportFrame)
+    visualViewportFrame = null
+  }
   stopRunPolling()
   stopSessionSyncPolling()
   stopTimeTicker()
@@ -2330,7 +2392,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full gap-3">
+  <div ref="chatRootRef" class="chat-viewport flex flex-col h-full gap-3">
     <div class="flex items-center justify-between gap-1 sm:gap-2">
       <div class="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
         <ChatHeader
@@ -2350,11 +2412,6 @@ onBeforeUnmount(() => {
           class="shrink-0 text-[11px] tabular-nums text-amber-600 dark:text-amber-400"
           title="AI 正在生成，这些消息将于本轮结束后自动接上"
         >待发送 {{ pendingQueue.length }} 条</span>
-        <span
-          v-if="runTimingText"
-          class="text-[11px] tabular-nums"
-          :class="isRunActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400 dark:text-zinc-500'"
-        >{{ runTimingText }}</span>
         <div
           class="relative"
           :class="{ 'group/front-prompt': !props.floatingLayer }"
@@ -2498,6 +2555,9 @@ onBeforeUnmount(() => {
         :selectedFiles="selectedFiles"
         :currentPath="currentPath"
         :selectable-file-root="selectableFileRoot"
+        :toolGroups="attachableToolGroups"
+        :selectedToolGroups="selectedToolGroupKeys"
+        @toggleToolGroup="toggleToolGroup"
         @send="sendChat"
         @stop="stopCurrentRun"
         @toggleFileSelector="handleToggleFileSelector"
@@ -2511,3 +2571,15 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.chat-viewport {
+  box-sizing: border-box;
+}
+
+@media (max-width: 767px) {
+  .chat-viewport {
+    padding-bottom: var(--chat-keyboard-inset, 0px);
+  }
+}
+</style>

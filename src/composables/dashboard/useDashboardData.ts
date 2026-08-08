@@ -557,19 +557,25 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     }
   }
 
-  const createSeedData = async () => {
-    await loadProjects()
-    await Promise.all([
-      loadAIAgents(),
-      loadConnectedDevices(),
-      loadKnowledgeEntries(),
-    ])
+  const ensureKnowledgeFallback = () => {
     if (knowledgeBase.value.length === 0) {
       knowledgeBase.value = [
         { id: 'k1', title: '学习总结数据库规范 v1.0', author: '阿尔法', time: '2026-03-01', tags: ['记忆', '规范'] },
         { id: 'k2', title: '多 Agent 端接入与行为准则', author: '阿尔法', time: '2026-03-05', tags: ['接入', '治理'] },
       ]
     }
+  }
+
+  const createSeedData = async () => {
+    // 项目影响成员归属展示，先读取项目；成员完成后即可展示控制台。
+    await loadProjects()
+    await loadAIAgents()
+
+    // 设备与知识体积更大，但并非首屏骨架必需，后台加载以缩短遮罩停留时间。
+    void Promise.all([
+      loadConnectedDevices(),
+      loadKnowledgeEntries(),
+    ]).then(ensureKnowledgeFallback)
   }
 
   watch(

@@ -212,8 +212,13 @@ export const parseMcpToolBubbleDetails = (raw?: string, fallbackTool = ''): McpT
   }
 
   const command = parseCommandDetails(params, result)
-  params = prettyJson(params)
-  result = prettyJson(result)
+  // Tool payloads sometimes arrive with escaped line breaks. Display them as
+  // actual lines inside the preformatted detail panel instead of showing `\n`.
+  const restoreEscapedLineBreaks = (value: string) => value.replace(/\\n/g, '\n')
+  params = restoreEscapedLineBreaks(prettyJson(params))
+  result = restoreEscapedLineBreaks(prettyJson(result))
+  error = restoreEscapedLineBreaks(error)
+
   const sections = { tool, params, result, error, command }
   return {
     ...sections,
