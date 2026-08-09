@@ -65,8 +65,6 @@ type StepEditor = {
   onDenied: string
 }
 
-const expanded = ref(true)
-const available = ref(true)
 const tab = ref<'cards' | 'runs'>('cards')
 const loading = ref(false)
 const busy = ref(false)
@@ -163,10 +161,6 @@ const loadCards = async () => {
   try {
     cards.value = (await listWorkflowCards({ limit: 200 })).items
   } catch (cause: any) {
-    if (cause?.status === 404) {
-      available.value = false
-      return
-    }
     error.value = cause?.message || '自动化卡片加载失败'
   } finally {
     loading.value = false
@@ -181,10 +175,6 @@ const loadRuns = async () => {
       await loadRunDetail(selectedRun.value)
     }
   } catch (cause: any) {
-    if (cause?.status === 404) {
-      available.value = false
-      return
-    }
     error.value = cause?.message || '运行历史加载失败'
   }
 }
@@ -576,19 +566,16 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 </script>
 
 <template>
-  <section v-if="available" class="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3 dark:border-indigo-500/25 dark:bg-indigo-500/5">
+  <section class="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3 dark:border-indigo-500/25 dark:bg-indigo-500/5">
     <header class="flex items-center justify-between gap-2">
-      <button class="min-w-0 text-left" @click="expanded = !expanded">
+      <div class="min-w-0 text-left">
         <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">自动化卡片</div>
         <div class="text-[10px] text-zinc-500">服务器确定性编排设备 MCP，不逐步调用模型</div>
-      </button>
-      <div class="flex items-center gap-1">
-        <span class="rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-900/50">{{ cards.length }} 张</span>
-        <button class="text-xs text-zinc-500" @click="expanded = !expanded">{{ expanded ? '收起' : '展开' }}</button>
       </div>
+      <span class="rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-900/50">{{ cards.length }} 张</span>
     </header>
 
-    <div v-if="expanded" class="mt-3">
+    <div class="mt-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex rounded-lg bg-white/70 p-0.5 text-xs dark:bg-zinc-900/50">
           <button class="rounded-md px-3 py-1" :class="tab === 'cards' ? 'bg-indigo-600 text-white' : 'text-zinc-500'" @click="tab = 'cards'">卡片</button>
@@ -607,7 +594,7 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
       <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
       <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
 
-      <div v-if="tab === 'cards'" class="mt-3 grid gap-2 lg:grid-cols-2">
+      <div v-if="tab === 'cards'" class="mt-3 grid grid-cols-1 gap-2">
         <div v-if="!loading && filteredCards.length === 0" class="col-span-full py-6 text-center text-xs text-zinc-400">暂无匹配卡片。</div>
         <article v-for="card in filteredCards" :key="card.id" class="rounded-lg border border-zinc-200 bg-white/75 p-2.5 dark:border-zinc-700 dark:bg-zinc-900/55">
           <div class="flex items-start justify-between gap-2">

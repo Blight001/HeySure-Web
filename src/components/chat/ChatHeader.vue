@@ -8,6 +8,7 @@ interface Session {
   name: string
   totalTokens?: number
   forwardToBot?: boolean
+  createdAt?: number | string | null
 }
 
 interface SessionMeta extends Session {
@@ -36,6 +37,7 @@ const normalGroupOpen = ref(true)
 const taskGroupOpen = ref(true)
 const selectedSessionIds = ref<Set<string>>(new Set())
 const contextMenu = ref({ visible: false, x: 0, y: 0 })
+const editingSessionId = ref<string | null>(null)
 
 // A session is a task conversation when its id uses the task-runtime prefix
 // (the authoritative signal); fall back to the legacy "任务:" name prefix.
@@ -65,12 +67,53 @@ const currentSessionName = computed(() => {
   return row?.name || '新对话'
 })
 
+const sessionDateLabel = (session: SessionMeta) => {
+  const raw = session.createdAt
+  let value = raw === null || raw === undefined || raw === '' ? NaN : (typeof raw === 'number' ? raw : Number(raw))
+  if (!Number.isFinite(value)) {
+    const idMatch = String(session.id || '').match(/(?:session[_-])(?:task[_-])?(\d{10,})/i)
+    if (idMatch) value = Number(idMatch[1])
+  }
+  if (!Number.isFinite(value)) {
+    const parsed = Date.parse(String(raw || ''))
+    if (!Number.isFinite(parsed)) return ''
+    value = parsed
+  }
+  if (value > 0 && value < 1_000_000_000_000) value *= 1000
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const year = String(date.getFullYear()).slice(-2)
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${day}`
+}
+
 const sessionLineLabel = (session: SessionMeta) => {
   if (session.isTask) return session.taskTitle || session.name || '未命名任务'
   return session.name || '未命名会话'
 }
 
 const isSessionSelected = (sessionId: string) => selectedSessionIds.value.has(sessionId)
+
+const editingSession = computed(() =>
+  editingSessionId.value
+    ? props.sessionList.find(session => session.id === editingSessionId.value) || null
+    : null,
+)
+
+const openSessionEditor = (sessionId: string) => {
+  editingSessionId.value = sessionId
+}
+
+const closeSessionEditor = () => {
+  editingSessionId.value = null
+}
+
+const deleteEditingSession = () => {
+  const sessionId = editingSessionId.value
+  if (!sessionId) return
+  emit('delete', sessionId)
+  closeSessionEditor()
+}
 
 const toggleSessionSelection = (sessionId: string) => {
   const next = new Set(selectedSessionIds.value)
@@ -145,8 +188,8 @@ useDismissibleLayer({
       <span class="shrink-0 text-zinc-400">▾</span>
     </button>
 
-    <div v-if="open" class="absolute left-0 top-[calc(100%+6px)] z-20 w-[320px] max-w-[88vw] sm:w-[420px] rounded-xl acrylic-modal shadow-lg p-2 overflow-hidden">
-      <div class="max-h-72 overflow-y-auto overflow-x-hidden space-y-2">
+    <div v-if="open" class="absolute left-0 top-[calc(100%+6px)] z-20 w-[320px] max-w-[88vw] sm:w-[420px] rounded-xl acrylic-modal shadow-lg p-2 overflow-hidden max-h-[70dvh]">
+      <div class="max-h-[calc(70dvh-1rem)] overflow-y-auto overflow-x-hidden space-y-2">
         <!-- 普通对话：在此栏目下创建对话 -->
         <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-800/40">
           <button
@@ -176,45 +219,21 @@ useDismissibleLayer({
               @contextmenu="onSessionContextMenu(session.id, $event)"
             >
               <button
-                class="min-w-0 flex-1 text-left text-xs truncate text-emerald-900/85 dark:text-emerald-100/85"
+                class="min-w-0 flex-1 flex items-center gap-1 text-left text-xs overflow-hidden text-emerald-900/85 dark:text-emerald-100/85"
                 @click="onSessionClick(session.id, $event)"
               >
-                {{ sessionLineLabel(session) }}
+                <span v-if="sessionDateLabel(session)" class="shrink-0 w-[38px] text-[10px] tabular-nums text-emerald-700/70 dark:text-emerald-300/80">{{ sessionDateLabel(session) }}</span>
+                <span class="truncate">{{ sessionLineLabel(session) }}</span>
               </button>
               <span class="shrink-0 text-[10px] text-emerald-700/60 dark:text-emerald-300/70">Token: {{ formatTokenCount(session.totalTokens) }}</span>
               <button
-                class="shrink-0 text-[11px] px-2 py-0.5 rounded border"
-                :class="session.forwardToBot
-                  ? 'border-sky-300 text-sky-600 bg-sky-50/60 dark:border-sky-500/40 dark:text-sky-300 dark:bg-sky-900/20'
-                  : 'border-zinc-200 text-zinc-400 dark:border-zinc-700 dark:text-zinc-500'"
-                :title="session.forwardToBot ? '机器人会回复此对话，点击关闭' : '机器人不回复此对话，点击开启'"
-                @click.stop="emit('toggleForward', { sessionId: session.id, enabled: !session.forwardToBot })"
-              >
-                {{ session.forwardToBot ? '机器人✓' : '机器人✗' }}
-              </button>
-              <button
                 class="shrink-0 text-[11px] px-2 py-0.5 rounded border border-emerald-300/60 text-emerald-700/80 hover:bg-emerald-50/50 dark:border-emerald-600/50 dark:text-emerald-300/80 dark:hover:bg-emerald-900/10"
-                @click="emit('rename', session.id)"
+                @click.stop="openSessionEditor(session.id)"
               >
                 编辑
               </button>
-              <button
-                class="shrink-0 text-[11px] px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-900/20"
-                @click="emit('delete', session.id)"
-              >
-                删除
-              </button>
-            </div>
-            <div
-              v-if="normalSessions.length === 0"
-              class="px-2 py-2 text-center text-[11px] text-zinc-400 dark:text-zinc-500"
-            >
-              还没有普通对话，点上方新建一个
             </div>
           </div>
-        </div>
-
-        <!-- 任务：存放全部任务对话记录 -->
         <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-800/40">
           <button
             class="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left text-xs text-zinc-700 dark:text-zinc-200"
@@ -238,23 +257,18 @@ useDismissibleLayer({
             >
               <span class="shrink-0 rounded bg-indigo-100 px-1 text-[10px] text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">任务</span>
               <button
-                class="min-w-0 flex-1 text-left text-xs truncate text-indigo-900/85 dark:text-indigo-100/85"
+                class="min-w-0 flex-1 flex items-center gap-1 text-left text-xs overflow-hidden text-indigo-900/85 dark:text-indigo-100/85"
                 @click="onSessionClick(session.id, $event)"
               >
-                {{ sessionLineLabel(session) }}
+                <span v-if="sessionDateLabel(session)" class="shrink-0 w-[38px] text-[10px] tabular-nums text-indigo-700/70 dark:text-indigo-300/80">{{ sessionDateLabel(session) }}</span>
+                <span class="truncate">{{ sessionLineLabel(session) }}</span>
               </button>
               <span class="shrink-0 text-[10px] text-indigo-700/60 dark:text-indigo-300/70">Token: {{ formatTokenCount(session.totalTokens) }}</span>
               <button
                 class="shrink-0 text-[11px] px-2 py-0.5 rounded border border-indigo-300/60 text-indigo-700/80 hover:bg-indigo-50/50 dark:border-indigo-600/50 dark:text-indigo-300/80 dark:hover:bg-indigo-900/10"
-                @click="emit('rename', session.id)"
+                @click.stop="openSessionEditor(session.id)"
               >
                 编辑
-              </button>
-              <button
-                class="shrink-0 text-[11px] px-2 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-900/20"
-                @click="emit('delete', session.id)"
-              >
-                删除
               </button>
             </div>
             <div
@@ -264,6 +278,72 @@ useDismissibleLayer({
               暂无任务对话记录
             </div>
           </div>
+        </div>
+        </div>
+      </div>
+    </div>
+    <div
+      v-if="editingSession"
+      class="fixed inset-0 z-[300] flex items-center justify-center bg-black/20 p-4 dark:bg-black/40"
+      @click.self="closeSessionEditor"
+    >
+      <div
+        class="w-full max-w-sm rounded-xl acrylic-modal p-4 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="编辑对话"
+        @click.stop
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h3 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">编辑对话</h3>
+            <p class="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+              {{ editingSession.name || '未命名会话' }}
+            </p>
+          </div>
+          <button
+            class="shrink-0 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+            aria-label="关闭"
+            @click="closeSessionEditor"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="mt-4 space-y-2">
+          <button
+            class="w-full rounded-lg border border-emerald-300/60 px-3 py-2 text-left text-xs text-emerald-700/80 hover:bg-emerald-50/50 dark:border-emerald-600/50 dark:text-emerald-300/80 dark:hover:bg-emerald-900/10"
+            @click="emit('rename', editingSession.id); closeSessionEditor()"
+          >
+            修改名称
+          </button>
+
+          <button
+            class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs transition"
+            :class="editingSession.forwardToBot
+              ? 'border-sky-300 bg-sky-50/70 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-300'
+              : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800'"
+            @click="emit('toggleForward', { sessionId: editingSession.id, enabled: !editingSession.forwardToBot })"
+          >
+            <span>{{ editingSession.forwardToBot ? '机器人会回复此对话' : '机器人不回复此对话' }}</span>
+            <span class="text-[11px]">{{ editingSession.forwardToBot ? '已开启' : '已关闭' }}</span>
+          </button>
+
+          <button
+            class="w-full rounded-lg border border-red-200 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-900/20"
+            @click="deleteEditingSession"
+          >
+            删除此对话
+          </button>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+          <button
+            class="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            @click="closeSessionEditor"
+          >
+            完成
+          </button>
         </div>
       </div>
     </div>

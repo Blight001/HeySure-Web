@@ -50,6 +50,7 @@ interface SessionItem {
   name: string
   totalTokens?: number
   forwardToBot?: boolean
+  createdAt?: number | string | null
 }
 
 interface PersistedBlockState {
@@ -287,7 +288,7 @@ const updateFrontPromptPopupPosition = () => {
       viewportRight - width - margin,
     )}px`,
     width: `${width}px`,
-    maxHeight: `${Math.min(448, availableHeight)}px`,
+    maxHeight: `${availableHeight}px`,
     zIndex: PINNED_POPUP_Z_INDEX + 1,
   }
   if (placeAbove) style.bottom = `${view.innerHeight - rect.top + gap}px`
@@ -1371,6 +1372,7 @@ const loadSessions = async () => {
     name: String(row?.name || BLANK_SESSION_NAME),
     totalTokens: Number(row?.total_tokens || 0),
     forwardToBot: !!row?.forward_to_bot,
+    createdAt: row?.created_at ?? row?.createdAt ?? row?.updated_at ?? row?.updatedAt ?? null,
   }))
 }
 
@@ -2488,7 +2490,7 @@ onBeforeUnmount(() => {
             v-if="!frontPromptUsesPortal"
             class="absolute right-0 top-full z-[120] hidden w-[min(42rem,calc(100vw-2rem))] pt-2 group-hover/front-prompt:block"
           >
-            <div class="max-h-[28rem] overflow-hidden rounded-lg acrylic-modal shadow-xl">
+            <div class="max-h-[70dvh] overflow-hidden rounded-lg acrylic-modal shadow-xl">
               <div class="flex items-center justify-between gap-3 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
                 <div class="text-xs font-semibold text-zinc-700 dark:text-zinc-200">前置 Prompt</div>
                 <button
@@ -2499,7 +2501,7 @@ onBeforeUnmount(() => {
                   {{ frontPromptCopied ? '已复制' : '复制' }}
                 </button>
               </div>
-              <div class="max-h-[24rem] overflow-auto">
+              <div class="max-h-[calc(70dvh-3.5rem)] overflow-auto">
                 <FrontPromptPreview
                   :prompt-text="frontPromptBaseText"
                   :prompt-error="frontPromptPreviewError"

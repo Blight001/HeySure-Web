@@ -7,6 +7,7 @@ import BrainCorePanel from './BrainCorePanel.vue'
 // 避免拖慢首屏（移动端"控制台"Tab 默认只需要数字生命面板）
 const KnowledgeBasePanel = defineAsyncComponent(() => import('./KnowledgeBasePanel.vue'))
 const WorkshopPanel = defineAsyncComponent(() => import('./WorkshopPanel.vue'))
+const AutomationCardsPanel = defineAsyncComponent(() => import('@/components/workshop/automation/AutomationCardsPanel.vue'))
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import type { KnowledgeItem, McpRoleMeta, User } from '@/types'
 
@@ -70,7 +71,7 @@ const emit = defineEmits<{
   (e: 'save-role-mcp-permissions'): void
 }>()
 
-const activeTab = ref<'brain' | 'knowledge' | 'workshop'>('brain')
+const activeTab = ref<'brain' | 'knowledge' | 'workshop' | 'work'>('brain')
 
 watch(() => props.focusSignal, () => {
   if (props.focusedAiConfigId) activeTab.value = 'brain'
@@ -117,6 +118,15 @@ watch(() => props.deviceFocusSignal, () => {
         >
           <AppIcon name="workshop" class="w-4 h-4" /> 作坊
         </button>
+        <button
+          @click="activeTab = 'work'"
+          class="flex-1 min-w-0 lg:min-w-[60px] px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-1 sm:gap-1.5 active:scale-[0.985] touch-manipulation whitespace-nowrap lg:whitespace-normal"
+          :class="activeTab === 'work'
+            ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400'
+            : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
+        >
+          <AppIcon name="bolt" class="w-4 h-4" /> 工作
+        </button>
       </div>
     </div>
     
@@ -147,6 +157,11 @@ watch(() => props.deviceFocusSignal, () => {
           @refresh-user="emit('refresh-user', $event)"
           @view-all-mcp="emit('view-all-mcp')"
           @manage-device-tools="emit('manage-device-tools')"
+        />
+        <AutomationCardsPanel
+          v-else-if="activeTab === 'work'"
+          class="flex-1"
+          :devices="connectedDevices"
         />
         <WorkshopPanel
           v-else

@@ -27,6 +27,8 @@ export interface ChatSessionRow {
   name: string
   total_tokens?: number
   forward_to_bot?: boolean
+  created_at?: number | string | null
+  updated_at?: number | string | null
 }
 
 export const listChatSessions = (ctx: AiContext) =>
