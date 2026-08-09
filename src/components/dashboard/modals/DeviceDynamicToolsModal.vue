@@ -13,7 +13,6 @@ import {
   listDeviceToolFailures,
   getPermissionPolicy,
   setPermissionPolicy,
-  getDeviceRuntimes,
   type PermissionDecision,
   type DeviceToolType,
   type DeviceDynamicTool,
@@ -122,14 +121,6 @@ const load = async () => {
     } catch {
       statsByTool.value = {}
     }
-    if (deviceType.value === 'desktop') {
-      try {
-        const r = await getDeviceRuntimes('desktop')
-        onlineRuntimes.value = r.runtimes || { python: false, powershell: false, shell: false }
-      } catch {
-        onlineRuntimes.value = { python: false, powershell: false, shell: false }
-      }
-    }
   } catch (err: any) {
     error.value = err?.message || '加载失败'
   } finally {
@@ -167,14 +158,6 @@ const policyOpen = ref(false)
 const policyTags = ref<string[]>([])
 const policy = ref<Record<string, PermissionDecision | ''>>({})
 const policySaving = ref(false)
-
-// Runtime availability across the user's online desktop devices — drives a
-// "no online device can run this" hint in the runtime editor.
-const onlineRuntimes = ref<Record<string, boolean>>({ python: false, powershell: false, shell: false })
-const runtimeUnavailable = computed(() =>
-  isRuntimeMode.value && draft.value != null && draft.value.desktopKind !== 'js'
-  && onlineRuntimes.value[draft.value.desktopKind] === false,
-)
 
 const loadPolicy = async () => {
   if (deviceType.value !== 'desktop') return
@@ -488,7 +471,6 @@ const onDesktopKindChange = () => {
               : 'border-zinc-200 text-zinc-500 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800'"
             @click="deviceType = tab.key"
           >{{ tab.label }}</button>
-          <div class="ml-auto text-[10px] text-zinc-400 self-center">改动会立即推送到所有在线{{ currentTabLabel }}设备</div>
         </div>
 
         <div v-if="notice" class="mb-3 text-xs text-emerald-600 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900 rounded-lg px-3 py-2">{{ notice }}</div>
@@ -554,9 +536,6 @@ const onDesktopKindChange = () => {
                 <span class="text-zinc-400">{{ policyOpen ? '收起' : '展开' }}</span>
               </button>
               <div v-if="policyOpen" class="border-t border-zinc-200 dark:border-zinc-700 p-2">
-                <p class="mb-2 text-[10px] text-zinc-400 leading-relaxed">
-                  「默认」表示沿用设备默认策略，改动保存后立即下发到在线设备。
-                </p>
                 <div class="grid grid-cols-2 gap-x-3 gap-y-1">
                   <label v-for="tag in policyTags" :key="tag" class="flex items-center gap-1.5">
                     <span class="flex-1 font-mono text-[10px] text-zinc-600 dark:text-zinc-300 truncate" :title="tag">{{ tag }}</span>
@@ -633,7 +612,6 @@ const onDesktopKindChange = () => {
             <div v-if="isJsMode">
               <div class="mb-1 flex items-center justify-between">
                 <span class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">实现代码（JS · 在设备上执行）</span>
-                <span class="text-[10px] text-zinc-400">服务器存储 · 改完即下发同步</span>
               </div>
               <textarea
                 v-model="draft.js"
@@ -641,9 +619,6 @@ const onDesktopKindChange = () => {
                 spellcheck="false"
                 class="w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-950/50 px-2.5 py-2 text-[11px] font-mono leading-relaxed"
               />
-              <p class="mt-1 text-[10px] text-zinc-400 leading-relaxed">
-                作用域内可用：<code>args</code>（入参）、<code>cap</code>（设备原生能力库，如 <code>await cap.call('keyboard.type', args)</code> 或 <code>cap.keyboard.type(args)</code>）、<code>ctx.workspaceRoot</code>。用 <code>return</code> 返回结果。
-              </p>
               <details class="mt-1">
                 <summary class="text-[10px] text-indigo-600 dark:text-indigo-300 cursor-pointer">可用能力（{{ availableTools.length }}）</summary>
                 <div class="mt-1 flex flex-wrap gap-1">
@@ -656,10 +631,6 @@ const onDesktopKindChange = () => {
             <div v-else-if="isRuntimeMode">
               <div class="mb-1 flex items-center justify-between">
                 <span class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">实现源码（{{ draft.desktopKind }} · 在设备上执行）</span>
-                <span class="text-[10px] text-zinc-400">服务器存储 · 改完即下发同步</span>
-              </div>
-              <div v-if="runtimeUnavailable" class="mb-1 text-[10px] text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900 rounded px-2 py-1">
-                当前没有在线桌面设备报告支持 {{ draft.desktopKind }} 运行时（python 需 npm run setup:python 或安装解释器）。仍可保存，设备具备该运行时后即可调用。
               </div>
               <textarea
                 v-model="draft.source"
@@ -667,11 +638,6 @@ const onDesktopKindChange = () => {
                 spellcheck="false"
                 class="w-full rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-950/50 px-2.5 py-2 text-[11px] font-mono leading-relaxed"
               />
-              <p class="mt-1 text-[10px] text-zinc-400 leading-relaxed">
-                <template v-if="draft.desktopKind === 'python'">入参在 <code>args</code> 字典里；把结果赋给 <code>result</code> 返回。需要设备已装 Python（或设 <code>HEYSURE_PYTHON</code>）。</template>
-                <template v-else>命令/脚本支持 <code>${'{'}args.x{'}'}</code> 模板。</template>
-                高风险操作请在下方声明权限标签，设备会按策略允许或拒绝。
-              </p>
               <label class="mt-2 block">
                 <span class="text-[11px] text-zinc-500">权限标签（逗号分隔，可留空）</span>
                 <input
@@ -737,9 +703,6 @@ const onDesktopKindChange = () => {
                 <option v-for="t in availableTools" :key="t.name" :value="`builtin:${t.name}`">{{ t.description }}</option>
                 <option v-for="t in availableTools" :key="`raw-${t.name}`" :value="t.name" />
               </datalist>
-              <p class="text-[10px] text-zinc-400 leading-relaxed">
-                用 <code>builtin:工具名</code> 调用设备原生能力；目标工具名与参数均支持模板，如 <code>${'{'}args.tool{'}'}</code>、<code>${'{'}args.x{'}'}</code>、<code>${'{'}vars.x{'}'}</code>、<code>${'{'}last{'}'}</code>。
-              </p>
             </div>
 
             <!-- version history / rollback (existing tools only) -->

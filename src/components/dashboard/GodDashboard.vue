@@ -179,20 +179,15 @@ const chatMcpCatalogRefreshKey = computed(() => connectedDevices.value
 const {
   settingsOpen,
   leftCollapsed,
-  knowledgeFilterOpen,
-  knowledgeFilter,
   userMenuOpen,
   closeSettings,
-  closeKnowledgeFilter,
   closeUserMenu,
   adminAgents,
   sidebarMemberAgents,
   activeAgents,
-  filteredKnowledgeBase,
 } = useDashboardUi({
   unassignedProjectId: UNASSIGNED_PROJECT_ID,
   agents,
-  knowledgeBase,
 })
 
 const {
@@ -922,7 +917,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative isolate h-app-viewport flex flex-col bg-zinc-50/60 text-zinc-900 overflow-hidden overflow-x-hidden font-sans dark:bg-zinc-950/60 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeKnowledgeFilter(); closeUserMenu()">
+  <div class="relative isolate h-app-viewport flex flex-col bg-zinc-50/60 text-zinc-900 overflow-hidden overflow-x-hidden font-sans dark:bg-zinc-950/60 dark:text-zinc-100 bg-gradient-to-br from-zinc-50 via-zinc-100 to-indigo-50/30 dark:from-zinc-950 dark:via-zinc-900 dark:to-indigo-950/20 animate-gradient" @click="closeSettings(); closeUserMenu()">
     <div class="app-background-glow pointer-events-none absolute inset-0"></div>
     <div class="pointer-events-none absolute inset-0 opacity-60">
       <div class="app-background-orb app-background-orb-left"></div>
@@ -1035,10 +1030,8 @@ onUnmounted(() => {
             :member-agents="sidebarMemberAgents"
             :active-agents="activeAgents"
             :connected-devices="connectedDevices"
-            :knowledge-items="filteredKnowledgeBase"
+            :knowledge-items="knowledgeBase"
             :knowledge-total-count="knowledgeBase.length"
-            :knowledge-filter-open="knowledgeFilterOpen"
-            :knowledge-filter="knowledgeFilter"
             :brain-view-mode="brainViewMode"
             :focused-ai-config-id="focusedAgentConfigId"
             :focus-signal="agentFocusSignal"
@@ -1055,8 +1048,6 @@ onUnmounted(() => {
             @chat="openAgentChat"
             @settings="openAgentSettings"
             @create-ai="openCreateAiConfig('worker')"
-            @update:knowledge-filter-open="knowledgeFilterOpen = $event"
-            @update:knowledge-filter="knowledgeFilter = $event"
             @refresh-user="emit('refreshUser', $event)"
             @view-all-mcp="openAllMcpToolsFromSystemSettings"
             @manage-device-tools="onManageDeviceTools"

@@ -45,15 +45,11 @@ interface KnowledgeItem {
 interface Props {
   items: KnowledgeItem[]
   totalCount: number
-  filterOpen: boolean
-  filterValue: 'all' | 'personas' | 'skills' | 'tools' | 'inheritance' | 'system' | 'business'
   noGlass?: boolean
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 const emit = defineEmits<{
-  (e: 'update:filterOpen', value: boolean): void
-  (e: 'update:filterValue', value: Props['filterValue']): void
   (e: 'refresh-user', user: User): void
   (e: 'view-all-mcp'): void
   (e: 'manage-device-tools', payload?: { deviceType?: string }): void
@@ -910,15 +906,6 @@ const removeInstalledClawHubSkill = async () => {
   }
 }
 
-const toggleFilter = () => {
-  emit('update:filterOpen', !props.filterOpen)
-}
-
-const applyFilter = (value: Props['filterValue']) => {
-  emit('update:filterValue', value)
-  emit('update:filterOpen', false)
-}
-
 const formatTime = (ts?: number | null) => formatDateMinute(ts, '')
 
 const initializeDetailColumns = (detail: KnowledgeEntryItem) => {
@@ -1084,30 +1071,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown)
       <div v-else class="flex items-center gap-2">
         <span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">知识库</span>
       </div>
-      <div class="flex items-center gap-2 relative">
+      <div class="flex items-center gap-2">
         <span class="text-xs bg-zinc-100/60 px-2 py-0.5 rounded-full text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">{{ totalCount }} 条目</span>
-        <button class="px-2 py-0.5 rounded border border-zinc-200 bg-white/75 text-xs text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 transition-colors dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-indigo-300" @click.stop="toggleFilter">
-          筛选
-        </button>
-        <Transition name="fade">
-          <div v-if="filterOpen" class="absolute right-0 top-8 w-36 acrylic-modal rounded-lg shadow-lg text-xs text-zinc-600 z-20 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-200" @click.stop>
-            <button class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800" :class="filterValue === 'all' ? 'text-indigo-600 dark:text-indigo-300' : ''" @click="applyFilter('all')">
-              全部
-            </button>
-            <button class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800" :class="filterValue === 'personas' ? 'text-indigo-600 dark:text-indigo-300' : ''" @click="applyFilter('personas')">
-              固有人格
-            </button>
-            <button class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800" :class="filterValue === 'system' ? 'text-indigo-600 dark:text-indigo-300' : ''" @click="applyFilter('system')">
-              固有思想
-            </button>
-            <button class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800" :class="filterValue === 'skills' ? 'text-indigo-600 dark:text-indigo-300' : ''" @click="applyFilter('skills')">
-              传承技能
-            </button>
-            <button class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800" :class="filterValue === 'tools' ? 'text-indigo-600 dark:text-indigo-300' : ''" @click="applyFilter('tools')">
-              传承思想
-            </button>
-          </div>
-        </Transition>
       </div>
     </div>
     
@@ -1120,19 +1085,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown)
           v-for="item in items"
           :key="item.id"
           type="button"
-          class="w-full text-left p-3 bg-zinc-50/60 rounded border border-zinc-100 hover:border-indigo-200 transition-all duration-200 cursor-pointer group hover:scale-[1.01] hover:shadow-sm dark:bg-zinc-800/60 dark:border-zinc-700 dark:hover:border-indigo-400"
+          class="w-full text-center p-5 bg-zinc-50/60 rounded border border-zinc-100 hover:border-indigo-200 transition-all duration-200 cursor-pointer group hover:scale-[1.01] hover:shadow-sm dark:bg-zinc-800/60 dark:border-zinc-700 dark:hover:border-indigo-400"
           @click="openDetail(item)"
         >
-          <h4 class="text-sm font-medium text-zinc-800 group-hover:text-indigo-600 truncate dark:text-zinc-100 dark:group-hover:text-indigo-300">{{ item.title }}</h4>
-          <div class="flex justify-between items-center mt-1">
-            <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ item.author }}</span>
-            <span class="text-[10px] text-zinc-400 dark:text-zinc-500">{{ item.time }}</span>
-          </div>
-          <div class="mt-2 flex gap-1 flex-wrap">
-            <span v-for="tag in item.tags" :key="tag" class="text-[10px] px-1.5 py-0.5 bg-white/75 border border-zinc-200 rounded text-zinc-500 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-400">
-              #{{ tag }}
-            </span>
-          </div>
+          <h4 class="text-lg font-medium text-zinc-800 group-hover:text-indigo-600 truncate dark:text-zinc-100 dark:group-hover:text-indigo-300">{{ item.title }}</h4>
         </button>
       </TransitionGroup>
     </div>
@@ -1148,37 +1104,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown)
       @click.self="navigateBackOrCloseDetail"
     >
       <div class="acrylic-modal w-full max-w-7xl h-app-viewport sm:h-[92vh] flex flex-col overflow-hidden rounded-none sm:rounded-2xl shadow-2xl border-0 sm:border border-zinc-200 dark:border-zinc-800">
-        <header class="shrink-0 border-b border-zinc-200/80 bg-white/45 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/25 sm:px-6 sm:py-4">
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex min-w-0 items-start gap-3">
-              <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:ring-indigo-900/60">
-                <AppIcon :name="detailPresentation.icon" class="h-5 w-5" />
-              </div>
-              <div class="min-w-0">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-500 dark:text-indigo-300">
-                  {{ detailPresentation.eyebrow }}
-                </div>
-                <h2 id="knowledge-detail-title" class="mt-0.5 truncate text-base font-semibold text-zinc-900 dark:text-zinc-100 sm:text-lg">
-                  {{ detailPresentation.title }}
-                </h2>
-                <p class="mt-1 max-w-4xl text-xs leading-relaxed text-zinc-500 dark:text-zinc-400 sm:text-sm">
-                  {{ detailPresentation.description }}
-                </p>
-              </div>
-            </div>
+        <header class="shrink-0 border-b border-zinc-200/80 bg-white/45 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-950/25 sm:px-6">
+          <div class="flex items-center gap-2 sm:gap-3">
             <button
               ref="detailCloseButton"
               type="button"
-              class="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white/70 text-zinc-500 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
-              :class="canGoBackDetail ? 'px-3' : 'w-10'"
+              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               :aria-label="canGoBackDetail ? '返回上一级' : '关闭知识库详情'"
               :title="canGoBackDetail ? '返回上一级（Esc）' : '关闭（Esc）'"
               @click="navigateBackOrCloseDetail"
             >
-              <AppIcon v-if="canGoBackDetail" name="chevron" class="h-4 w-4 rotate-180" />
-              <span v-if="canGoBackDetail" class="text-xs font-medium">返回上一级</span>
-              <AppIcon v-else name="close" class="h-4 w-4" />
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
             </button>
+            <h2 id="knowledge-detail-title" class="truncate text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              {{ detailPresentation.title }}
+            </h2>
           </div>
         </header>
 
@@ -1426,9 +1368,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown)
                 <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 dark:border-indigo-900/60 dark:bg-indigo-950/20">
                   <div class="min-w-0">
                     <div class="text-xs font-semibold text-indigo-700 dark:text-indigo-300">传承技能 MCP</div>
-                    <div class="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                      工具箱（默认） + 图书管理工具（治理） + 在线设备实时上报的 MCP 工具
-                    </div>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
                     <button

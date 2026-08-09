@@ -45,8 +45,6 @@ interface Props {
   connectedDevices: ConnectedDevice[]
   knowledgeItems: KnowledgeItem[]
   knowledgeTotalCount: number
-  knowledgeFilterOpen: boolean
-  knowledgeFilter: 'all' | 'personas' | 'skills' | 'tools' | 'inheritance' | 'system' | 'business'
   brainViewMode: 'sections' | 'all'
   focusedAiConfigId?: number | null
   focusSignal?: number
@@ -65,8 +63,6 @@ const emit = defineEmits<{
   (e: 'chat', agent: Agent): void
   (e: 'settings', agent: Agent): void
   (e: 'create-ai'): void
-  (e: 'update:knowledge-filter-open', value: boolean): void
-  (e: 'update:knowledge-filter', value: Props['knowledgeFilter']): void
   (e: 'refresh-user', user: User): void
   (e: 'view-all-mcp'): void
   (e: 'manage-device-tools', payload?: { deviceType?: string }): void
@@ -148,10 +144,6 @@ watch(() => props.deviceFocusSignal, () => {
           no-glass
           :items="knowledgeItems"
           :total-count="knowledgeTotalCount"
-          :filter-open="knowledgeFilterOpen"
-          :filter-value="knowledgeFilter"
-          @update:filter-open="emit('update:knowledge-filter-open', $event)"
-          @update:filter-value="emit('update:knowledge-filter', $event)"
           @refresh-user="emit('refresh-user', $event)"
           @view-all-mcp="emit('view-all-mcp')"
           @manage-device-tools="emit('manage-device-tools')"
