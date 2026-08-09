@@ -17,8 +17,8 @@ const error = ref('')
 const copied = ref(false)
 const contentPane = ref<HTMLElement | null>(null)
 
-// ── 目录模型：章（##）是"页"，一页渲染该章 + 其全部 ### 子节；
-//    子标题只是章内锚点，点击滚动定位，不单独成页（避免内容重复）。 ──────
+// ── 文档模型：解析出章（##）与子节（###），只用于左侧目录锚点定位。
+//    阅读模式整篇全文连续渲染（不分页），目录点击负责滚动定位到对应内容块。 ──
 interface DocSub { title: string; line: number }
 interface DocChapter { title: string; start: number; end: number; subs: DocSub[] }
 
@@ -57,69 +57,79 @@ const chapters = computed<DocChapter[]>(() => {
   return out
 })
 
-const selectedIndex = ref(0)     // 当前章
-const activeSubIndex = ref(-1)   // 当前章内高亮的子节，-1 = 无
-const flashSubIndex = ref(-1)    // 刚定位到的子节（短暂高亮，短内容滚不动时也有反馈）
+// 整篇文档的连续内容块：按章/子节切块后全部平铺渲染（不再分页）。
+// 每块带 (chapterIndex, subIndex) 供目录定位；subIndex = -1 表示章头 + 引言。
+interface DocBlock { chapterIndex: number; subIndex: number; text: string }
 
-const currentChapter = computed(() => chapters.value[selectedIndex.value] || null)
-
-// 章内容按子节切块渲染：每块自带 data-sub-index，点子标题直接滚到对应块。
-// 不依赖"数正文里第 N 个标题节点"——文档里出现 #### 或其它写法也不会错位。
-interface DocBlock { subIndex: number; text: string }  // -1 = 章头 + 引言
-
-const currentBlocks = computed<DocBlock[]>(() => {
-  const chapter = currentChapter.value
-  if (!chapter) return []
+const allBlocks = computed<DocBlock[]>(() => {
   const lines = docLines.value
-  if (!chapter.subs.length) {
-    return [{ subIndex: -1, text: lines.slice(chapter.start, chapter.end).join('\n') }]
-  }
-  const blocks: DocBlock[] = []
-  const firstSubLine = chapter.subs[0].line
-  if (firstSubLine > chapter.start) {
-    blocks.push({ subIndex: -1, text: lines.slice(chapter.start, firstSubLine).join('\n') })
-  }
-  chapter.subs.forEach((sub, si) => {
-    const end = si + 1 < chapter.subs.length ? chapter.subs[si + 1].line : chapter.end
-    blocks.push({ subIndex: si, text: lines.slice(sub.line, end).join('\n') })
+  const out: DocBlock[] = []
+  chapters.value.forEach((chapter, ci) => {
+    if (!chapter.subs.length) {
+      out.push({ chapterIndex: ci, subIndex: -1, text: lines.slice(chapter.start, chapter.end).join('\n') })
+      return
+    }
+    const firstSubLine = chapter.subs[0].line
+    if (firstSubLine > chapter.start) {
+      out.push({ chapterIndex: ci, subIndex: -1, text: lines.slice(chapter.start, firstSubLine).join('\n') })
+    }
+    chapter.subs.forEach((sub, si) => {
+      const end = si + 1 < chapter.subs.length ? chapter.subs[si + 1].line : chapter.end
+      out.push({ chapterIndex: ci, subIndex: si, text: lines.slice(sub.line, end).join('\n') })
+    })
   })
-  return blocks
+  return out
 })
 
-// 章节数量变化（编辑/恢复默认后）时保护选中索引
-watch(chapters, (list) => {
-  if (selectedIndex.value >= list.length) {
-    selectedIndex.value = 0
-    activeSubIndex.value = -1
-  }
-})
+// 当前浏览位置：跟随滚动定位到的内容块下标（-1 = 尚未定位）
+const activeBlockIndex = ref(-1)
+const flashBlockIndex = ref(-1)
 
-const selectChapter = (index: number) => {
-  selectedIndex.value = Math.max(0, Math.min(index, chapters.value.length - 1))
-  activeSubIndex.value = -1
-  flashSubIndex.value = -1
-  nextTick(() => { contentPane.value?.scrollTo({ top: 0 }) })
+const activeBlock = computed(() =>
+  activeBlockIndex.value >= 0 ? allBlocks.value[activeBlockIndex.value] : null,
+)
+const activeChapterIndex = computed(() => activeBlock.value?.chapterIndex ?? -1)
+const activeSubIndex = computed(() => activeBlock.value?.subIndex ?? -1)
+
+// 滚动时跟随更新左侧目录高亮
+const onContentScroll = () => {
+  const pane = contentPane.value
+  if (!pane) return
+  const offset = pane.scrollTop + 80
+  let current = -1
+  pane.querySelectorAll<HTMLElement>('[data-block-index]').forEach((el) => {
+    const top = el.getBoundingClientRect().top - pane.getBoundingClientRect().top
+    if (top <= offset) {
+      current = Number(el.getAttribute('data-block-index'))
+    }
+  })
+  if (current !== activeBlockIndex.value) activeBlockIndex.value = current
 }
 
-// 点子标题：切到所属章（如需要），然后滚动定位到该子节所在的内容块。
-const selectSub = (chapterIndex: number, subIndex: number) => {
-  const changedChapter = selectedIndex.value !== chapterIndex
-  selectedIndex.value = chapterIndex
-  activeSubIndex.value = subIndex
+// 滚动定位到指定内容块，并短暂高亮提示
+const scrollToBlock = (blockIndex: number, smooth = true) => {
   nextTick(() => {
     const pane = contentPane.value
     if (!pane) return
-    const target = pane.querySelector(`[data-sub-index="${subIndex}"]`) as HTMLElement | null
+    const target = pane.querySelector(`[data-block-index="${blockIndex}"]`) as HTMLElement | null
     if (!target) { pane.scrollTo({ top: 0 }); return }
     const top = target.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop - 8
-    pane.scrollTo({ top: Math.max(0, top), behavior: changedChapter ? 'auto' : 'smooth' })
-    flashSubIndex.value = subIndex
-    setTimeout(() => { if (flashSubIndex.value === subIndex) flashSubIndex.value = -1 }, 1200)
+    pane.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' })
+    flashBlockIndex.value = blockIndex
+    setTimeout(() => { if (flashBlockIndex.value === blockIndex) flashBlockIndex.value = -1 }, 1200)
   })
 }
 
-const hasPrev = computed(() => selectedIndex.value > 0)
-const hasNext = computed(() => selectedIndex.value < chapters.value.length - 1)
+// 目录点击：整篇连续文档，直接滚动到对应章 / 子节所在内容块
+const selectChapter = (chapterIndex: number) => {
+  const idx = allBlocks.value.findIndex(b => b.chapterIndex === chapterIndex)
+  if (idx >= 0) scrollToBlock(idx)
+}
+
+const selectSub = (chapterIndex: number, subIndex: number) => {
+  const idx = allBlocks.value.findIndex(b => b.chapterIndex === chapterIndex && b.subIndex === subIndex)
+  if (idx >= 0) scrollToBlock(idx)
+}
 
 // 移动端下拉用的扁平目录（章 + 子节，子节值编码为 "章.节"）
 const navOptions = computed(() => {
@@ -133,9 +143,12 @@ const navOptions = computed(() => {
   return out
 })
 
-const mobileNavValue = computed(() =>
-  activeSubIndex.value >= 0 ? `${selectedIndex.value}.${activeSubIndex.value}` : String(selectedIndex.value),
-)
+const mobileNavValue = computed(() => {
+  const b = activeBlock.value
+  if (b && b.subIndex >= 0) return `${b.chapterIndex}.${b.subIndex}`
+  if (b) return String(b.chapterIndex)
+  return '0'
+})
 
 const onMobileNav = (raw: string) => {
   const [ci, si] = raw.split('.')
@@ -161,8 +174,8 @@ const load = async () => {
 watch(() => props.show, (open) => {
   if (open) {
     editing.value = false
-    selectedIndex.value = 0
-    activeSubIndex.value = -1
+    activeBlockIndex.value = -1
+    flashBlockIndex.value = -1
     load()
   }
 })
@@ -196,8 +209,8 @@ const resetToDefault = async () => {
     content.value = data?.content || ''
     isCustom.value = !!data?.isCustom
     editing.value = false
-    selectedIndex.value = 0
-    activeSubIndex.value = -1
+    activeBlockIndex.value = -1
+    flashBlockIndex.value = -1
   } catch (err: any) {
     error.value = err?.message || '恢复默认失败'
   } finally {
@@ -305,14 +318,14 @@ const copyDoc = async () => {
             class="block h-full w-full flex-1 resize-none bg-transparent p-4 font-mono text-xs leading-relaxed text-zinc-700 outline-none dark:text-zinc-200"
           ></textarea>
 
-          <!-- 阅读模式：左目录（章 + 锚点子节） + 右内容（一次一章） -->
+          <!-- 阅读模式：左目录（章 + 锚点子节，点击滚动定位）+ 右全文（整篇连续显示） -->
           <template v-else>
             <nav class="hidden w-56 shrink-0 overflow-y-auto border-r border-zinc-100 bg-zinc-50/40 py-2 custom-scrollbar sm:block dark:border-zinc-800 dark:bg-zinc-950/40">
               <template v-for="(chapter, ci) in chapters" :key="`c-${ci}`">
                 <button
                   type="button"
                   class="block w-full truncate px-3 py-1.5 text-left text-xs font-medium transition-colors"
-                  :class="ci === selectedIndex
+                  :class="ci === activeChapterIndex
                     ? 'border-r-2 border-indigo-500 bg-indigo-50/70 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
                     : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100'"
                   :title="chapter.title"
@@ -325,7 +338,7 @@ const copyDoc = async () => {
                   :key="`s-${ci}-${si}`"
                   type="button"
                   class="block w-full truncate py-1 pl-7 pr-3 text-left text-[11px] transition-colors"
-                  :class="ci === selectedIndex && si === activeSubIndex
+                  :class="ci === activeChapterIndex && si === activeSubIndex
                     ? 'text-indigo-600 dark:text-indigo-300'
                     : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300'"
                   :title="sub.title"
@@ -350,43 +363,22 @@ const copyDoc = async () => {
                 </select>
               </div>
 
-              <div ref="contentPane" class="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+              <div ref="contentPane" class="min-h-0 flex-1 overflow-y-auto custom-scrollbar" @scroll.passive="onContentScroll">
                 <div v-if="error" class="mx-4 mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
                   {{ error }}
                 </div>
-                <!-- Modern documentation surface: background, spacing, rounded card look -->
+                <!-- 整篇文档连续渲染：所有章节一次铺开，滚动阅读 -->
                 <div class="doc-surface mx-2 my-2 rounded-2xl border border-zinc-200/80 bg-white/80 p-5 shadow-sm backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/80 sm:mx-3 sm:p-6">
                   <div
-                    v-for="block in currentBlocks"
-                    :key="`${selectedIndex}-${block.subIndex}`"
+                    v-for="(block, bi) in allBlocks"
+                    :key="`b-${bi}`"
                     class="doc-block"
-                    :class="{ 'doc-block-flash': block.subIndex >= 0 && block.subIndex === flashSubIndex }"
-                    :data-sub-index="block.subIndex >= 0 ? block.subIndex : undefined"
+                    :class="{ 'doc-block-flash': bi === flashBlockIndex }"
+                    :data-block-index="bi"
                   >
                     <MarkdownText :text="block.text" />
                   </div>
                 </div>
-              </div>
-
-              <!-- 上一章 / 下一章 -->
-              <div class="flex shrink-0 items-center justify-between border-t border-zinc-100 px-4 py-2 dark:border-zinc-800">
-                <button
-                  type="button"
-                  class="rounded-lg px-2.5 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-indigo-600 disabled:opacity-0 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-indigo-300"
-                  :disabled="!hasPrev"
-                  @click="selectChapter(selectedIndex - 1)"
-                >
-                  ← {{ hasPrev ? chapters[selectedIndex - 1]?.title : '' }}
-                </button>
-                <span class="text-[10px] text-zinc-300 dark:text-zinc-600">{{ selectedIndex + 1 }} / {{ chapters.length }}</span>
-                <button
-                  type="button"
-                  class="rounded-lg px-2.5 py-1 text-xs text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-indigo-600 disabled:opacity-0 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-indigo-300"
-                  :disabled="!hasNext"
-                  @click="selectChapter(selectedIndex + 1)"
-                >
-                  {{ hasNext ? chapters[selectedIndex + 1]?.title : '' }} →
-                </button>
               </div>
             </div>
           </template>
@@ -418,7 +410,7 @@ const copyDoc = async () => {
   border-top-color: rgba(63, 63, 70, 0.5);
 }
 
-/* 点击子标题定位后的短暂高亮：内容太短滚动不了时也能看出已经切换 */
+/* 点击目录定位后的短暂高亮：内容太短滚动不了时也能看出已经切换 */
 .doc-block-flash {
   animation: docBlockFlash 1.2s ease-out;
   border-radius: 0.5rem;
