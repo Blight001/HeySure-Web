@@ -48,6 +48,7 @@ const { confirm } = useMessage()
 
 type StepEditor = {
   id: string
+  title: string
   type: WorkflowStepType
   deviceId: string
   tool: string
@@ -69,6 +70,14 @@ type StepEditor = {
 }
 
 const AI_INTERVENTION_TOOL = '__workflow.ai_intervention'
+const defaultStepTitles: Record<WorkflowStepType, string> = {
+  mcp: '设备 MCP',
+  condition: '判断分支',
+  delay: '等待',
+  confirm: '人工确认',
+  ai: 'AI 介入',
+  end: '结束',
+}
 
 type WorkflowNodePosition = { x: number; y: number }
 type WorkflowCanvasConnection = {
@@ -166,6 +175,7 @@ const cardRunSummary = (cardId: string) => {
 
 const emptyStep = (type: WorkflowStepType = 'mcp', index = editorSteps.value.length + 1): StepEditor => ({
   id: type === 'end' ? `finish_${index}` : `step_${index}`,
+  title: `${defaultStepTitles[type]} ${index}`,
   type,
   deviceId: '',
   tool: '',
@@ -228,6 +238,7 @@ const fromStep = (id: string, step: Record<string, any>): StepEditor => {
   return ({
   ...emptyStep(type),
   id,
+  title: String(step.title || id),
   type,
   deviceId: isAi ? '' : String(step.toolRef?.deviceId || ''),
   tool: isAi ? '' : String(step.toolRef?.name || ''),
@@ -263,6 +274,7 @@ const openNew = () => {
   editor.maxTransitions = 100
   const end = emptyStep('end', 1)
   end.id = 'finish'
+  end.title = '结束'
   editorSteps.value = [end]
   selectedStepId.value = end.id
   canvasPositions.value = { [end.id]: { x: 360, y: 180 } }
@@ -482,34 +494,6 @@ const disconnectStep = ({ from, branch }: Omit<WorkflowCanvasConnection, 'to'>) 
   else step.next = ''
 }
 
-const renameSelectedStep = (event: Event) => {
-  const step = selectedStep.value
-  if (!step) return
-  const target = event.target as HTMLInputElement
-  const oldId = step.id
-  const newId = target.value.trim()
-  if (!newId || newId === oldId) return
-  if (editorSteps.value.some(item => item !== step && item.id === newId)) {
-    error.value = '步骤 ID 必须唯一'
-    target.value = oldId
-    return
-  }
-  step.id = newId
-  editorSteps.value.forEach(item => {
-    if (item.next === oldId) item.next = newId
-    if (item.onTrue === oldId) item.onTrue = newId
-    if (item.onFalse === oldId) item.onFalse = newId
-    if (item.onDenied === oldId) item.onDenied = newId
-    if (item.onError === oldId) item.onError = newId
-  })
-  if (editor.startStepId === oldId) editor.startStepId = newId
-  const positions = { ...canvasPositions.value }
-  if (positions[oldId]) positions[newId] = positions[oldId]
-  delete positions[oldId]
-  canvasPositions.value = positions
-  selectedStepId.value = newId
-}
-
 const uniqueStepIds = () => {
   const ids = editorSteps.value.map(step => step.id.trim())
   if (ids.some(id => !id)) throw new Error('步骤 ID 不能为空')
@@ -584,6 +568,7 @@ const buildDefinition = (): WorkflowDefinition => {
     } else {
       steps[id] = { type: 'end' }
     }
+    steps[id].title = row.title.trim() || id
   }
   return {
     schemaVersion: 1,
@@ -1028,7 +1013,7 @@ onBeforeUnmount(() => {
             <label class="text-[10px] text-zinc-500">名称<input v-model="editor.name" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
             <label class="text-[10px] text-zinc-500">标签（逗号分隔）<input v-model="editor.tags" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
             <label class="text-[10px] text-zinc-500">风险等级<select v-model="editor.riskLevel" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option value="read_only">只读</option><option value="normal_change">普通变更</option><option value="high_risk">高风险</option></select></label>
-            <label class="text-[10px] text-zinc-500">入口步骤<select v-model="editor.startStepId" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option v-for="step in editorSteps" :key="step.id" :value="step.id">{{ step.id }}</option></select></label>
+            <label class="text-[10px] text-zinc-500">入口步骤<select v-model="editor.startStepId" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option v-for="step in editorSteps" :key="step.id" :value="step.id">{{ step.title || step.id }}</option></select></label>
             <label class="md:col-span-2 lg:col-span-4 text-[10px] text-zinc-500">说明<textarea v-model="editor.description" rows="2" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
             <label class="text-[10px] text-zinc-500">总超时（秒）<input v-model.number="editor.timeoutSeconds" type="number" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
             <label class="text-[10px] text-zinc-500">最大推进次数<input v-model.number="editor.maxTransitions" type="number" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
@@ -1058,7 +1043,7 @@ onBeforeUnmount(() => {
                 <div class="flex gap-1"><button class="rounded border px-2 py-1 text-[9px] text-indigo-600" @click="editor.startStepId = selectedStep.id">设为入口</button><button class="rounded border border-rose-200 px-2 py-1 text-[9px] text-rose-500" @click="removeSelectedStep">删除</button></div>
               </div>
               <div class="mt-3 grid gap-2">
-                <label class="text-[9px] text-zinc-500">步骤 ID<input :value="selectedStep.id" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="renameSelectedStep" /></label>
+                <label class="text-[9px] text-zinc-500">步骤标题<input v-model="selectedStep.title" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                 <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','ai','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
 
                 <template v-if="selectedStep.type === 'mcp'">

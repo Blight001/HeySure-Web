@@ -4,6 +4,7 @@ import type { WorkflowStepType } from '@/api/workflowCards'
 
 type CanvasStep = {
   id: string
+  title?: string
   type: WorkflowStepType
   tool?: string
   next?: string
@@ -380,7 +381,7 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
             <span>#{{ index + 1 }} · {{ typeLabels[step.type] }}</span>
             <span v-if="startStepId === step.id" class="rounded bg-indigo-500/20 px-1 text-indigo-300">入口</span>
           </div>
-          <div class="mt-2 truncate text-xs font-bold text-slate-100">{{ step.id }}</div>
+          <div class="mt-2 truncate text-xs font-bold text-slate-100">{{ step.title || step.id }}</div>
           <div class="mt-1 truncate text-[10px] text-slate-400">{{ nodeMeta(step) }}</div>
           <div
             v-for="port in outputPorts(step)"
