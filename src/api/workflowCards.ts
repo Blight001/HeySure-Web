@@ -1,6 +1,6 @@
 import { del, get, patch, post } from './http'
 
-export type WorkflowCardStatus = 'draft' | 'validated' | 'published' | 'deprecated'
+export type WorkflowCardStatus = 'draft' | 'validated' | 'published'
 export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'confirm' | 'ai' | 'end'
 
 export interface WorkflowDefinition {
@@ -101,6 +101,3 @@ export const exportWorkflowCard = (cardId: string) =>
 
 export const deleteWorkflowCard = (cardId: string) =>
   del<void>(`/api/workflow-cards/${encodeURIComponent(cardId)}`, { fallbackError: '卡片删除失败' })
-
-export const deprecateWorkflowCard = (cardId: string) =>
-  post<WorkflowCard>(`/api/workflow-cards/${encodeURIComponent(cardId)}/deprecate`, {}, { fallbackError: '卡片弃用失败' })

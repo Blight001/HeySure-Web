@@ -4,7 +4,6 @@ import {
   cloneWorkflowCard,
   createWorkflowCard,
   deleteWorkflowCard,
-  deprecateWorkflowCard,
   exportWorkflowCard,
   getWorkflowCard,
   getWorkflowCardVersion,
@@ -764,26 +763,27 @@ const decide = async (approved: boolean) => {
   await loadRuns()
 }
 
-const deleteCard = async (card: WorkflowCard) => {
+const deleteCurrentCard = async () => {
+  if (!editingId.value) return
+  const cardId = editingId.value
+  const cardName = editor.name
   const approved = await confirm({
-    message: `确认删除自动化卡片“${card.name}”？卡片将从列表中移除，历史运行仍保留。`,
+    message: `确认删除自动化卡片“${cardName}”？卡片将从列表中移除，历史运行仍保留。`,
     type: 'warning',
   })
   if (!approved) return
   resetMessages()
+  busy.value = true
   try {
-    await deleteWorkflowCard(card.id)
-    if (editingId.value === card.id) editorOpen.value = false
+    await deleteWorkflowCard(cardId)
+    editorOpen.value = false
     notice.value = '卡片已删除'
     await loadCards()
   } catch (cause: any) {
     error.value = cause?.message || '卡片删除失败'
+  } finally {
+    busy.value = false
   }
-}
-
-const deprecateCard = async (card: WorkflowCard) => {
-  await deprecateWorkflowCard(card.id)
-  await loadCards()
 }
 
 const exportCurrentCard = async () => {
@@ -869,7 +869,7 @@ const comparisonStatuses = computed(() => {
 })
 
 const statusLabel = (status: string) => ({
-  draft: '草稿', validated: '已校验', published: '已发布', deprecated: '已弃用',
+  draft: '草稿', validated: '已校验', published: '已发布',
   pending: '待领取', running: '推进中', waiting_device: '等待设备', waiting_confirmation: '等待确认',
   waiting_ai: '等待 AI', retry_wait: '等待重试', paused_offline: '设备离线', succeeded: '成功', failed: '失败',
   cancelled: '已取消', timed_out: '超时', dispatch_pending: '待派发', dispatching: '派发中',
@@ -923,7 +923,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="tab === 'cards'" class="flex gap-1">
           <input v-model="cardSearch" class="w-36 rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60" placeholder="搜索名称或标签" />
-          <select v-model="cardStatus" class="rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60"><option value="">全部状态</option><option value="draft">草稿</option><option value="validated">已校验</option><option value="published">已发布</option><option value="deprecated">已弃用</option></select>
+          <select v-model="cardStatus" class="rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60"><option value="">全部状态</option><option value="draft">草稿</option><option value="validated">已校验</option><option value="published">已发布</option></select>
           <label class="cursor-pointer rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
             导入<input type="file" accept="application/json,.json" class="hidden" @change="importFile" />
           </label>
@@ -952,8 +952,6 @@ onBeforeUnmount(() => {
           <div class="mt-2 flex flex-wrap gap-1 text-[10px]">
             <button class="rounded border px-2 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-800" @click="openEdit(card)">编辑</button>
             <button :disabled="card.status !== 'published'" class="rounded border border-indigo-200 px-2 py-0.5 text-indigo-600 disabled:opacity-40 dark:border-indigo-500/30 dark:text-indigo-300" @click="openRun(card)">运行</button>
-            <button v-if="card.status === 'published'" class="rounded border border-amber-200 px-2 py-0.5 text-amber-600 dark:border-amber-500/30" @click="deprecateCard(card)">弃用</button>
-            <button class="ml-auto rounded border border-rose-200 px-2 py-0.5 text-rose-500 dark:border-rose-500/30" @click="deleteCard(card)">删除</button>
           </div>
         </article>
       </div>
@@ -1078,7 +1076,7 @@ onBeforeUnmount(() => {
 
         <div class="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]"><div><div class="text-[10px] text-zinc-500">契约设备（可多选）</div><div class="mt-1 grid max-h-32 gap-1 overflow-auto rounded border p-2 dark:border-zinc-700"><label v-for="device in onlineDevices" :key="device.id" class="flex items-center gap-2 text-[10px]"><input v-model="publishDeviceIds" type="checkbox" :value="device.id" /><span>{{ device.name || device.id }}</span><span class="ml-auto text-zinc-400">{{ device.deviceType || device.platform }}</span></label><div v-if="!onlineDevices.length" class="text-[10px] text-zinc-400">暂无在线设备</div></div></div><div class="text-[10px] leading-5 text-zinc-500">共同暴露且 Schema 一致的工具：{{ toolNames.length }} 个。发布时服务端会逐台复核；运行前还会再次检查目标设备在线状态与 MCP 暴露，派发时继续执行权限校验。</div></div>
         <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">已发布版本与当前草稿</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">画布对比 v{{ version.version_number }}</button></div></div>
-        <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">关闭</button><button :disabled="busy" class="rounded border border-zinc-300 px-3 py-1.5 text-xs" @click="saveCard">保存草稿</button><button :disabled="busy" class="rounded border border-emerald-300 px-3 py-1.5 text-xs text-emerald-600" @click="validateCard">校验</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="publishCard">发布版本</button></div></div>
+        <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border border-rose-200 px-3 py-1.5 text-xs text-rose-600 dark:border-rose-500/30 dark:text-rose-300" @click="deleteCurrentCard">删除卡片</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">关闭</button><button :disabled="busy" class="rounded border border-zinc-300 px-3 py-1.5 text-xs" @click="saveCard">保存草稿</button><button :disabled="busy" class="rounded border border-emerald-300 px-3 py-1.5 text-xs text-emerald-600" @click="validateCard">校验</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="publishCard">发布版本</button></div></div>
       </div>
     </div>
     </Teleport>
