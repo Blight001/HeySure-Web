@@ -394,7 +394,9 @@ const deleteSelectedEdge = () => {
 <style scoped>
 .canvas-editor { display: grid; gap: 10px; min-width: 0; }
 .canvas-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.canvas-button { border: 1px solid rgb(161 161 170); border-radius: 7px; padding: 6px 9px; color: #27272a; background: rgb(255 255 255 / 0.9); font-size: 13px; font-weight: 500; }
+.canvas-button { border: 1px solid var(--editor-border, rgb(161 161 170)); border-radius: 7px; padding: 6px 9px; color: var(--editor-text, #27272a); background: var(--editor-field, #eef2f7); font-size: 13px; font-weight: 500; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
+.canvas-button:hover { border-color: #818cf8; color: var(--editor-heading, #3730a3); background: var(--editor-field-focus, #f1f5ff); }
+.canvas-button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(99 102 241 / 0.18); }
 .workflow-canvas { position: relative; height: clamp(500px, 58vh, 680px); overflow: hidden; border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; background-image: radial-gradient(circle, rgb(148 163 184 / 0.25) 1px, transparent 1px); background-size: 20px 20px; cursor: grab; touch-action: none; }
 .workflow-viewport { position: absolute; inset: 0 auto auto 0; width: 2200px; height: 1400px; transform-origin: 0 0; }
 .workflow-svg { position: absolute; inset: 0; overflow: visible; }
@@ -416,6 +418,5 @@ const deleteSelectedEdge = () => {
 .port-label { position: absolute; right: 19px; top: -2px; color: #e2e8f0; font-size: 11px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 2px #0f172a; }
 .tone-success { border-color: #34d399; color: #6ee7b7; }
 .tone-danger { border-color: #fb7185; color: #fda4af; }
-@media (prefers-color-scheme: dark) { .canvas-button { border-color: rgb(113 113 122); color: #f4f4f5; background: rgb(39 39 42 / 0.92); } }
 @media (max-width: 900px) { .canvas-toolbar { align-items: flex-start; flex-direction: column; } .workflow-canvas { height: 480px; } }
 </style>

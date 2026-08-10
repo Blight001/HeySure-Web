@@ -795,11 +795,11 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 
     <Teleport to="body">
     <div v-if="editorOpen" class="fixed inset-0 flex justify-center overflow-y-auto bg-zinc-950/45 p-3 backdrop-blur-sm" :style="{ zIndex: editorZIndex }" @click.self="editorOpen = false">
-      <div class="automation-editor-modal my-auto w-full max-w-[1500px] rounded-xl border border-zinc-200 bg-white p-4 text-zinc-800 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-        <div class="flex items-center justify-between"><div class="text-sm font-semibold">{{ editingId ? '编辑自动化卡片' : '新建自动化卡片' }}</div><button @click="editorOpen = false">✕</button></div>
+      <div class="automation-editor-modal my-auto w-full max-w-[1500px] rounded-xl border p-4 shadow-2xl">
+        <div class="automation-editor-header flex items-center justify-between gap-3"><div class="automation-editor-title text-sm font-semibold">{{ editingId ? '编辑自动化卡片' : '新建自动化卡片' }}</div><button class="automation-editor-close" aria-label="关闭自动化卡片编辑器" @click="editorOpen = false">✕</button></div>
         <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
         <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
-        <details class="mt-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+        <details class="automation-editor-section mt-3 rounded-lg border p-3">
           <summary class="cursor-pointer text-xs font-semibold text-zinc-700 dark:text-zinc-200">卡片设置</summary>
           <div class="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
             <label class="text-[10px] text-zinc-500">名称<input v-model="editor.name" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
@@ -828,10 +828,10 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
             @update:positions="canvasPositions = $event"
           />
 
-          <aside class="max-h-[680px] overflow-auto rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 dark:border-zinc-700 dark:bg-zinc-950/60">
+          <aside class="automation-editor-inspector max-h-[680px] overflow-auto rounded-xl border p-3">
             <template v-if="selectedStep">
               <div class="flex items-center justify-between gap-2">
-                <div><div class="text-xs font-semibold">节点属性</div><div class="mt-0.5 text-[9px] text-zinc-400">连线请直接在画布中拖动端点</div></div>
+                <div><div class="automation-editor-subtitle text-xs font-semibold">节点属性</div><div class="mt-0.5 text-[9px] text-zinc-400">连线请直接在画布中拖动端点</div></div>
                 <div class="flex gap-1"><button class="rounded border px-2 py-1 text-[9px] text-indigo-600" @click="editor.startStepId = selectedStep.id">设为入口</button><button class="rounded border border-rose-200 px-2 py-1 text-[9px] text-rose-500" @click="removeSelectedStep">删除</button></div>
               </div>
               <div class="mt-3 grid gap-2">
@@ -858,7 +858,7 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 
         <div class="mt-4 grid gap-2 md:grid-cols-2"><label class="text-[10px] text-zinc-500">契约设备<select v-model="publishDeviceId" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option value="">请选择设备</option><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || device.id }}</option></select></label><div class="text-[10px] text-zinc-500">设备上报工具：{{ toolNames.length }} 个。MCP 参数表单从当前 JSON Schema 自动生成。</div></div>
         <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">已发布版本与草稿对比</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">v{{ version.version_number }}</button></div><div v-if="versionPreview?.definition" class="mt-1 grid gap-1 md:grid-cols-2"><div><div class="mb-1 text-[9px] text-zinc-400">所选版本</div><pre class="max-h-40 overflow-auto rounded bg-zinc-950 p-2 text-[9px] text-zinc-300">{{ JSON.stringify(versionPreview.definition, null, 2) }}</pre></div><div><div class="mb-1 text-[9px] text-zinc-400">当前草稿</div><pre class="max-h-40 overflow-auto rounded bg-zinc-950 p-2 text-[9px] text-zinc-300">{{ JSON.stringify(draftPreview, null, 2) }}</pre></div></div></div>
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">关闭</button><button :disabled="busy" class="rounded border border-zinc-300 px-3 py-1.5 text-xs" @click="saveCard">保存草稿</button><button :disabled="busy" class="rounded border border-emerald-300 px-3 py-1.5 text-xs text-emerald-600" @click="validateCard">校验</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="publishCard">发布版本</button></div></div>
+        <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">关闭</button><button :disabled="busy" class="rounded border border-zinc-300 px-3 py-1.5 text-xs" @click="saveCard">保存草稿</button><button :disabled="busy" class="rounded border border-emerald-300 px-3 py-1.5 text-xs text-emerald-600" @click="validateCard">校验</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="publishCard">发布版本</button></div></div>
       </div>
     </div>
     </Teleport>
@@ -869,7 +869,64 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 
 <style scoped>
 .automation-editor-modal {
+  --editor-surface: #f8fafc;
+  --editor-panel: #eef2f7;
+  --editor-field: #e8eef5;
+  --editor-field-focus: #f1f5ff;
+  --editor-border: #b8c4d3;
+  --editor-heading: #3730a3;
+  --editor-label: #3f3f46;
+  --editor-muted: #52525b;
+  --editor-text: #18181b;
+  border-color: #c7d2fe;
+  color: var(--editor-text);
+  background:
+    linear-gradient(180deg, rgb(238 242 255 / 0.72), transparent 180px),
+    var(--editor-surface);
   font-size: 14px;
+}
+
+.automation-editor-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dbe3ee;
+}
+
+.automation-editor-title,
+.automation-editor-subtitle {
+  color: var(--editor-heading);
+}
+
+.automation-editor-close {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  color: #4f46e5;
+  background: #e0e7ff;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.automation-editor-close:hover {
+  border-color: #a5b4fc;
+  color: #3730a3;
+  background: #c7d2fe;
+}
+
+.automation-editor-section {
+  border-color: #c7d2fe !important;
+  background: rgb(238 242 255 / 0.52);
+}
+
+.automation-editor-inspector {
+  border-color: var(--editor-border) !important;
+  background: var(--editor-panel) !important;
+}
+
+.automation-editor-footer {
+  padding-top: 14px;
+  border-top: 1px solid #dbe3ee;
 }
 
 .automation-editor-modal :deep(.text-\[9px\]) {
@@ -890,59 +947,120 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 
 .automation-editor-modal :deep(.text-zinc-400),
 .automation-editor-modal :deep(.text-zinc-500) {
-  color: #52525b;
+  color: var(--editor-muted);
 }
 
-.automation-editor-modal label,
-.automation-editor-modal summary {
-  color: #18181b !important;
+.automation-editor-modal label {
+  color: var(--editor-label) !important;
   font-weight: 600;
+}
+
+.automation-editor-modal summary {
+  color: var(--editor-heading) !important;
+  font-weight: 700;
 }
 
 .automation-editor-modal input,
 .automation-editor-modal select,
 .automation-editor-modal textarea {
-  border-color: #a1a1aa !important;
-  color: #09090b !important;
-  background-color: #ffffff !important;
+  border-color: var(--editor-border) !important;
+  color: var(--editor-text) !important;
+  background-color: var(--editor-field) !important;
   font-size: 13px;
   font-weight: 500;
   opacity: 1 !important;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.automation-editor-modal input:hover,
+.automation-editor-modal select:hover,
+.automation-editor-modal textarea:hover {
+  border-color: #94a3b8 !important;
+}
+
+.automation-editor-modal input:focus,
+.automation-editor-modal select:focus,
+.automation-editor-modal textarea:focus {
+  border-color: #6366f1 !important;
+  outline: none;
+  background-color: var(--editor-field-focus) !important;
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 0.16);
 }
 
 .automation-editor-modal select option {
-  color: #09090b !important;
-  background-color: #ffffff !important;
+  color: var(--editor-text) !important;
+  background-color: var(--editor-panel) !important;
 }
 
 .automation-editor-modal input::placeholder,
 .automation-editor-modal textarea::placeholder {
-  color: #52525b !important;
+  color: #64748b !important;
   opacity: 1;
+}
+
+:global(.dark) .automation-editor-modal {
+  --editor-surface: #111827;
+  --editor-panel: #172033;
+  --editor-field: #1e293b;
+  --editor-field-focus: #222d45;
+  --editor-border: #475569;
+  --editor-heading: #c7d2fe;
+  --editor-label: #e4e4e7;
+  --editor-muted: #a1a1aa;
+  --editor-text: #f4f4f5;
+  border-color: #374151;
+  background:
+    linear-gradient(180deg, rgb(49 46 129 / 0.24), transparent 190px),
+    var(--editor-surface);
+}
+
+:global(.dark) .automation-editor-header,
+:global(.dark) .automation-editor-footer {
+  border-color: #334155;
+}
+
+:global(.dark) .automation-editor-close {
+  border-color: #4338ca;
+  color: #c7d2fe;
+  background: rgb(49 46 129 / 0.55);
+}
+
+:global(.dark) .automation-editor-close:hover {
+  border-color: #6366f1;
+  color: #eef2ff;
+  background: rgb(67 56 202 / 0.68);
+}
+
+:global(.dark) .automation-editor-section {
+  border-color: #373e68 !important;
+  background: rgb(49 46 129 / 0.13);
 }
 
 :global(.dark) .automation-editor-modal :deep(.text-zinc-400),
 :global(.dark) .automation-editor-modal :deep(.text-zinc-500),
-:global(.dark) .automation-editor-modal label,
+:global(.dark) .automation-editor-modal label {
+  color: var(--editor-label) !important;
+}
+
 :global(.dark) .automation-editor-modal summary {
-  color: #fafafa !important;
+  color: var(--editor-heading) !important;
 }
 
 :global(.dark) .automation-editor-modal input,
 :global(.dark) .automation-editor-modal select,
 :global(.dark) .automation-editor-modal textarea {
-  border-color: #71717a !important;
-  color: #ffffff !important;
-  background-color: #18181b !important;
+  border-color: var(--editor-border) !important;
+  color: var(--editor-text) !important;
+  background-color: var(--editor-field) !important;
 }
 
 :global(.dark) .automation-editor-modal select option {
-  color: #ffffff !important;
-  background-color: #18181b !important;
+  color: var(--editor-text) !important;
+  background-color: var(--editor-panel) !important;
 }
 
 :global(.dark) .automation-editor-modal input::placeholder,
 :global(.dark) .automation-editor-modal textarea::placeholder {
-  color: #d4d4d8 !important;
+  color: #94a3b8 !important;
 }
 </style>
