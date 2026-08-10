@@ -79,5 +79,8 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  preview: {
+    allowedHosts: ['web'],
   }
 })
