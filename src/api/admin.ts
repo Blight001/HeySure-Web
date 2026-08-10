@@ -8,14 +8,19 @@
 import { del, get, getAuthToken, patch, post, put } from './http'
 import type { UserRole } from '@/types'
 
-export type ServiceStatus = 'running' | 'degraded' | 'down' | 'local'
+export type ServiceStatus = 'running' | 'completed' | 'degraded' | 'down' | 'disabled' | 'local' | 'unknown'
+export type ServiceGroup = 'runtime' | 'infrastructure' | 'channel'
 
 export interface ServiceInfo {
   key: string
   name: string
+  group: ServiceGroup
   status: ServiceStatus
+  summary: string
   detail: Record<string, unknown>
   url: string
+  restartable: boolean
+  logs_available: boolean
 }
 
 export interface LogLine {
@@ -104,6 +109,18 @@ export const restartService = (key: string) =>
     undefined,
     { fallbackError: '重启服务失败' },
   )
+
+export interface RestartAllServicesResult {
+  ok: boolean
+  restarting: string[]
+  errors: Record<string, string>
+  gateway_scheduled: boolean
+}
+
+export const restartAllServices = () =>
+  post<RestartAllServicesResult>('/api/admin/services/restart-all', undefined, {
+    fallbackError: '全部重启失败',
+  })
 
 export const listUsers = () =>
   get<{ users: AdminUser[] }>('/api/admin/users', { fallbackError: '获取用户列表失败' })

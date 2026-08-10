@@ -81,6 +81,7 @@ const tasks = ref<AdminTask[]>([])
 const tasksLoading = ref(false)
 const busyRun = ref<string>('')
 const busyService = ref<string>('')
+const busyAllServices = ref(false)
 
 // ---- Users ----
 const users = ref<AdminUser[]>([])
@@ -213,6 +214,58 @@ const ROLE_OPTIONS = ADMIN_ROLE_OPTIONS
 const fmtTime = formatOptionalDateTime
 const fmtLogTime = formatLogTime
 
+const SERVICE_GROUPS: Array<{ key: ServiceInfo['group']; label: string }> = [
+  { key: 'runtime', label: '核心 Runtime' },
+  { key: 'infrastructure', label: '基础设施与入口' },
+  { key: 'channel', label: '功能链路与调度' },
+]
+
+const groupedServices = computed(() => SERVICE_GROUPS.map(group => ({
+  ...group,
+  services: services.value.filter(service => service.group === group.key),
+})).filter(group => group.services.length > 0))
+
+const DETAIL_LABELS: Record<string, string> = {
+  live: '存活', ready: '就绪', draining: '排空中', accepting_work: '接受任务',
+  accepting_runs: '接受推理', readiness_error: '未就绪原因', uptime_seconds: '运行时长',
+  latency_ms: '延迟', ok: '正常', connected_agent_count: '在线设备',
+  dispatchable_agent_count: '可调度设备', pending_dispatch_count: '等待分发',
+  queued_dispatch_count: '排队分发', oldest_pending_age_seconds: '最老等待任务',
+  active_run_count: '活动推理', queued_run_count: '排队推理', registered_tool_count: '注册工具',
+  registry_version: '工具注册表版本', http_status: 'HTTP 状态', phase: '阶段',
+  running: '执行中', token_configured: '令牌已配置', configured: '地址已配置',
+  current_revisions: '当前 Revision', expected_revisions: '代码 Revision', at_head: '迁移到 Head',
+  enabled: '已启用', heartbeat_age_seconds: '心跳年龄', stale_threshold_seconds: '过期阈值',
+  last_tick_duration_ms: '最近 Tick', last_error: '最近错误', configured_count: '已配置',
+  healthy_count: '正常连接', reported_count: '已上报', service_role: '进程角色',
+}
+
+const detailValue = (key: string, value: unknown): string => {
+  if (value === null || value === undefined || value === '') return '—'
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (Array.isArray(value)) return value.length ? value.join(', ') : '—'
+  if (typeof value === 'number' && key.endsWith('_at')) return fmtTime(value)
+  if (typeof value === 'number' && key.endsWith('_seconds')) return `${Math.round(value * 10) / 10} 秒`
+  if (typeof value === 'number' && key.endsWith('_ms')) return `${value} ms`
+  return String(value)
+}
+
+const serviceDetailRows = (service: ServiceInfo) => {
+  const rows: Array<{ key: string; label: string; value: string }> = []
+  const walk = (value: Record<string, unknown>, prefix = '') => {
+    for (const [key, item] of Object.entries(value)) {
+      const path = prefix ? `${prefix}.${key}` : key
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        walk(item as Record<string, unknown>, path)
+      } else {
+        rows.push({ key: path, label: DETAIL_LABELS[key] || path, value: detailValue(key, item) })
+      }
+    }
+  }
+  walk(service.detail || {})
+  return rows
+}
+
 const loadServices = async () => {
   servicesLoading.value = true
   try {
@@ -234,6 +287,8 @@ const scrollLogsToBottom = () => {
 }
 
 const loadLogs = async (key: string, silent = false) => {
+  const service = services.value.find(item => item.key === key)
+  if (service && !service.logs_available) return
   selectedServiceKey.value = key
   if (!silent) logsLoading.value = true
   logsNote.value = ''
@@ -263,7 +318,10 @@ const loadTasks = async () => {
 }
 
 const refreshServicesTab = async () => {
-  await Promise.all([loadServices(), loadTasks(), loadLogs(selectedServiceKey.value)])
+  const selected = services.value.find(item => item.key === selectedServiceKey.value)
+  const requests: Promise<unknown>[] = [loadServices(), loadTasks()]
+  if (!selected || selected.logs_available) requests.push(loadLogs(selectedServiceKey.value))
+  await Promise.all(requests)
 }
 
 const stopTask = async (task: AdminTask) => {
@@ -304,6 +362,28 @@ const restartService = async (svc: ServiceInfo) => {
     await alert({ message: (err as Error).message, type: 'error' })
   } finally {
     busyService.value = ''
+  }
+}
+
+const restartAllServices = async () => {
+  const ok = await confirm({
+    message: '确认全部重启核心应用 Runtime？系统将依次重启 MCP、Connector、AI，最后重启 Gateway；设备和网页会短暂断开。PostgreSQL、Web 容器和宿主更新器不会被此操作重启。',
+    type: 'warning',
+  })
+  if (!ok) return
+  busyAllServices.value = true
+  try {
+    const result = await adminApi.restartAllServices()
+    if (!result.ok) {
+      const failed = Object.entries(result.errors).map(([key, message]) => `${key}: ${message}`).join('；')
+      await alert({ message: `部分服务未能发起重启：${failed || '未知错误'}`, type: 'error' })
+      return
+    }
+    await alert({ message: '全部核心 Runtime 已发起重启，Gateway 将最后重启。请稍候刷新页面。', type: 'success' })
+  } catch (err) {
+    await alert({ message: (err as Error).message, type: 'error' })
+  } finally {
+    busyAllServices.value = false
   }
 }
 
@@ -1449,38 +1529,61 @@ const avatarFor = (u: AdminUser) =>
             <section>
               <div class="flex items-center justify-between mb-2">
                 <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">子服务运行状态</h3>
-                <button
-                  class="text-xs px-2 py-1 rounded-lg border border-zinc-200 text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-400"
-                  :disabled="servicesLoading"
-                  @click="refreshServicesTab"
-                >{{ servicesLoading ? '刷新中…' : '↻ 刷新' }}</button>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="text-xs px-2 py-1 rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:opacity-50"
+                    :disabled="busyAllServices || servicesLoading"
+                    @click="restartAllServices"
+                  >{{ busyAllServices ? '正在发起…' : '↻ 全部重启' }}</button>
+                  <button
+                    class="text-xs px-2 py-1 rounded-lg border border-zinc-200 text-zinc-500 hover:text-indigo-600 hover:border-indigo-200 dark:border-zinc-700 dark:text-zinc-400"
+                    :disabled="servicesLoading"
+                    @click="refreshServicesTab"
+                  >{{ servicesLoading ? '刷新中…' : '↻ 刷新' }}</button>
+                </div>
               </div>
-              <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div
-                  v-for="svc in services"
-                  :key="svc.key"
-                  class="text-left p-3 rounded-xl border transition-colors cursor-pointer"
-                  :class="selectedServiceKey === svc.key
-                    ? 'border-indigo-300 bg-indigo-50/50 dark:border-indigo-700 dark:bg-indigo-900/10'
-                    : 'border-zinc-200 hover:border-indigo-200 dark:border-zinc-800 dark:hover:border-indigo-800'"
-                  @click="loadLogs(svc.key)"
-                >
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ svc.name }}</span>
-                    <span
-                      class="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                      :class="(STATUS_META[svc.status] || STATUS_META.local).cls"
-                    >{{ (STATUS_META[svc.status] || { label: svc.status }).label }}</span>
-                  </div>
-                  <div class="text-[10px] text-zinc-400 mt-1 truncate">{{ svc.url || svc.key }}</div>
-                  <div class="mt-2 flex justify-end">
-                    <button
-                      v-if="svc.status !== 'local'"
-                      class="text-[11px] px-2 py-1 rounded-lg text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:opacity-50"
-                      :disabled="busyService === svc.key"
-                      @click.stop="restartService(svc)"
-                    >{{ busyService === svc.key ? '重启中…' : '↻ 重启服务' }}</button>
-                    <span v-else class="text-[10px] text-zinc-400">内置无需重启</span>
+              <div v-for="group in groupedServices" :key="group.key" class="mb-4 last:mb-0">
+                <div class="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-2">{{ group.label }}</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <div
+                    v-for="svc in group.services"
+                    :key="svc.key"
+                    class="text-left p-3 rounded-xl border transition-colors"
+                    :class="[
+                      selectedServiceKey === svc.key && svc.logs_available
+                        ? 'border-indigo-300 bg-indigo-50/50 dark:border-indigo-700 dark:bg-indigo-900/10'
+                        : 'border-zinc-200 dark:border-zinc-800',
+                      svc.logs_available ? 'cursor-pointer hover:border-indigo-200 dark:hover:border-indigo-800' : '',
+                    ]"
+                    @click="svc.logs_available && loadLogs(svc.key)"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ svc.name }}</span>
+                      <span
+                        class="text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
+                        :class="(STATUS_META[svc.status] || STATUS_META.unknown).cls"
+                      >{{ (STATUS_META[svc.status] || { label: svc.status }).label }}</span>
+                    </div>
+                    <div class="text-[11px] text-zinc-600 dark:text-zinc-300 mt-2 min-h-8">{{ svc.summary || '暂无摘要' }}</div>
+                    <div class="text-[10px] text-zinc-400 mt-1 truncate" :title="svc.url">{{ svc.url || svc.key }}</div>
+                    <details v-if="serviceDetailRows(svc).length" class="mt-2 text-[10px] text-zinc-500 dark:text-zinc-400">
+                      <summary class="cursor-pointer select-none hover:text-indigo-500">运行明细（{{ serviceDetailRows(svc).length }}）</summary>
+                      <dl class="mt-1.5 space-y-1 max-h-40 overflow-y-auto pr-1">
+                        <div v-for="row in serviceDetailRows(svc)" :key="row.key" class="flex justify-between gap-3">
+                          <dt class="truncate" :title="row.key">{{ row.label }}</dt>
+                          <dd class="text-right text-zinc-700 dark:text-zinc-200 break-all">{{ row.value }}</dd>
+                        </div>
+                      </dl>
+                    </details>
+                    <div class="mt-2 flex items-center justify-end min-h-6">
+                      <button
+                        v-if="svc.restartable"
+                        class="text-[11px] px-2 py-1 rounded-lg text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:opacity-50"
+                        :disabled="busyService === svc.key || busyAllServices"
+                        @click.stop="restartService(svc)"
+                      >{{ busyService === svc.key ? '重启中…' : '↻ 重启服务' }}</button>
+                      <span v-else class="text-[10px] text-zinc-400">状态只读</span>
+                    </div>
                   </div>
                 </div>
               </div>

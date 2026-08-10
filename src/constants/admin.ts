@@ -44,8 +44,11 @@ export const ADMIN_CLEANUP_CATEGORIES: Array<{ key: DbCleanupCategory; label: st
 
 export const ADMIN_STATUS_META: Record<string, AdminStatusMeta> = {
   running: { label: '运行中', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
+  completed: { label: '已完成', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300' },
   degraded: { label: '降级', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
   down: { label: '离线', cls: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+  disabled: { label: '未启用', cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
+  unknown: { label: '未知', cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
   local: { label: '单体内置', cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
 }
 
@@ -69,6 +72,7 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   delete_user: '删除用户',
   create_user: '创建用户',
   restart_service: '重启服务',
+  restart_all_services: '全部重启',
   stop_task: '停止子任务',
   file_write: '保存文件',
   file_mkdir: '新建文件夹',
