@@ -34,6 +34,7 @@ import {
 import { getDeviceMcpScope, type DeviceMcpScope } from '@/api/devices'
 import { useMessage } from '@/composables/useMessage'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import WorkflowCanvasEditor from './WorkflowCanvasEditor.vue'
 
 interface DeviceLike {
   id: string
@@ -68,6 +69,13 @@ type StepEditor = {
   onDenied: string
 }
 
+type WorkflowNodePosition = { x: number; y: number }
+type WorkflowCanvasConnection = {
+  from: string
+  to: string
+  branch: 'next' | 'error' | 'true' | 'false' | 'denied'
+}
+
 const tab = ref<'cards' | 'runs'>('cards')
 const loading = ref(false)
 const busy = ref(false)
@@ -92,6 +100,9 @@ const editor = reactive({
   startStepId: '',
 })
 const editorSteps = ref<StepEditor[]>([])
+const selectedStepId = ref('')
+const canvasPositions = ref<Record<string, WorkflowNodePosition>>({})
+const editorCompatibility = ref<Record<string, any>>({})
 const publishDeviceId = ref('')
 const deviceScope = ref<DeviceMcpScope | null>(null)
 const validation = ref<{ valid: boolean; digest: string; warnings: string[] } | null>(null)
@@ -108,6 +119,7 @@ const confirmations = ref<WorkflowConfirmation[]>([])
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
 const toolDefs = computed(() => deviceScope.value?.toolDefs || {})
 const toolNames = computed(() => Object.keys(toolDefs.value).sort())
+const selectedStep = computed(() => editorSteps.value.find(step => step.id === selectedStepId.value) || null)
 const activeStatuses = new Set(['pending', 'running', 'waiting_device', 'waiting_confirmation', 'retry_wait', 'paused_offline'])
 const filteredCards = computed(() => {
   const query = cardSearch.value.trim().toLowerCase()
@@ -219,6 +231,9 @@ const openNew = () => {
   const end = emptyStep('end', 1)
   end.id = 'finish'
   editorSteps.value = [end]
+  selectedStepId.value = end.id
+  canvasPositions.value = { [end.id]: { x: 360, y: 180 } }
+  editorCompatibility.value = {}
   editor.startStepId = 'finish'
   versions.value = []
   versionPreview.value = null
@@ -240,24 +255,100 @@ const openEdit = async (card: WorkflowCard) => {
   editor.maxTransitions = Number(full.definition.limits?.maxTransitions || 100)
   editor.startStepId = String(full.definition.startStepId || '')
   editorSteps.value = Object.entries(full.definition.steps || {}).map(([id, step]) => fromStep(id, step))
+  selectedStepId.value = editor.startStepId || editorSteps.value[0]?.id || ''
+  editorCompatibility.value = { ...(full.definition.compatibility || {}) }
+  const savedPositions = full.definition.compatibility?.editorLayout?.positions
+  canvasPositions.value = savedPositions && typeof savedPositions === 'object' ? { ...savedPositions } : {}
   versions.value = (await listWorkflowCardVersions(card.id)).items
   versionPreview.value = null
   validation.value = null
   editorOpen.value = true
 }
 
-const addStep = (type: WorkflowStepType) => {
-  const step = emptyStep(type)
-  const previous = editorSteps.value[editorSteps.value.length - 1]
-  if (previous && previous.type !== 'end' && !previous.next) previous.next = step.id
+const addStep = (type: WorkflowStepType, position: WorkflowNodePosition = { x: 48, y: 48 }) => {
+  let suffix = editorSteps.value.length + 1
+  let step = emptyStep(type, suffix)
+  while (editorSteps.value.some(item => item.id === step.id)) {
+    suffix += 1
+    step = emptyStep(type, suffix)
+  }
   editorSteps.value.push(step)
+  canvasPositions.value = { ...canvasPositions.value, [step.id]: position }
   if (!editor.startStepId) editor.startStepId = step.id
+  selectedStepId.value = step.id
+}
+
+const clearStepTarget = (step: StepEditor, targetId: string) => {
+  if (step.next === targetId) step.next = ''
+  if (step.onTrue === targetId) step.onTrue = ''
+  if (step.onFalse === targetId) step.onFalse = ''
+  if (step.onDenied === targetId) step.onDenied = ''
+  if (step.onError === targetId) step.onError = 'fail'
 }
 
 const removeStep = (index: number) => {
   const removed = editorSteps.value[index]
+  if (!removed) return
   editorSteps.value.splice(index, 1)
+  editorSteps.value.forEach(step => clearStepTarget(step, removed.id))
+  const positions = { ...canvasPositions.value }
+  delete positions[removed.id]
+  canvasPositions.value = positions
   if (editor.startStepId === removed.id) editor.startStepId = editorSteps.value[0]?.id || ''
+  selectedStepId.value = editorSteps.value[Math.min(index, editorSteps.value.length - 1)]?.id || ''
+}
+
+const removeSelectedStep = () => {
+  const index = editorSteps.value.findIndex(step => step.id === selectedStepId.value)
+  if (index >= 0) removeStep(index)
+}
+
+const connectSteps = ({ from, to, branch }: WorkflowCanvasConnection) => {
+  const step = editorSteps.value.find(item => item.id === from)
+  if (!step || from === to) return
+  if (branch === 'true') step.onTrue = to
+  else if (branch === 'false') step.onFalse = to
+  else if (branch === 'error') step.onError = to
+  else if (branch === 'denied') step.onDenied = to
+  else step.next = to
+}
+
+const disconnectStep = ({ from, branch }: Omit<WorkflowCanvasConnection, 'to'>) => {
+  const step = editorSteps.value.find(item => item.id === from)
+  if (!step) return
+  if (branch === 'true') step.onTrue = ''
+  else if (branch === 'false') step.onFalse = ''
+  else if (branch === 'error') step.onError = 'fail'
+  else if (branch === 'denied') step.onDenied = ''
+  else step.next = ''
+}
+
+const renameSelectedStep = (event: Event) => {
+  const step = selectedStep.value
+  if (!step) return
+  const target = event.target as HTMLInputElement
+  const oldId = step.id
+  const newId = target.value.trim()
+  if (!newId || newId === oldId) return
+  if (editorSteps.value.some(item => item !== step && item.id === newId)) {
+    error.value = '步骤 ID 必须唯一'
+    target.value = oldId
+    return
+  }
+  step.id = newId
+  editorSteps.value.forEach(item => {
+    if (item.next === oldId) item.next = newId
+    if (item.onTrue === oldId) item.onTrue = newId
+    if (item.onFalse === oldId) item.onFalse = newId
+    if (item.onDenied === oldId) item.onDenied = newId
+    if (item.onError === oldId) item.onError = newId
+  })
+  if (editor.startStepId === oldId) editor.startStepId = newId
+  const positions = { ...canvasPositions.value }
+  if (positions[oldId]) positions[newId] = positions[oldId]
+  delete positions[oldId]
+  canvasPositions.value = positions
+  selectedStepId.value = newId
 }
 
 const uniqueStepIds = () => {
@@ -322,6 +413,13 @@ const buildDefinition = (): WorkflowDefinition => {
     limits: { timeoutSeconds: Number(editor.timeoutSeconds), maxTransitions: Number(editor.maxTransitions) },
     steps,
     output: parseJson(editor.outputText, '输出映射'),
+    compatibility: {
+      ...editorCompatibility.value,
+      editorLayout: {
+        ...(editorCompatibility.value.editorLayout || {}),
+        positions: canvasPositions.value,
+      },
+    },
   }
 }
 
@@ -697,40 +795,65 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 
     <Teleport to="body">
     <div v-if="editorOpen" class="fixed inset-0 overflow-y-auto bg-zinc-950/45 p-3 backdrop-blur-sm" :style="{ zIndex: editorZIndex }" @click.self="editorOpen = false">
-      <div class="mx-auto max-w-4xl rounded-xl border border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+      <div class="mx-auto w-full max-w-[1500px] rounded-xl border border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
         <div class="flex items-center justify-between"><div class="text-sm font-semibold">{{ editingId ? '编辑自动化卡片' : '新建自动化卡片' }}</div><button @click="editorOpen = false">✕</button></div>
         <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
         <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
-        <div class="mt-3 grid gap-2 md:grid-cols-2">
-          <label class="text-[10px] text-zinc-500">名称<input v-model="editor.name" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
-          <label class="text-[10px] text-zinc-500">标签（逗号分隔）<input v-model="editor.tags" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
-          <label class="md:col-span-2 text-[10px] text-zinc-500">说明<textarea v-model="editor.description" rows="2" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
-          <label class="text-[10px] text-zinc-500">风险等级<select v-model="editor.riskLevel" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option value="read_only">只读</option><option value="normal_change">普通变更</option><option value="high_risk">高风险</option></select></label>
-          <label class="text-[10px] text-zinc-500">入口步骤<select v-model="editor.startStepId" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option v-for="step in editorSteps" :key="step.id" :value="step.id">{{ step.id }}</option></select></label>
-          <label class="text-[10px] text-zinc-500">总超时（秒）<input v-model.number="editor.timeoutSeconds" type="number" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
-          <label class="text-[10px] text-zinc-500">最大推进次数<input v-model.number="editor.maxTransitions" type="number" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
-          <label class="text-[10px] text-zinc-500">输入 JSON Schema<textarea v-model="editor.inputSchemaText" rows="8" class="mt-1 w-full font-mono rounded border p-2 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-          <label class="text-[10px] text-zinc-500">输出映射<textarea v-model="editor.outputText" rows="8" class="mt-1 w-full font-mono rounded border p-2 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-        </div>
-
-        <div class="mt-4 flex flex-wrap items-center justify-between gap-2"><div class="text-xs font-semibold">步骤列表</div><div class="flex flex-wrap gap-1"><button v-for="kind in (['mcp','condition','delay','confirm','end'] as WorkflowStepType[])" :key="kind" class="rounded border px-2 py-0.5 text-[10px]" @click="addStep(kind)">+ {{ kind }}</button></div></div>
-        <div class="mt-2 space-y-2">
-          <div v-for="(step, index) in editorSteps" :key="index" class="rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
-            <div class="flex items-center gap-2"><input v-model.trim="step.id" class="min-w-0 flex-1 rounded border px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="step_id" /><select v-model="step.type" class="rounded border px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select><button class="text-[10px] text-rose-500" @click="removeStep(index)">删除</button></div>
-            <div v-if="step.type === 'mcp'" class="mt-2 grid gap-2 md:grid-cols-3">
-              <label class="text-[9px] text-zinc-500">工具<select v-model="step.tool" class="mt-0.5 w-full rounded border px-1 py-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(step)"><option value="">选择设备工具</option><option v-for="tool in toolNames" :key="tool">{{ tool }}</option></select></label>
-              <label class="text-[9px] text-zinc-500">保存为<input v-model="step.saveAs" class="mt-0.5 w-full rounded border px-1 py-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-              <label class="text-[9px] text-zinc-500">成功下一步<select v-model="step.next" class="mt-0.5 w-full rounded border px-1 py-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="target in editorSteps.filter(item => item !== step)" :key="target.id">{{ target.id }}</option></select></label>
-              <label class="md:col-span-2 text-[9px] text-zinc-500">参数模板<textarea v-model="step.argumentsText" rows="5" class="mt-0.5 w-full rounded border p-1 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-              <div v-if="toolProperties(step).length" class="md:col-span-3 grid gap-1 rounded border border-dashed border-zinc-200 p-2 md:grid-cols-2 dark:border-zinc-700"><div class="md:col-span-2 text-[9px] font-medium text-zinc-500">Schema 参数表单（可填字面量或 ${input.*} 模板）</div><label v-for="([name, schema]) in toolProperties(step)" :key="name" class="text-[9px] text-zinc-500">{{ name }}<span v-if="(toolDefs[step.tool]?.input_schema?.required || []).includes(name)" class="text-rose-500"> *</span><select v-if="schema.type === 'boolean'" :value="String(stepArgumentValue(step, name))" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="setStepArgumentValue(step, name, schema, $event)"><option value="true">true</option><option value="false">false</option></select><input v-else :type="schema.type === 'number' || schema.type === 'integer' ? 'number' : 'text'" :value="stepArgumentValue(step, name)" :placeholder="schema.description || schema.type" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @input="setStepArgumentValue(step, name, schema, $event)" /></label></div>
-              <div class="grid grid-cols-2 gap-1"><label class="text-[9px] text-zinc-500">超时<input v-model.number="step.timeoutSeconds" type="number" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">最大尝试<input v-model.number="step.maxAttempts" type="number" min="1" max="10" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">退避<select v-model="step.backoff" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="fixed">固定</option><option value="exponential">指数</option></select></label><label class="text-[9px] text-zinc-500">重试等待<input v-model.number="step.retryDelay" type="number" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label></div>
-              <label class="text-[9px] text-zinc-500">结果投影（逗号分隔）<input v-model="step.projection" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-              <label class="text-[9px] text-zinc-500">失败分支<select v-model="step.onError" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="fail">终止</option><option v-for="target in editorSteps.filter(item => item !== step)" :key="target.id">{{ target.id }}</option></select></label>
-            </div>
-            <div v-else-if="step.type === 'condition'" class="mt-2 grid gap-2 md:grid-cols-2"><label class="md:col-span-2 text-[9px] text-zinc-500">条件表达式<textarea v-model="step.expressionText" rows="5" class="mt-0.5 w-full rounded border p-1 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px]">为真<select v-model="step.onTrue" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="target in editorSteps.filter(item => item !== step)" :key="target.id">{{ target.id }}</option></select></label><label class="text-[9px]">为假<select v-model="step.onFalse" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="target in editorSteps.filter(item => item !== step)" :key="target.id">{{ target.id }}</option></select></label></div>
-            <div v-else-if="step.type === 'delay'" class="mt-2 grid grid-cols-2 gap-2"><label class="text-[9px]">延迟秒数<input v-model.number="step.delaySeconds" type="number" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px]">下一步<select v-model="step.next" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="target in editorSteps.filter(item => item !== step)" :key="target.id">{{ target.id }}</option></select></label></div>
-            <div v-else-if="step.type === 'confirm'" class="mt-2 grid gap-2 md:grid-cols-3"><label class="md:col-span-3 text-[9px]">确认提示<input v-model="step.message" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px]">下一步<select v-model="step.next" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="target in editorSteps.filter(item => item !== step)" :key="target.id">{{ target.id }}</option></select></label><label class="text-[9px]">拒绝分支<select v-model="step.onDenied" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="">取消运行</option><option v-for="target in editorSteps.filter(item => item !== step)" :key="target.id">{{ target.id }}</option></select></label><label class="text-[9px]">确认超时<input v-model.number="step.timeoutSeconds" type="number" class="w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label></div>
+        <details class="mt-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+          <summary class="cursor-pointer text-xs font-semibold text-zinc-700 dark:text-zinc-200">卡片设置</summary>
+          <div class="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
+            <label class="text-[10px] text-zinc-500">名称<input v-model="editor.name" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
+            <label class="text-[10px] text-zinc-500">标签（逗号分隔）<input v-model="editor.tags" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
+            <label class="text-[10px] text-zinc-500">风险等级<select v-model="editor.riskLevel" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option value="read_only">只读</option><option value="normal_change">普通变更</option><option value="high_risk">高风险</option></select></label>
+            <label class="text-[10px] text-zinc-500">入口步骤<select v-model="editor.startStepId" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option v-for="step in editorSteps" :key="step.id" :value="step.id">{{ step.id }}</option></select></label>
+            <label class="md:col-span-2 lg:col-span-4 text-[10px] text-zinc-500">说明<textarea v-model="editor.description" rows="2" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
+            <label class="text-[10px] text-zinc-500">总超时（秒）<input v-model.number="editor.timeoutSeconds" type="number" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
+            <label class="text-[10px] text-zinc-500">最大推进次数<input v-model.number="editor.maxTransitions" type="number" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
+            <label class="md:col-span-2 text-[10px] text-zinc-500">输入 JSON Schema<textarea v-model="editor.inputSchemaText" rows="6" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
+            <label class="md:col-span-2 text-[10px] text-zinc-500">输出映射<textarea v-model="editor.outputText" rows="6" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
           </div>
+        </details>
+
+        <div class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <WorkflowCanvasEditor
+            :steps="editorSteps"
+            :start-step-id="editor.startStepId"
+            :selected-step-id="selectedStepId"
+            :positions="canvasPositions"
+            @select="selectedStepId = $event"
+            @add="addStep"
+            @connect="connectSteps"
+            @disconnect="disconnectStep"
+            @set-start="editor.startStepId = $event"
+            @update:positions="canvasPositions = $event"
+          />
+
+          <aside class="max-h-[680px] overflow-auto rounded-xl border border-zinc-200 bg-zinc-50/70 p-3 dark:border-zinc-700 dark:bg-zinc-950/60">
+            <template v-if="selectedStep">
+              <div class="flex items-center justify-between gap-2">
+                <div><div class="text-xs font-semibold">节点属性</div><div class="mt-0.5 text-[9px] text-zinc-400">连线请直接在画布中拖动端点</div></div>
+                <div class="flex gap-1"><button class="rounded border px-2 py-1 text-[9px] text-indigo-600" @click="editor.startStepId = selectedStep.id">设为入口</button><button class="rounded border border-rose-200 px-2 py-1 text-[9px] text-rose-500" @click="removeSelectedStep">删除</button></div>
+              </div>
+              <div class="mt-3 grid gap-2">
+                <label class="text-[9px] text-zinc-500">步骤 ID<input :value="selectedStep.id" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="renameSelectedStep" /></label>
+                <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
+
+                <template v-if="selectedStep.type === 'mcp'">
+                  <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">选择设备工具</option><option v-for="tool in toolNames" :key="tool">{{ tool }}</option></select></label>
+                  <label class="text-[9px] text-zinc-500">结果保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
+                  <label class="text-[9px] text-zinc-500">参数模板<textarea v-model="selectedStep.argumentsText" rows="6" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
+                  <div v-if="toolProperties(selectedStep).length" class="grid gap-1 rounded border border-dashed border-zinc-200 p-2 dark:border-zinc-700"><div class="text-[9px] font-medium text-zinc-500">Schema 参数</div><label v-for="([name, schema]) in toolProperties(selectedStep)" :key="name" class="text-[9px] text-zinc-500">{{ name }}<span v-if="(toolDefs[selectedStep.tool]?.input_schema?.required || []).includes(name)" class="text-rose-500"> *</span><select v-if="schema.type === 'boolean'" :value="String(stepArgumentValue(selectedStep, name))" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="setStepArgumentValue(selectedStep, name, schema, $event)"><option value="true">true</option><option value="false">false</option></select><input v-else :type="schema.type === 'number' || schema.type === 'integer' ? 'number' : 'text'" :value="stepArgumentValue(selectedStep, name)" :placeholder="schema.description || schema.type" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @input="setStepArgumentValue(selectedStep, name, schema, $event)" /></label></div>
+                  <details class="rounded border border-zinc-200 p-2 dark:border-zinc-700"><summary class="cursor-pointer text-[9px] font-medium text-zinc-500">重试与结果设置</summary><div class="mt-2 grid grid-cols-2 gap-1"><label class="text-[9px] text-zinc-500">超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">最大尝试<input v-model.number="selectedStep.maxAttempts" type="number" min="1" max="10" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">退避<select v-model="selectedStep.backoff" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="fixed">固定</option><option value="exponential">指数</option></select></label><label class="text-[9px] text-zinc-500">重试等待<input v-model.number="selectedStep.retryDelay" type="number" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="col-span-2 text-[9px] text-zinc-500">结果投影<input v-model="selectedStep.projection" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="字段以逗号分隔" /></label></div></details>
+                </template>
+
+                <label v-else-if="selectedStep.type === 'condition'" class="text-[9px] text-zinc-500">条件表达式<textarea v-model="selectedStep.expressionText" rows="8" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
+                <label v-else-if="selectedStep.type === 'delay'" class="text-[9px] text-zinc-500">延迟秒数<input v-model.number="selectedStep.delaySeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
+                <template v-else-if="selectedStep.type === 'confirm'"><label class="text-[9px] text-zinc-500">确认提示<input v-model="selectedStep.message" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">确认超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label></template>
+                <div v-else class="rounded-lg bg-emerald-50 p-3 text-[10px] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">结束节点会生成卡片输出并终止运行。</div>
+              </div>
+            </template>
+            <div v-else class="grid min-h-48 place-items-center text-center text-xs text-zinc-400">点击画布节点<br />在这里编辑属性</div>
+          </aside>
         </div>
 
         <div class="mt-4 grid gap-2 md:grid-cols-2"><label class="text-[10px] text-zinc-500">契约设备<select v-model="publishDeviceId" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option value="">请选择设备</option><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || device.id }}</option></select></label><div class="text-[10px] text-zinc-500">设备上报工具：{{ toolNames.length }} 个。MCP 参数表单从当前 JSON Schema 自动生成。</div></div>
