@@ -394,7 +394,7 @@ const deleteSelectedEdge = () => {
 <style scoped>
 .canvas-editor { display: grid; gap: 10px; min-width: 0; }
 .canvas-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.canvas-button { border: 1px solid rgb(212 212 216); border-radius: 7px; padding: 5px 8px; background: rgb(255 255 255 / 0.72); }
+.canvas-button { border: 1px solid rgb(161 161 170); border-radius: 7px; padding: 6px 9px; color: #27272a; background: rgb(255 255 255 / 0.9); font-size: 13px; font-weight: 500; }
 .workflow-canvas { position: relative; height: clamp(500px, 58vh, 680px); overflow: hidden; border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; background-image: radial-gradient(circle, rgb(148 163 184 / 0.25) 1px, transparent 1px); background-size: 20px 20px; cursor: grab; touch-action: none; }
 .workflow-viewport { position: absolute; inset: 0 auto auto 0; width: 2200px; height: 1400px; transform-origin: 0 0; }
 .workflow-svg { position: absolute; inset: 0; overflow: visible; }
@@ -402,8 +402,8 @@ const deleteSelectedEdge = () => {
 .workflow-edge.selected { stroke: #818cf8; stroke-width: 3.2; }
 .edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
 .edge-preview { fill: none; stroke: #818cf8; stroke-width: 2; stroke-dasharray: 7 5; }
-.edge-label { fill: #cbd5e1; font: 700 10px ui-sans-serif, system-ui; }
-.workflow-node { position: absolute; width: 184px; height: 92px; box-sizing: border-box; padding: 11px 15px; border: 1px solid #475569; border-radius: 11px; background: #1e293b; box-shadow: 0 10px 24px rgb(0 0 0 / 0.28); cursor: move; user-select: none; }
+.edge-label { fill: #f1f5f9; font: 700 12px ui-sans-serif, system-ui; paint-order: stroke; stroke: #0f172a; stroke-width: 3px; }
+.workflow-node { position: absolute; width: 184px; height: 92px; box-sizing: border-box; padding: 10px 15px; border: 1px solid #64748b; border-radius: 11px; color: #f8fafc; background: #1e293b; box-shadow: 0 10px 24px rgb(0 0 0 / 0.28); cursor: move; user-select: none; }
 .workflow-node.selected { border-color: #818cf8; box-shadow: 0 0 0 2px rgb(129 140 248 / 0.26), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.type-condition { border-top-color: #f59e0b; }
 .workflow-node.type-confirm { border-top-color: #e879f9; }
@@ -413,9 +413,9 @@ const deleteSelectedEdge = () => {
 .input-port { left: -9px; top: 38px; }
 .output-port-wrap { position: absolute; right: -9px; height: 15px; }
 .output-port { position: relative; inset: auto; display: block; }
-.port-label { position: absolute; right: 19px; top: -1px; color: #94a3b8; font-size: 8px; white-space: nowrap; }
+.port-label { position: absolute; right: 19px; top: -2px; color: #e2e8f0; font-size: 11px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 2px #0f172a; }
 .tone-success { border-color: #34d399; color: #6ee7b7; }
 .tone-danger { border-color: #fb7185; color: #fda4af; }
-@media (prefers-color-scheme: dark) { .canvas-button { border-color: rgb(63 63 70); background: rgb(24 24 27 / 0.72); } }
+@media (prefers-color-scheme: dark) { .canvas-button { border-color: rgb(113 113 122); color: #f4f4f5; background: rgb(39 39 42 / 0.92); } }
 @media (max-width: 900px) { .canvas-toolbar { align-items: flex-start; flex-direction: column; } .workflow-canvas { height: 480px; } }
 </style>

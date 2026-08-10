@@ -794,8 +794,8 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
     </div>
 
     <Teleport to="body">
-    <div v-if="editorOpen" class="fixed inset-0 overflow-y-auto bg-zinc-950/45 p-3 backdrop-blur-sm" :style="{ zIndex: editorZIndex }" @click.self="editorOpen = false">
-      <div class="mx-auto w-full max-w-[1500px] rounded-xl border border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+    <div v-if="editorOpen" class="fixed inset-0 flex justify-center overflow-y-auto bg-zinc-950/45 p-3 backdrop-blur-sm" :style="{ zIndex: editorZIndex }" @click.self="editorOpen = false">
+      <div class="automation-editor-modal my-auto w-full max-w-[1500px] rounded-xl border border-zinc-200 bg-white p-4 text-zinc-800 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
         <div class="flex items-center justify-between"><div class="text-sm font-semibold">{{ editingId ? '编辑自动化卡片' : '新建自动化卡片' }}</div><button @click="editorOpen = false">✕</button></div>
         <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
         <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
@@ -866,3 +866,55 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
     <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><label class="mt-3 block text-[10px] text-zinc-500">目标设备<select v-model="runDeviceId" class="mt-1 w-full rounded border p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || device.id }}</option></select></label><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy || !runDeviceId" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
   </section>
 </template>
+
+<style scoped>
+.automation-editor-modal {
+  font-size: 14px;
+}
+
+.automation-editor-modal :deep(.text-\[9px\]) {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.automation-editor-modal :deep(.text-\[10px\]),
+.automation-editor-modal :deep(.text-\[11px\]),
+.automation-editor-modal :deep(.text-xs) {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.automation-editor-modal :deep(.text-sm) {
+  font-size: 15px;
+}
+
+.automation-editor-modal :deep(.text-zinc-400),
+.automation-editor-modal :deep(.text-zinc-500) {
+  color: #52525b;
+}
+
+.automation-editor-modal label,
+.automation-editor-modal summary {
+  color: #3f3f46;
+}
+
+.automation-editor-modal input,
+.automation-editor-modal select,
+.automation-editor-modal textarea {
+  color: #27272a;
+  font-size: 13px;
+}
+
+:global(.dark) .automation-editor-modal :deep(.text-zinc-400),
+:global(.dark) .automation-editor-modal :deep(.text-zinc-500),
+:global(.dark) .automation-editor-modal label,
+:global(.dark) .automation-editor-modal summary {
+  color: #d4d4d8;
+}
+
+:global(.dark) .automation-editor-modal input,
+:global(.dark) .automation-editor-modal select,
+:global(.dark) .automation-editor-modal textarea {
+  color: #f4f4f5;
+}
+</style>
