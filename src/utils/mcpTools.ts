@@ -157,6 +157,7 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   'mcp.describe+tool': '工具说明',
   'workspace.search': '联网搜索',
   'workspace.run+command': '执行命令',
+  'workspace.file+manage': '文件管理',
   'member.manage': 'AI 数字成员管理',
   'todo.manage': '计划管理',
   'message.send+to': '发消息',

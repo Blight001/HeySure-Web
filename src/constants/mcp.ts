@@ -7,6 +7,7 @@ export const DEFAULT_MCP_TOOLS = [
   'mcp.describe+tool',
   'workspace.search',
   'workspace.run+command',
+  'workspace.file+manage',
   'member.manage',
   'device+mcp.manage',
   'todo.manage',
