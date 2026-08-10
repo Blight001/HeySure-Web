@@ -298,6 +298,7 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
         recentUserChatActive: !!row.recent_user_chat_active,
         recentUserChatAt: Number.isFinite(Number(row.recent_user_chat_at)) ? Number(row.recent_user_chat_at) : undefined,
         model: row.model || '',
+        executionMode: row.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model',
         currentTaskTitle: row.current_task_title || '',
         currentTaskStatus: row.current_task_status || 'idle',
         taskCurrent,

@@ -52,6 +52,7 @@ export interface AiConfigUpsertPayload {
   token_limit: number
   model?: string
   model_preset_id?: string
+  execution_mode?: 'internal_model' | 'external_mcp'
   prompt?: string
   mcp_tools: string
   bot_channel: 'feishu' | 'qq'
@@ -76,3 +77,30 @@ export const updateAiConfigFields = (configId: number, payload: Partial<AiConfig
 
 export const deleteAiConfig = (configId: number) =>
   del<void>(`/api/ai/configs/${configId}`, { fallbackError: 'AI 删除失败' })
+
+export interface ExternalControlEvent {
+  id: number
+  run_id?: string | null
+  event_type: string
+  tool_name?: string
+  status: string
+  result: unknown
+  created_at: number
+}
+
+export interface ExternalControlStatus {
+  ai_config_id: number
+  execution_mode: 'external_mcp'
+  credentials: Array<Record<string, any>>
+  runs: Array<Record<string, any>>
+  events: ExternalControlEvent[]
+}
+
+export const issueExternalControllerCredential = (configId: number, payload: { label?: string; ttl_days?: number } = {}) =>
+  post<Record<string, any>>(`/api/external-control/${configId}/credentials`, payload, { fallbackError: '控制文档生成失败' })
+
+export const getExternalControlStatus = (configId: number) =>
+  get<ExternalControlStatus>(`/api/external-control/${configId}`, { fallbackError: '外部控制状态加载失败' })
+
+export const revokeExternalControllerCredential = (configId: number, credentialId: number) =>
+  del<{ revoked: number }>(`/api/external-control/${configId}/credentials/${credentialId}`, { fallbackError: '控制凭证吊销失败' })

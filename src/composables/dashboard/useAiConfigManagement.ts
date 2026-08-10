@@ -7,6 +7,7 @@ import {
   deleteAiConfig as apiDeleteAiConfig,
   listAiConfigs,
   updateAiConfig,
+  updateAiConfigFields,
   type AiConfigUpsertPayload,
 } from '@/api/ai'
 import { DEFAULT_AI_AVATAR, resolveAiAvatarUrl } from '@/utils/aiAvatar'
@@ -167,6 +168,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     token_limit: role === 'assistant_admin' ? 0 : 10000,
     model_preset_id: modelPresets.value[0]?.id || '',
     model: modelPresets.value[0]?.model || '',
+    execution_mode: 'internal_model' as 'internal_model' | 'external_mcp',
     prompt: '',
     // 新建 AI 默认勾选全部可用 MCP 工具（工具列表已加载时用全量，否则回退到基础默认集）。
     mcp_tools: availableMcpTools.value.length ? [...availableMcpTools.value] : [...defaultMcpTools],
@@ -302,6 +304,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       token_limit: cfg.token_limit ?? aiConfigForm.value.token_limit,
       model_preset_id: presetIdForModel(cfg.model_preset_id, cfg.model),
       model: cfg.model ?? aiConfigForm.value.model,
+      execution_mode: cfg.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: cfg.prompt || '',
       mcp_tools: parsedTools,
       bot_channel: cfg.bot_channel === 'qq' ? 'qq' : 'feishu',
@@ -336,6 +339,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       token_limit: agent.aiRole === 'assistant_admin' ? 0 : agent.tokenLimit,
       model_preset_id: presetIdForModel('', agent.model),
       model: agent.model || '',
+      execution_mode: agent.executionMode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: '',
       mcp_tools: parsedTools,
       bot_channel: agent.botChannel === 'qq' ? 'qq' : 'feishu',
@@ -350,8 +354,9 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     if (!aiConfigForm.value) return false
     if (!getAuthToken()) return false
     const selectedBotChannel = aiConfigForm.value.bot_channel === 'qq' ? 'qq' : 'feishu'
+    const executionMode = aiConfigForm.value.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model'
     const selectedPreset = modelPresets.value.find(item => item.id === aiConfigForm.value.model_preset_id)
-    if (!selectedPreset) {
+    if (!selectedPreset && (executionMode === 'internal_model' || aiConfigMode.value === 'create')) {
       await alert?.({
         title: '保存失败',
         message: '请先选择一个已保存的服务器模型。',
@@ -372,8 +377,9 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       token_limit: aiConfigForm.value.ai_role_group === 'assistant_admin'
         ? 0
         : (Number(aiConfigForm.value.token_limit) || 10000),
-      model: selectedPreset.model,
-      model_preset_id: selectedPreset.id,
+      execution_mode: executionMode,
+      model: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.model : '',
+      model_preset_id: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.id : '',
       prompt: aiConfigForm.value.prompt,
       mcp_tools: JSON.stringify(aiConfigForm.value.mcp_tools || []),
       bot_channel: selectedBotChannel,
@@ -387,7 +393,10 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
 
     try {
       if (aiConfigMode.value === 'create') {
-        await createAiConfig(payload)
+        const created = await createAiConfig(payload)
+        if (executionMode === 'external_mcp' && Number(created?.id) > 0) {
+          await updateAiConfigFields(Number(created.id), { execution_mode: 'external_mcp' })
+        }
       } else if (aiConfigForm.value.id) {
         await updateAiConfig(aiConfigForm.value.id, payload)
       }

@@ -56,6 +56,11 @@ export default defineConfig({
         changeOrigin: false,
         xfwd: true,
       },
+      '/mcp': {
+        target: process.env.SERVER_URL || 'http://localhost:3000',
+        changeOrigin: false,
+        xfwd: true,
+      },
       '/socket.io': {
         target: process.env.SERVER_URL || 'http://localhost:3000',
         ws: true,

@@ -8,7 +8,7 @@ import FrontPromptPreview from './FrontPromptPreview.vue'
 import { parseChatResponseInline, type ActionBlock, type InlineContent as InlineContentType } from '@/utils/chatParser'
 import { isSameAssistantVisibleReply, normalizeAssistantReplyText } from '@/utils/chatReplyCompare'
 import * as chatApi from '@/api/chat'
-import { listAiConfigs } from '@/api/ai'
+import { getExternalControlStatus, listAiConfigs, type ExternalControlEvent } from '@/api/ai'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
 import { getAuthToken } from '@/api/http'
 import { formatTokenCount } from '@/utils/formatTokenCount'
@@ -139,6 +139,7 @@ let timeTickTimer: number | null = null
 let runLivePollTimer: number | null = null
 let runHistoryPollTimer: number | null = null
 let sessionSyncPollTimer: number | null = null
+let externalControlPollTimer: number | null = null
 let liveTypingFrame: number | null = null
 let liveRenderLength = 0
 let liveRenderVelocity = 0
@@ -202,6 +203,9 @@ const undoActions = ref<Record<string, { tool: string; arguments: Record<string,
 const actionResults = ref<Record<string, string>>({})
 const actionResultsBySignature = ref<Record<string, string>>({})
 const configuredFrontPrompt = ref('')
+const externalControlMode = ref(false)
+const externalControlEvents = ref<ExternalControlEvent[]>([])
+const externalControlError = ref('')
 const effectiveSystemPromptPreview = ref('')
 const frontPromptPreviewError = ref('')
 const frontPromptCopied = ref(false)
@@ -1487,6 +1491,8 @@ const loadTotalTokens = async () => {
 
 const loadConfiguredFrontPrompt = async () => {
   configuredFrontPrompt.value = ''
+  externalControlMode.value = false
+  externalControlEvents.value = []
   if (!getAuthToken()) return
   if (props.aiConfigId === undefined || props.aiConfigId === null) return
   let rows
@@ -1497,6 +1503,43 @@ const loadConfiguredFrontPrompt = async () => {
   }
   const cfg = (Array.isArray(rows) ? rows : []).find((row: any) => Number(row?.id) === Number(props.aiConfigId))
   configuredFrontPrompt.value = String(cfg?.prompt || '').trim()
+  externalControlMode.value = cfg?.execution_mode === 'external_mcp'
+  if (externalControlMode.value) await loadExternalControlEvents()
+  syncExternalControlPolling()
+}
+
+const loadExternalControlEvents = async () => {
+  const configId = Number(props.aiConfigId || 0)
+  if (!configId || !getAuthToken()) return
+  try {
+    const status = await getExternalControlStatus(configId)
+    externalControlEvents.value = (Array.isArray(status.events) ? status.events : [])
+      .filter(item => item.event_type === 'mcp.result')
+    externalControlError.value = ''
+  } catch (err: any) {
+    externalControlError.value = err?.message || '控制日志加载失败'
+  }
+}
+
+const stopExternalControlPolling = () => {
+  if (externalControlPollTimer !== null) {
+    window.clearInterval(externalControlPollTimer)
+    externalControlPollTimer = null
+  }
+}
+
+const syncExternalControlPolling = () => {
+  stopExternalControlPolling()
+  if (!externalControlMode.value) return
+  externalControlPollTimer = window.setInterval(() => void loadExternalControlEvents(), 3000)
+}
+
+const externalEventResultText = (event: ExternalControlEvent) => {
+  try {
+    return JSON.stringify(event.result ?? {}, null, 2)
+  } catch {
+    return String(event.result ?? '')
+  }
 }
 
 const loadEffectiveSystemPromptPreview = async () => {
@@ -2308,6 +2351,7 @@ const initializeSessions = async () => {
 }
 
 watch(() => [props.aiConfigId, preferredInitialSessionId.value] as const, async () => {
+  stopExternalControlPolling()
   stopRunPolling()
   stopSessionSyncPolling()
   stopTimeTicker()
@@ -2407,6 +2451,7 @@ onMounted(async () => {
   syncVisualViewport()
   if (props.currentUserId) runStream.connect(props.currentUserId)
   await initializeSessions()
+  syncExternalControlPolling()
   emit('update:currentSessionId', currentSessionId.value || '')
   emit('taskPlanRefresh', taskPlanRefreshSignal.value)
   await nextTick()
@@ -2432,6 +2477,7 @@ onBeforeUnmount(() => {
   }
   stopRunPolling()
   stopSessionSyncPolling()
+  stopExternalControlPolling()
   stopTimeTicker()
   clearLiveAssistantView()
   if (pinSettleTimer !== null) {
@@ -2557,9 +2603,28 @@ onBeforeUnmount(() => {
     <!-- 聊天内容区：消息 + 输入（任务流程已移到顶部标题边上，水平显示） -->
     <div class="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
       <div ref="chatScrollRef" class="flex-1 overflow-y-auto">
+        <div v-if="externalControlMode" class="mx-auto flex w-full max-w-4xl flex-col gap-3 p-4 sm:p-6">
+          <div class="rounded-xl border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/30 dark:bg-cyan-950/20">
+            <div class="text-sm font-semibold text-cyan-800 dark:text-cyan-200">外部 MCP 控制日志</div>
+            <div class="mt-1 text-xs text-cyan-700/80 dark:text-cyan-300/80">该数字成员不接受网页对话。此处仅展示远程控制器返回的 MCP 调用结果，每 3 秒自动刷新。</div>
+          </div>
+          <div v-if="externalControlError" class="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-950/20 dark:text-rose-300">{{ externalControlError }}</div>
+          <div v-if="externalControlEvents.length === 0" class="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-xs text-zinc-400 dark:border-zinc-700">暂无 MCP 调用结果</div>
+          <article v-for="event in externalControlEvents" :key="event.id" class="rounded-xl border border-zinc-200 bg-white/70 p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-900/50">
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div class="font-mono text-xs font-semibold text-indigo-700 dark:text-indigo-300">{{ event.tool_name || 'MCP' }}</div>
+              <div class="flex items-center gap-2 text-[10px] text-zinc-400">
+                <span :class="event.status === 'ok' ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'">{{ event.status }}</span>
+                <span>{{ new Date(event.created_at * 1000).toLocaleString() }}</span>
+              </div>
+            </div>
+            <pre class="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-zinc-950 p-3 text-[11px] leading-5 text-zinc-100">{{ externalEventResultText(event) }}</pre>
+          </article>
+        </div>
+
         <!-- 空白对话欢迎页：logo + 最近对话 -->
         <div
-          v-if="isBlankConversation"
+          v-else-if="isBlankConversation"
           class="flex min-h-[300px] h-full flex-col items-center justify-center gap-5 px-4 py-8"
         >
           <img
@@ -2627,7 +2692,11 @@ onBeforeUnmount(() => {
         />
       </div>
 
+      <div v-if="externalControlMode" class="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 text-center text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
+        对话输入已关闭；请通过已绑定的远程 MCP 控制器操作该成员。
+      </div>
       <ChatInput
+        v-else
         v-model="chatInput"
         :isTyping="isTyping"
         :isFileSelectorOpen="isFileSelectorOpen"

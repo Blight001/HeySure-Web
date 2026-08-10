@@ -98,6 +98,7 @@ export interface Agent {
   recentUserChatActive?: boolean
   recentUserChatAt?: number
   model?: string
+  executionMode?: 'internal_model' | 'external_mcp'
   currentTaskTitle?: string
   currentTaskStatus?: string
   taskCurrent?: AgentTaskSnapshot | null
