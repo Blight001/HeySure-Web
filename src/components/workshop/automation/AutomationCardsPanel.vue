@@ -119,6 +119,8 @@ const canvasPositions = ref<Record<string, WorkflowNodePosition>>({})
 const editorCompatibility = ref<Record<string, any>>({})
 const publishDeviceIds = ref<string[]>([])
 const deviceScopes = ref<Record<string, DeviceMcpScope>>({})
+const deviceToolsLoading = ref(false)
+const deviceToolsError = ref('')
 const validation = ref<{ valid: boolean; digest: string; warnings: string[] } | null>(null)
 const versions = ref<WorkflowCardVersion[]>([])
 const versionPreview = ref<WorkflowCardVersion | null>(null)
@@ -126,6 +128,7 @@ const comparisonOpen = ref(false)
 const comparisonZIndex = usePopupZIndex(comparisonOpen)
 const comparisonDraft = ref<WorkflowDefinition | null>(null)
 let stepClipboard: StepClipboard | null = null
+let deviceToolsRequestId = 0
 
 const runModalCard = ref<WorkflowCard | null>(null)
 const runDeviceId = ref('')
@@ -135,13 +138,22 @@ const selectedSteps = ref<WorkflowStepRun[]>([])
 const confirmations = ref<WorkflowConfirmation[]>([])
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
+
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
 const toolDefs = computed(() => {
-  const scopes = publishDeviceIds.value.map(id => deviceScopes.value[id]).filter(Boolean)
-  if (!scopes.length) return {}
+  if (!publishDeviceIds.value.length || publishDeviceIds.value.some(id => !deviceScopes.value[id])) return {}
+  const scopes = publishDeviceIds.value.map(id => deviceScopes.value[id])
   const first = scopes[0].toolDefs || {}
   return Object.fromEntries(Object.entries(first).filter(([name, definition]) => scopes.every(scope => {
     const candidate = scope.toolDefs?.[name]
-    return candidate && JSON.stringify(candidate.input_schema || {}) === JSON.stringify(definition.input_schema || {})
+    return candidate && canonicalJson(candidate.input_schema || {}) === canonicalJson(definition.input_schema || {})
   })))
 })
 const toolNames = computed(() => Object.keys(toolDefs.value).sort())
@@ -646,13 +658,24 @@ const publishCard = async () => {
 }
 
 const loadDeviceTools = async () => {
+  const requestId = ++deviceToolsRequestId
+  const deviceIds = [...publishDeviceIds.value]
   deviceScopes.value = {}
-  if (!publishDeviceIds.value.length) return
+  deviceToolsError.value = ''
+  if (!deviceIds.length) {
+    deviceToolsLoading.value = false
+    return
+  }
+  deviceToolsLoading.value = true
   try {
-    const pairs = await Promise.all(publishDeviceIds.value.map(async id => [id, await getDeviceMcpScope(id)] as const))
+    const pairs = await Promise.all(deviceIds.map(async id => [id, await getDeviceMcpScope(id)] as const))
+    if (requestId !== deviceToolsRequestId) return
     deviceScopes.value = Object.fromEntries(pairs)
   } catch (cause: any) {
-    error.value = cause?.message || '设备工具加载失败'
+    if (requestId !== deviceToolsRequestId) return
+    deviceToolsError.value = cause?.message || '设备工具加载失败'
+  } finally {
+    if (requestId === deviceToolsRequestId) deviceToolsLoading.value = false
   }
 }
 
@@ -1056,7 +1079,7 @@ onBeforeUnmount(() => {
                 <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','ai','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
 
                 <template v-if="selectedStep.type === 'mcp'">
-                  <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">选择设备工具</option><option v-for="tool in toolNames" :key="tool">{{ tool }}</option></select></label>
+                  <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">{{ deviceToolsLoading ? '正在加载设备工具…' : deviceToolsError ? '设备工具加载失败' : !publishDeviceIds.length ? '请先选择契约设备' : toolNames.length ? '选择设备工具' : '没有共同且 Schema 一致的工具' }}</option><option v-if="selectedStep.tool && !toolNames.includes(selectedStep.tool)" :value="selectedStep.tool" disabled>{{ selectedStep.tool }}（当前契约设备不兼容）</option><option v-for="tool in toolNames" :key="tool">{{ tool }}</option></select></label>
                   <label class="text-[9px] text-zinc-500">结果保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                   <label class="text-[9px] text-zinc-500">参数模板<textarea v-model="selectedStep.argumentsText" rows="6" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                   <div v-if="toolProperties(selectedStep).length" class="grid gap-1 rounded border border-dashed border-zinc-200 p-2 dark:border-zinc-700"><div class="text-[9px] font-medium text-zinc-500">Schema 参数</div><label v-for="([name, schema]) in toolProperties(selectedStep)" :key="name" class="text-[9px] text-zinc-500">{{ name }}<span v-if="(toolDefs[selectedStep.tool]?.input_schema?.required || []).includes(name)" class="text-rose-500"> *</span><select v-if="schema.type === 'boolean'" :value="String(stepArgumentValue(selectedStep, name))" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="setStepArgumentValue(selectedStep, name, schema, $event)"><option value="true">true</option><option value="false">false</option></select><input v-else :type="schema.type === 'number' || schema.type === 'integer' ? 'number' : 'text'" :value="stepArgumentValue(selectedStep, name)" :placeholder="schema.description || schema.type" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @input="setStepArgumentValue(selectedStep, name, schema, $event)" /></label></div>
@@ -1074,7 +1097,7 @@ onBeforeUnmount(() => {
           </aside>
         </div>
 
-        <div class="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]"><div><div class="text-[10px] text-zinc-500">契约设备（可多选）</div><div class="mt-1 grid max-h-32 gap-1 overflow-auto rounded border p-2 dark:border-zinc-700"><label v-for="device in onlineDevices" :key="device.id" class="flex items-center gap-2 text-[10px]"><input v-model="publishDeviceIds" type="checkbox" :value="device.id" /><span>{{ device.name || device.id }}</span><span class="ml-auto text-zinc-400">{{ device.deviceType || device.platform }}</span></label><div v-if="!onlineDevices.length" class="text-[10px] text-zinc-400">暂无在线设备</div></div></div><div class="text-[10px] leading-5 text-zinc-500">共同暴露且 Schema 一致的工具：{{ toolNames.length }} 个。发布时服务端会逐台复核；运行前还会再次检查目标设备在线状态与 MCP 暴露，派发时继续执行权限校验。</div></div>
+        <div class="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]"><div><div class="text-[10px] text-zinc-500">契约设备（可多选）</div><div class="mt-1 grid max-h-32 gap-1 overflow-auto rounded border p-2 dark:border-zinc-700"><label v-for="device in onlineDevices" :key="device.id" class="flex items-center gap-2 text-[10px]"><input v-model="publishDeviceIds" type="checkbox" :value="device.id" /><span>{{ device.name || device.id }}</span><span class="ml-auto text-zinc-400">{{ device.deviceType || device.platform }}</span></label><div v-if="!onlineDevices.length" class="text-[10px] text-zinc-400">暂无在线设备</div></div></div><div class="text-[10px] leading-5 text-zinc-500"><span v-if="deviceToolsLoading">正在读取所选设备的 MCP 工具…</span><span v-else-if="deviceToolsError" class="text-rose-500">{{ deviceToolsError }}</span><span v-else>共同暴露且 Schema 一致的工具：{{ toolNames.length }} 个。</span> 发布时服务端会逐台复核；运行前还会再次检查目标设备在线状态与 MCP 暴露，派发时继续执行权限校验。</div></div>
         <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">已发布版本与当前草稿</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">画布对比 v{{ version.version_number }}</button></div></div>
         <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border border-rose-200 px-3 py-1.5 text-xs text-rose-600 dark:border-rose-500/30 dark:text-rose-300" @click="deleteCurrentCard">删除卡片</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">关闭</button><button :disabled="busy" class="rounded border border-zinc-300 px-3 py-1.5 text-xs" @click="saveCard">保存草稿</button><button :disabled="busy" class="rounded border border-emerald-300 px-3 py-1.5 text-xs text-emerald-600" @click="validateCard">校验</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="publishCard">发布版本</button></div></div>
       </div>
