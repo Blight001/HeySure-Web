@@ -998,7 +998,7 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
   opacity: 1;
 }
 
-:global(.dark) .automation-editor-modal {
+:global(.dark .automation-editor-modal) {
   --editor-surface: #111827;
   --editor-panel: #172033;
   --editor-field: #1e293b;
@@ -1014,53 +1014,53 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
     var(--editor-surface);
 }
 
-:global(.dark) .automation-editor-header,
-:global(.dark) .automation-editor-footer {
+:global(.dark .automation-editor-header),
+:global(.dark .automation-editor-footer) {
   border-color: #334155;
 }
 
-:global(.dark) .automation-editor-close {
+:global(.dark .automation-editor-close) {
   border-color: #4338ca;
   color: #c7d2fe;
   background: rgb(49 46 129 / 0.55);
 }
 
-:global(.dark) .automation-editor-close:hover {
+:global(.dark .automation-editor-close:hover) {
   border-color: #6366f1;
   color: #eef2ff;
   background: rgb(67 56 202 / 0.68);
 }
 
-:global(.dark) .automation-editor-section {
+:global(.dark .automation-editor-section) {
   border-color: #373e68 !important;
   background: rgb(49 46 129 / 0.13);
 }
 
-:global(.dark) .automation-editor-modal :deep(.text-zinc-400),
-:global(.dark) .automation-editor-modal :deep(.text-zinc-500),
-:global(.dark) .automation-editor-modal label {
+:global(.dark .automation-editor-modal .text-zinc-400),
+:global(.dark .automation-editor-modal .text-zinc-500),
+:global(.dark .automation-editor-modal label) {
   color: var(--editor-label) !important;
 }
 
-:global(.dark) .automation-editor-modal summary {
+:global(.dark .automation-editor-modal summary) {
   color: var(--editor-heading) !important;
 }
 
-:global(.dark) .automation-editor-modal input,
-:global(.dark) .automation-editor-modal select,
-:global(.dark) .automation-editor-modal textarea {
+:global(.dark .automation-editor-modal input),
+:global(.dark .automation-editor-modal select),
+:global(.dark .automation-editor-modal textarea) {
   border-color: var(--editor-border) !important;
   color: var(--editor-text) !important;
   background-color: var(--editor-field) !important;
 }
 
-:global(.dark) .automation-editor-modal select option {
+:global(.dark .automation-editor-modal select option) {
   color: var(--editor-text) !important;
   background-color: var(--editor-panel) !important;
 }
 
-:global(.dark) .automation-editor-modal input::placeholder,
-:global(.dark) .automation-editor-modal textarea::placeholder {
+:global(.dark .automation-editor-modal input::placeholder),
+:global(.dark .automation-editor-modal textarea::placeholder) {
   color: #94a3b8 !important;
 }
 </style>
