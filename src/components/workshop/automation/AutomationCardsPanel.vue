@@ -895,26 +895,54 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 
 .automation-editor-modal label,
 .automation-editor-modal summary {
-  color: #3f3f46;
+  color: #18181b !important;
+  font-weight: 600;
 }
 
 .automation-editor-modal input,
 .automation-editor-modal select,
 .automation-editor-modal textarea {
-  color: #27272a;
+  border-color: #a1a1aa !important;
+  color: #09090b !important;
+  background-color: #ffffff !important;
   font-size: 13px;
+  font-weight: 500;
+  opacity: 1 !important;
+}
+
+.automation-editor-modal select option {
+  color: #09090b !important;
+  background-color: #ffffff !important;
+}
+
+.automation-editor-modal input::placeholder,
+.automation-editor-modal textarea::placeholder {
+  color: #52525b !important;
+  opacity: 1;
 }
 
 :global(.dark) .automation-editor-modal :deep(.text-zinc-400),
 :global(.dark) .automation-editor-modal :deep(.text-zinc-500),
 :global(.dark) .automation-editor-modal label,
 :global(.dark) .automation-editor-modal summary {
-  color: #d4d4d8;
+  color: #fafafa !important;
 }
 
 :global(.dark) .automation-editor-modal input,
 :global(.dark) .automation-editor-modal select,
 :global(.dark) .automation-editor-modal textarea {
-  color: #f4f4f5;
+  border-color: #71717a !important;
+  color: #ffffff !important;
+  background-color: #18181b !important;
+}
+
+:global(.dark) .automation-editor-modal select option {
+  color: #ffffff !important;
+  background-color: #18181b !important;
+}
+
+:global(.dark) .automation-editor-modal input::placeholder,
+:global(.dark) .automation-editor-modal textarea::placeholder {
+  color: #d4d4d8 !important;
 }
 </style>
