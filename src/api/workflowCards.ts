@@ -1,6 +1,6 @@
 import { del, get, patch, post } from './http'
 
-export type WorkflowCardStatus = 'draft' | 'validated' | 'published'
+export type WorkflowCardStatus = 'active' | 'deprecated' | 'draft' | 'validated' | 'published'
 export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'confirm' | 'ai' | 'end'
 
 export interface WorkflowDefinition {
@@ -48,6 +48,8 @@ export interface WorkflowCardInput {
   tags?: string[]
   risk_level?: string
   definition?: Record<string, any>
+  device_id?: string
+  device_ids?: string[]
 }
 
 export const listWorkflowCards = (query: { status?: string; tag?: string; device_id?: string; limit?: number; offset?: number } = {}) =>
@@ -71,13 +73,6 @@ export const updateWorkflowCard = (cardId: string, body: Partial<WorkflowCardInp
 export const validateWorkflowCard = (cardId: string) =>
   post<{ valid: boolean; digest: string; warnings: string[] }>(
     `/api/workflow-cards/${encodeURIComponent(cardId)}/validate`, {}, { fallbackError: '卡片校验失败' },
-  )
-
-export const publishWorkflowCard = (cardId: string, deviceIds: string[] = []) =>
-  post<WorkflowCardVersion>(
-    `/api/workflow-cards/${encodeURIComponent(cardId)}/publish`,
-    { device_ids: deviceIds },
-    { fallbackError: '卡片发布失败' },
   )
 
 export const listWorkflowCardVersions = (cardId: string) =>

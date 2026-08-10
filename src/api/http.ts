@@ -80,10 +80,15 @@ const parseDetail = async (res: Response, fallback: string): Promise<{ message: 
   try {
     const data = await res.json()
     const detail = data && typeof data === 'object' ? (data as any).detail : undefined
+    const errors = detail && typeof detail === 'object' && Array.isArray(detail.errors)
+      ? detail.errors.map((item: any) => typeof item === 'string'
+        ? item
+        : String(item?.message || item?.msg || '')).filter(Boolean).join('；')
+      : ''
     const message = typeof detail === 'string'
       ? detail
       : detail && typeof detail === 'object'
-        ? String(detail.message || detail.code || (Array.isArray(detail.errors) ? detail.errors.join('；') : '') || fallback)
+        ? String(detail.message || errors || detail.code || fallback)
         : fallback
     return { message, payload: data }
   } catch {

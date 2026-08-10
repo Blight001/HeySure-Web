@@ -10,9 +10,7 @@ import {
   importWorkflowCard,
   listWorkflowCards,
   listWorkflowCardVersions,
-  publishWorkflowCard,
   updateWorkflowCard,
-  validateWorkflowCard,
   type WorkflowCard,
   type WorkflowCardVersion,
   type WorkflowDefinition,
@@ -51,6 +49,7 @@ const { confirm } = useMessage()
 type StepEditor = {
   id: string
   type: WorkflowStepType
+  deviceId: string
   tool: string
   argumentsText: string
   saveAs: string
@@ -121,7 +120,6 @@ const publishDeviceIds = ref<string[]>([])
 const deviceScopes = ref<Record<string, DeviceMcpScope>>({})
 const deviceToolsLoading = ref(false)
 const deviceToolsError = ref('')
-const validation = ref<{ valid: boolean; digest: string; warnings: string[] } | null>(null)
 const versions = ref<WorkflowCardVersion[]>([])
 const versionPreview = ref<WorkflowCardVersion | null>(null)
 const comparisonOpen = ref(false)
@@ -139,24 +137,14 @@ const confirmations = ref<WorkflowConfirmation[]>([])
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
 
-const canonicalJson = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
-const toolDefs = computed(() => {
-  if (!publishDeviceIds.value.length || publishDeviceIds.value.some(id => !deviceScopes.value[id])) return {}
-  const scopes = publishDeviceIds.value.map(id => deviceScopes.value[id])
-  const first = scopes[0].toolDefs || {}
-  return Object.fromEntries(Object.entries(first).filter(([name, definition]) => scopes.every(scope => {
-    const candidate = scope.toolDefs?.[name]
-    return candidate && canonicalJson(candidate.input_schema || {}) === canonicalJson(definition.input_schema || {})
-  })))
-})
-const toolNames = computed(() => Object.keys(toolDefs.value).sort())
+const toolDefsForStep = (row: StepEditor) => deviceScopes.value[row.deviceId]?.toolDefs || {}
+const toolNamesForStep = (row: StepEditor) => Object.keys(toolDefsForStep(row)).sort()
+const boundMcpDeviceIds = (definition: WorkflowDefinition) => Array.from(new Set(
+  Object.values(definition.steps || {})
+    .filter(step => step?.type === 'mcp' && step?.toolRef?.name !== AI_INTERVENTION_TOOL)
+    .map(step => String(step?.toolRef?.deviceId || '').trim())
+    .filter(Boolean),
+))
 const selectedStep = computed(() => editorSteps.value.find(step => step.id === selectedStepId.value) || null)
 const activeStatuses = new Set(['pending', 'running', 'waiting_device', 'waiting_confirmation', 'waiting_ai', 'retry_wait', 'paused_offline'])
 const filteredCards = computed(() => {
@@ -179,6 +167,7 @@ const cardRunSummary = (cardId: string) => {
 const emptyStep = (type: WorkflowStepType = 'mcp', index = editorSteps.value.length + 1): StepEditor => ({
   id: type === 'end' ? `finish_${index}` : `step_${index}`,
   type,
+  deviceId: '',
   tool: '',
   argumentsText: '{}',
   saveAs: `result_${index}`,
@@ -240,6 +229,7 @@ const fromStep = (id: string, step: Record<string, any>): StepEditor => {
   ...emptyStep(type),
   id,
   type,
+  deviceId: isAi ? '' : String(step.toolRef?.deviceId || ''),
   tool: isAi ? '' : String(step.toolRef?.name || ''),
   argumentsText: JSON.stringify(step.arguments || {}, null, 2),
   saveAs: String(step.saveAs || ''),
@@ -282,7 +272,6 @@ const openNew = () => {
   versionPreview.value = null
   publishDeviceIds.value = []
   deviceScopes.value = {}
-  validation.value = null
   editorOpen.value = true
   resetEditorHistory()
 }
@@ -309,7 +298,6 @@ const openEdit = async (card: WorkflowCard) => {
   versions.value = (await listWorkflowCardVersions(card.id)).items
   publishDeviceIds.value = [...(versions.value[0]?.contract_device_ids || [])]
   versionPreview.value = null
-  validation.value = null
   editorOpen.value = true
   resetEditorHistory()
 }
@@ -534,10 +522,22 @@ const buildDefinition = (): WorkflowDefinition => {
   for (const row of editorSteps.value) {
     const id = row.id.trim()
     if (row.type === 'mcp') {
-      const definition = toolDefs.value[row.tool] || {}
+      if (!row.deviceId.trim()) {
+        throw new Error(`步骤 ${id}：请先选择此节点绑定的契约设备`)
+      }
+      if (!publishDeviceIds.value.includes(row.deviceId)) {
+        throw new Error(`步骤 ${id}：绑定设备未勾选为契约设备`)
+      }
+      if (!row.tool.trim()) {
+        throw new Error(`步骤 ${id}：请选择绑定设备上报的工具`)
+      }
+      const definition = toolDefsForStep(row)[row.tool]
+      if (!definition) {
+        throw new Error(`步骤 ${id}：设备 ${row.deviceId} 当前未上报工具 ${row.tool}`)
+      }
       const step: Record<string, any> = {
         type: 'mcp',
-        toolRef: { namespace: 'device', name: row.tool },
+        toolRef: { namespace: 'device', deviceId: row.deviceId, name: row.tool },
         arguments: parseJson(row.argumentsText, `步骤 ${id} 参数`),
         saveAs: row.saveAs.trim(),
         timeoutSeconds: Number(row.timeoutSeconds),
@@ -606,52 +606,29 @@ const buildDefinition = (): WorkflowDefinition => {
 
 const saveCard = async () => {
   resetMessages()
-  busy.value = true
-  try {
-    const body = {
-      name: editor.name.trim(), description: editor.description.trim(),
-      tags: editor.tags.split(',').map(item => item.trim()).filter(Boolean),
-      risk_level: editor.riskLevel, definition: buildDefinition(),
-    }
-    const saved = editingId.value
-      ? await updateWorkflowCard(editingId.value, body)
-      : await createWorkflowCard(body)
-    editingId.value = saved.id
-    notice.value = '草稿已保存'
-    await loadCards()
-  } catch (cause: any) {
-    error.value = cause?.message || '保存失败'
-  } finally {
-    busy.value = false
-  }
-}
-
-const validateCard = async () => {
-  await saveCard()
-  if (error.value || !editingId.value) return
-  try {
-    validation.value = await validateWorkflowCard(editingId.value)
-    notice.value = validation.value.warnings.length ? `校验通过：${validation.value.warnings.join('；')}` : '静态校验通过'
-    await loadCards()
-  } catch (cause: any) {
-    error.value = cause?.message || '校验失败'
-  }
-}
-
-const publishCard = async () => {
-  await saveCard()
-  if (error.value || !editingId.value || !publishDeviceIds.value.length) {
-    if (!publishDeviceIds.value.length) error.value = '请至少选择一台用于冻结工具契约的设备'
+  const hasMcpStep = editorSteps.value.some(step => step.type === 'mcp')
+  if (hasMcpStep && !publishDeviceIds.value.length) {
+    error.value = '请至少选择一台用于冻结工具契约的设备'
     return
   }
   busy.value = true
   try {
-    await publishWorkflowCard(editingId.value, publishDeviceIds.value)
-    versions.value = (await listWorkflowCardVersions(editingId.value)).items
-    notice.value = '新版本已发布'
+    const wasExisting = Boolean(editingId.value)
+    const body = {
+      name: editor.name.trim(), description: editor.description.trim(),
+      tags: editor.tags.split(',').map(item => item.trim()).filter(Boolean),
+      risk_level: editor.riskLevel, definition: buildDefinition(),
+      device_ids: [...publishDeviceIds.value],
+    }
+    const saved = wasExisting
+      ? await updateWorkflowCard(editingId.value, body)
+      : await createWorkflowCard(body)
+    editingId.value = saved.id
+    versions.value = (await listWorkflowCardVersions(saved.id)).items
+    notice.value = wasExisting ? '已保存为新版本' : '卡片与第 1 版已创建'
     await loadCards()
   } catch (cause: any) {
-    error.value = cause?.message || '发布失败'
+    error.value = cause?.message || '保存版本失败'
   } finally {
     busy.value = false
   }
@@ -679,8 +656,13 @@ const loadDeviceTools = async () => {
   }
 }
 
+const changeStepDevice = (row: StepEditor) => {
+  row.tool = ''
+  row.argumentsText = '{}'
+}
+
 const scaffoldArguments = (row: StepEditor) => {
-  const schema = toolDefs.value[row.tool]?.input_schema || {}
+  const schema = toolDefsForStep(row)[row.tool]?.input_schema || {}
   const inputSchema = parseJson<Record<string, any>>(editor.inputSchemaText, '输入 Schema')
   const inputProps = inputSchema.properties || {}
   const args: Record<string, any> = {}
@@ -692,7 +674,7 @@ const scaffoldArguments = (row: StepEditor) => {
   row.argumentsText = JSON.stringify(args, null, 2)
 }
 
-const toolProperties = (row: StepEditor) => Object.entries<any>(toolDefs.value[row.tool]?.input_schema?.properties || {})
+const toolProperties = (row: StepEditor) => Object.entries<any>(toolDefsForStep(row)[row.tool]?.input_schema?.properties || {})
 
 const stepArgumentValue = (row: StepEditor, name: string) => {
   try {
@@ -715,7 +697,8 @@ const setStepArgumentValue = (row: StepEditor, name: string, schema: any, event:
 
 const openRun = (card: WorkflowCard) => {
   runModalCard.value = card
-  runDeviceId.value = onlineDevices.value[0]?.id || ''
+  const boundIds = boundMcpDeviceIds(card.definition)
+  runDeviceId.value = boundIds[0] || onlineDevices.value[0]?.id || ''
   const properties = card.definition.inputSchema?.properties || {}
   const sample: Record<string, any> = {}
   for (const [key, cfg] of Object.entries<any>(properties)) {
@@ -842,7 +825,7 @@ const importFile = async (event: Event) => {
       risk_level: String(payload.risk_level || 'read_only'),
       definition: payload.definition || {},
     })
-    notice.value = '卡片已导入为草稿'
+    notice.value = '卡片已导入并创建第 1 版'
     await loadCards()
   } catch (cause: any) {
     error.value = cause?.message || '导入失败'
@@ -892,14 +875,14 @@ const comparisonStatuses = computed(() => {
 })
 
 const statusLabel = (status: string) => ({
-  draft: '草稿', validated: '已校验', published: '已发布',
+  active: '可执行', deprecated: '旧版本', draft: '历史草稿', validated: '历史已校验', published: '可执行',
   pending: '待领取', running: '推进中', waiting_device: '等待设备', waiting_confirmation: '等待确认',
   waiting_ai: '等待 AI', retry_wait: '等待重试', paused_offline: '设备离线', succeeded: '成功', failed: '失败',
   cancelled: '已取消', timed_out: '超时', dispatch_pending: '待派发', dispatching: '派发中',
 }[status] || status)
 
 const statusClass = (status: string) => {
-  if (status === 'succeeded' || status === 'published') return 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10'
+  if (status === 'succeeded' || ['active', 'published'].includes(status)) return 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10'
   if (['failed', 'timed_out', 'cancelled'].includes(status)) return 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/10'
   if (['waiting_confirmation', 'waiting_ai', 'paused_offline', 'retry_wait'].includes(status)) return 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10'
   return 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/10'
@@ -946,7 +929,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="tab === 'cards'" class="flex gap-1">
           <input v-model="cardSearch" class="w-36 rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60" placeholder="搜索名称或标签" />
-          <select v-model="cardStatus" class="rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60"><option value="">全部状态</option><option value="draft">草稿</option><option value="validated">已校验</option><option value="published">已发布</option></select>
+          <select v-model="cardStatus" class="rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60"><option value="">全部状态</option><option value="active">可执行</option><option value="deprecated">旧版本</option></select>
           <label class="cursor-pointer rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
             导入<input type="file" accept="application/json,.json" class="hidden" @change="importFile" />
           </label>
@@ -974,7 +957,7 @@ onBeforeUnmount(() => {
           <div class="mt-1 text-[9px] text-zinc-400">成功率 {{ cardRunSummary(card.id).rate }} · 最近运行 {{ cardRunSummary(card.id).latest }}</div>
           <div class="mt-2 flex flex-wrap gap-1 text-[10px]">
             <button class="rounded border px-2 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-800" @click="openEdit(card)">编辑</button>
-            <button :disabled="card.status !== 'published'" class="rounded border border-indigo-200 px-2 py-0.5 text-indigo-600 disabled:opacity-40 dark:border-indigo-500/30 dark:text-indigo-300" @click="openRun(card)">运行</button>
+            <button :disabled="!['active', 'published', 'deprecated'].includes(card.status)" class="rounded border border-indigo-200 px-2 py-0.5 text-indigo-600 disabled:opacity-40 dark:border-indigo-500/30 dark:text-indigo-300" @click="openRun(card)">运行</button>
           </div>
         </article>
       </div>
@@ -1079,10 +1062,11 @@ onBeforeUnmount(() => {
                 <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','ai','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
 
                 <template v-if="selectedStep.type === 'mcp'">
-                  <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">{{ deviceToolsLoading ? '正在加载设备工具…' : deviceToolsError ? '设备工具加载失败' : !publishDeviceIds.length ? '请先选择契约设备' : toolNames.length ? '选择设备工具' : '没有共同且 Schema 一致的工具' }}</option><option v-if="selectedStep.tool && !toolNames.includes(selectedStep.tool)" :value="selectedStep.tool" disabled>{{ selectedStep.tool }}（当前契约设备不兼容）</option><option v-for="tool in toolNames" :key="tool">{{ tool }}</option></select></label>
+                  <label class="text-[9px] text-zinc-500">节点绑定设备<select v-model="selectedStep.deviceId" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="changeStepDevice(selectedStep)"><option value="">选择契约设备</option><option v-for="device in onlineDevices.filter(item => publishDeviceIds.includes(item.id))" :key="device.id" :value="device.id">{{ device.name || device.id }} · {{ device.deviceType || device.platform }}</option></select></label>
+                  <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">{{ deviceToolsLoading ? '正在加载设备工具…' : deviceToolsError ? '设备工具加载失败' : !selectedStep.deviceId ? '请先选择节点绑定设备' : toolNamesForStep(selectedStep).length ? '选择该设备的工具' : '该设备没有可用工具' }}</option><option v-if="selectedStep.tool && !toolNamesForStep(selectedStep).includes(selectedStep.tool)" :value="selectedStep.tool" disabled>{{ selectedStep.tool }}（绑定设备当前未上报）</option><option v-for="tool in toolNamesForStep(selectedStep)" :key="tool">{{ tool }}</option></select></label>
                   <label class="text-[9px] text-zinc-500">结果保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                   <label class="text-[9px] text-zinc-500">参数模板<textarea v-model="selectedStep.argumentsText" rows="6" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-                  <div v-if="toolProperties(selectedStep).length" class="grid gap-1 rounded border border-dashed border-zinc-200 p-2 dark:border-zinc-700"><div class="text-[9px] font-medium text-zinc-500">Schema 参数</div><label v-for="([name, schema]) in toolProperties(selectedStep)" :key="name" class="text-[9px] text-zinc-500">{{ name }}<span v-if="(toolDefs[selectedStep.tool]?.input_schema?.required || []).includes(name)" class="text-rose-500"> *</span><select v-if="schema.type === 'boolean'" :value="String(stepArgumentValue(selectedStep, name))" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="setStepArgumentValue(selectedStep, name, schema, $event)"><option value="true">true</option><option value="false">false</option></select><input v-else :type="schema.type === 'number' || schema.type === 'integer' ? 'number' : 'text'" :value="stepArgumentValue(selectedStep, name)" :placeholder="schema.description || schema.type" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @input="setStepArgumentValue(selectedStep, name, schema, $event)" /></label></div>
+                  <div v-if="toolProperties(selectedStep).length" class="grid gap-1 rounded border border-dashed border-zinc-200 p-2 dark:border-zinc-700"><div class="text-[9px] font-medium text-zinc-500">Schema 参数</div><label v-for="([name, schema]) in toolProperties(selectedStep)" :key="name" class="text-[9px] text-zinc-500">{{ name }}<span v-if="(toolDefsForStep(selectedStep)[selectedStep.tool]?.input_schema?.required || []).includes(name)" class="text-rose-500"> *</span><select v-if="schema.type === 'boolean'" :value="String(stepArgumentValue(selectedStep, name))" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="setStepArgumentValue(selectedStep, name, schema, $event)"><option value="true">true</option><option value="false">false</option></select><input v-else :type="schema.type === 'number' || schema.type === 'integer' ? 'number' : 'text'" :value="stepArgumentValue(selectedStep, name)" :placeholder="schema.description || schema.type" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @input="setStepArgumentValue(selectedStep, name, schema, $event)" /></label></div>
                   <details class="rounded border border-zinc-200 p-2 dark:border-zinc-700"><summary class="cursor-pointer text-[9px] font-medium text-zinc-500">重试与结果设置</summary><div class="mt-2 grid grid-cols-2 gap-1"><label class="text-[9px] text-zinc-500">超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">最大尝试<input v-model.number="selectedStep.maxAttempts" type="number" min="1" max="10" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">退避<select v-model="selectedStep.backoff" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="fixed">固定</option><option value="exponential">指数</option></select></label><label class="text-[9px] text-zinc-500">重试等待<input v-model.number="selectedStep.retryDelay" type="number" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="col-span-2 text-[9px] text-zinc-500">结果投影<input v-model="selectedStep.projection" class="mt-0.5 w-full rounded border p-1 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="字段以逗号分隔" /></label></div></details>
                 </template>
 
@@ -1097,9 +1081,9 @@ onBeforeUnmount(() => {
           </aside>
         </div>
 
-        <div class="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]"><div><div class="text-[10px] text-zinc-500">契约设备（可多选）</div><div class="mt-1 grid max-h-32 gap-1 overflow-auto rounded border p-2 dark:border-zinc-700"><label v-for="device in onlineDevices" :key="device.id" class="flex items-center gap-2 text-[10px]"><input v-model="publishDeviceIds" type="checkbox" :value="device.id" /><span>{{ device.name || device.id }}</span><span class="ml-auto text-zinc-400">{{ device.deviceType || device.platform }}</span></label><div v-if="!onlineDevices.length" class="text-[10px] text-zinc-400">暂无在线设备</div></div></div><div class="text-[10px] leading-5 text-zinc-500"><span v-if="deviceToolsLoading">正在读取所选设备的 MCP 工具…</span><span v-else-if="deviceToolsError" class="text-rose-500">{{ deviceToolsError }}</span><span v-else>共同暴露且 Schema 一致的工具：{{ toolNames.length }} 个。</span> 发布时服务端会逐台复核；运行前还会再次检查目标设备在线状态与 MCP 暴露，派发时继续执行权限校验。</div></div>
-        <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">已发布版本与当前草稿</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">画布对比 v{{ version.version_number }}</button></div></div>
-        <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border border-rose-200 px-3 py-1.5 text-xs text-rose-600 dark:border-rose-500/30 dark:text-rose-300" @click="deleteCurrentCard">删除卡片</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">关闭</button><button :disabled="busy" class="rounded border border-zinc-300 px-3 py-1.5 text-xs" @click="saveCard">保存草稿</button><button :disabled="busy" class="rounded border border-emerald-300 px-3 py-1.5 text-xs text-emerald-600" @click="validateCard">校验</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="publishCard">发布版本</button></div></div>
+        <div class="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]"><div><div class="text-[10px] text-zinc-500">契约设备（可多选）</div><div class="mt-1 grid max-h-32 gap-1 overflow-auto rounded border p-2 dark:border-zinc-700"><label v-for="device in onlineDevices" :key="device.id" class="flex items-center gap-2 text-[10px]"><input v-model="publishDeviceIds" type="checkbox" :value="device.id" /><span>{{ device.name || device.id }}</span><span class="ml-auto text-zinc-400">{{ device.deviceType || device.platform }}</span></label><div v-if="!onlineDevices.length" class="text-[10px] text-zinc-400">暂无在线设备</div></div></div><div class="text-[10px] leading-5 text-zinc-500"><span v-if="deviceToolsLoading">正在读取所选设备的 MCP 工具…</span><span v-else-if="deviceToolsError" class="text-rose-500">{{ deviceToolsError }}</span><span v-else>已读取 {{ Object.keys(deviceScopes).length }} 台契约设备的独立工具清单。</span> 每个 MCP 节点分别绑定一台设备及该设备上的工具；保存新版本时冻结节点的设备、工具与 Schema，运行时按节点派发并继续执行在线状态与权限校验。</div></div>
+        <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">历史版本与当前未保存修改</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">画布对比 v{{ version.version_number }}</button></div></div>
+        <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border border-rose-200 px-3 py-1.5 text-xs text-rose-600 dark:border-rose-500/30 dark:text-rose-300" @click="deleteCurrentCard">删除卡片</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">舍弃修改</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="saveCard">{{ editingId ? '保存为新版本' : '创建卡片' }}</button></div></div>
       </div>
     </div>
     </Teleport>
@@ -1112,14 +1096,14 @@ onBeforeUnmount(() => {
             <div class="flex flex-wrap items-center gap-3 text-[10px]"><span class="text-emerald-500">● 新增</span><span class="text-rose-500">● 删除</span><span class="text-amber-500">● 修改</span><span class="text-zinc-400">● 未变化</span><button class="rounded border px-2 py-1" @click="comparisonOpen = false">关闭</button></div>
           </header>
           <div class="mt-3 grid gap-3 xl:grid-cols-2">
-            <div><div class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">已发布版本 v{{ versionPreview.version_number }}</div><WorkflowCanvasEditor readonly :steps="comparisonVersionSteps" :start-step-id="versionPreview.definition.startStepId" selected-step-id="" :positions="comparisonVersionPositions" :node-statuses="comparisonStatuses.version" /></div>
-            <div><div class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">当前草稿</div><WorkflowCanvasEditor readonly :steps="comparisonDraftSteps" :start-step-id="comparisonDraft.startStepId" selected-step-id="" :positions="comparisonDraftPositions" :node-statuses="comparisonStatuses.current" /></div>
+            <div><div class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">历史版本 v{{ versionPreview.version_number }}</div><WorkflowCanvasEditor readonly :steps="comparisonVersionSteps" :start-step-id="versionPreview.definition.startStepId" selected-step-id="" :positions="comparisonVersionPositions" :node-statuses="comparisonStatuses.version" /></div>
+            <div><div class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">当前未保存修改</div><WorkflowCanvasEditor readonly :steps="comparisonDraftSteps" :start-step-id="comparisonDraft.startStepId" selected-step-id="" :positions="comparisonDraftPositions" :node-statuses="comparisonStatuses.current" /></div>
           </div>
         </section>
       </div>
     </Teleport>
 
-    <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><label class="mt-3 block text-[10px] text-zinc-500">目标设备<select v-model="runDeviceId" class="mt-1 w-full rounded border p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || device.id }}</option></select></label><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy || !runDeviceId" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
+    <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><div class="mt-3 rounded border border-indigo-200 bg-indigo-50 p-2 text-[10px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">各 MCP 节点会自动派发到编辑时绑定的契约设备，无需在运行时再次选择目标设备。</div><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy || !runDeviceId" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
   </section>
 </template>
 
