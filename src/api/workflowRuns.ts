@@ -2,7 +2,7 @@ import { get, post } from './http'
 
 export type WorkflowRunStatus =
   | 'pending' | 'running' | 'waiting_device' | 'waiting_confirmation'
-  | 'retry_wait' | 'paused_offline' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
+  | 'retry_wait' | 'paused_offline' | 'waiting_ai' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 
 export interface WorkflowRun {
   id: string
@@ -44,11 +44,13 @@ export interface WorkflowConfirmation {
   id: string
   run_id: string
   step_id: string
-  type: 'explicit' | 'forced'
+  type: 'explicit' | 'forced' | 'ai_review' | 'user_via_ai'
   status: string
   risk_summary: string
   expires_at: number
   decision: string | null
+  ai_config_id?: number | null
+  notified_at?: number | null
 }
 
 export const startWorkflowRun = (

@@ -27,6 +27,8 @@ const props = defineProps<{
   startStepId: string
   selectedStepId: string
   positions: Record<string, WorkflowNodePosition>
+  readonly?: boolean
+  nodeStatuses?: Record<string, 'added' | 'removed' | 'changed' | 'unchanged'>
 }>()
 
 const emit = defineEmits<{
@@ -51,7 +53,7 @@ const connection = ref<{ from: string; branch: WorkflowCanvasConnection['branch'
 const previewPoint = ref<WorkflowNodePosition | null>(null)
 
 const typeLabels: Record<WorkflowStepType, string> = {
-  mcp: '设备 MCP', condition: '判断分支', delay: '等待', confirm: '人工确认', end: '结束',
+  mcp: '设备 MCP', condition: '判断分支', delay: '等待', confirm: '用户确认', ai: 'AI 介入', end: '结束',
 }
 
 const palette: Array<{ type: WorkflowStepType; label: string }> = [
@@ -59,6 +61,7 @@ const palette: Array<{ type: WorkflowStepType; label: string }> = [
   { type: 'condition', label: '判断分支' },
   { type: 'delay', label: '等待' },
   { type: 'confirm', label: '人工确认' },
+  { type: 'ai', label: 'AI 介入' },
   { type: 'end', label: '结束' },
 ]
 
@@ -81,7 +84,7 @@ const outputPorts = (step: CanvasStep): OutputPort[] => {
     { branch: 'next', label: '完成', tone: 'normal' },
     { branch: 'error', label: '失败', tone: 'danger' },
   ]
-  if (step.type === 'confirm') return [
+  if (step.type === 'confirm' || step.type === 'ai') return [
     { branch: 'next', label: '批准', tone: 'success' },
     { branch: 'denied', label: '拒绝', tone: 'danger' },
   ]
@@ -138,6 +141,7 @@ const nodeMeta = (step: CanvasStep) => {
   if (step.type === 'condition') return 'true / false 双分支'
   if (step.type === 'delay') return `${Number(step.delaySeconds || 0)} 秒`
   if (step.type === 'confirm') return step.message || '等待用户批准'
+  if (step.type === 'ai') return step.message || '等待 AI 审核与回调'
   return '生成输出并结束'
 }
 
@@ -146,6 +150,7 @@ const updatePosition = (stepId: string, position: WorkflowNodePosition) => {
 }
 
 const startNodeDrag = (event: PointerEvent, step: CanvasStep) => {
+  if (props.readonly) return
   if (event.button !== 0 || (event.target as HTMLElement).closest('[data-port]')) return
   event.preventDefault()
   emit('select', step.id)
@@ -178,6 +183,7 @@ const startConnection = (
   step: CanvasStep,
   branch: WorkflowCanvasConnection['branch'],
 ) => {
+  if (props.readonly) return
   event.preventDefault()
   event.stopPropagation()
   emit('select', step.id)
@@ -264,10 +270,12 @@ const autoLayout = () => {
 }
 
 const addStep = (type: WorkflowStepType, position?: WorkflowNodePosition) => {
+  if (props.readonly) return
   emit('add', type, position || defaultPosition(props.steps.length))
 }
 
 const onDrop = (event: DragEvent) => {
+  if (props.readonly) return
   const type = event.dataTransfer?.getData('application/x-heysure-workflow-step') as WorkflowStepType
   if (palette.some(item => item.type === type)) addStep(type, canvasPoint(event))
 }
@@ -277,15 +285,24 @@ const onPaletteDrag = (event: DragEvent, type: WorkflowStepType) => {
 }
 
 const selectEdge = (edgeId: string) => {
+  if (props.readonly) return
   selectedEdgeId.value = edgeId
   emit('select', '')
 }
 
 const deleteSelectedEdge = () => {
+  if (props.readonly) return
   const edge = edges.value.find(item => item.id === selectedEdgeId.value)
   if (!edge) return
   emit('disconnect', { from: edge.from, branch: edge.branch })
   selectedEdgeId.value = ''
+}
+
+const onCanvasKeydown = (event: KeyboardEvent) => {
+  if (!selectedEdgeId.value || (event.key !== 'Delete' && event.key !== 'Backspace')) return
+  event.preventDefault()
+  event.stopPropagation()
+  deleteSelectedEdge()
 }
 </script>
 
@@ -297,7 +314,7 @@ const deleteSelectedEdge = () => {
         <div class="text-[10px] text-zinc-500">拖动节点和端点完成编排，双击节点可设为入口</div>
       </div>
       <div class="flex flex-wrap items-center gap-1 text-[10px]">
-        <button class="canvas-button" type="button" @click="autoLayout">自动排版</button>
+        <button v-if="!readonly" class="canvas-button" type="button" @click="autoLayout">自动排版</button>
         <button v-if="selectedEdgeId" class="canvas-button text-rose-500" type="button" @click="deleteSelectedEdge">删除连线</button>
         <button class="canvas-button" type="button" @click="setZoom(scale - 0.1)">−</button>
         <button class="canvas-button min-w-12" type="button" @click="resetView">{{ Math.round(scale * 100) }}%</button>
@@ -305,7 +322,7 @@ const deleteSelectedEdge = () => {
       </div>
     </header>
 
-    <div class="flex flex-wrap gap-1.5">
+    <div v-if="!readonly" class="flex flex-wrap gap-1.5">
       <button
         v-for="item in palette"
         :key="item.type"
@@ -325,8 +342,7 @@ const deleteSelectedEdge = () => {
       @wheel.prevent="setZoom(scale + ($event.deltaY < 0 ? 0.1 : -0.1))"
       @dragover.prevent
       @drop.prevent="onDrop"
-      @keydown.delete.prevent="deleteSelectedEdge"
-      @keydown.backspace.prevent="deleteSelectedEdge"
+      @keydown="onCanvasKeydown"
     >
       <div class="workflow-viewport" :style="{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})` }">
         <svg class="workflow-svg" width="2200" height="1400" aria-hidden="true">
@@ -353,7 +369,7 @@ const deleteSelectedEdge = () => {
           :key="step.id"
           data-node
           class="workflow-node"
-          :class="[`type-${step.type}`, { selected: selectedStepId === step.id }]"
+          :class="[`type-${step.type}`, nodeStatuses?.[step.id] ? `diff-${nodeStatuses[step.id]}` : '', { selected: selectedStepId === step.id }]"
           :style="{ left: `${positionFor(step.id).x}px`, top: `${positionFor(step.id).y}px` }"
           @pointerdown="startNodeDrag($event, step)"
           @click.stop="emit('select', step.id); selectedEdgeId = ''"
@@ -378,6 +394,7 @@ const deleteSelectedEdge = () => {
               class="node-port output-port"
               :class="`tone-${port.tone}`"
               type="button"
+              :disabled="readonly"
               :aria-label="`${port.label}输出端点`"
               @pointerdown="startConnection($event, step, port.branch)"
             />
@@ -387,7 +404,7 @@ const deleteSelectedEdge = () => {
       <div v-if="steps.length === 0" class="absolute inset-0 grid place-items-center text-xs text-slate-400">从上方添加第一个流程节点</div>
     </div>
 
-    <p class="text-[10px] leading-5 text-zinc-500">点击节点在右侧编辑属性；从输出端点拖到目标输入端点建立或替换连线。选中连线后可按 Delete 删除。</p>
+    <p v-if="!readonly" class="text-[10px] leading-5 text-zinc-500">点击节点在右侧编辑属性；从输出端点拖到目标输入端点建立或替换连线。支持 Ctrl/Cmd+C/X/V 复制剪切粘贴、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Y 重做及 Delete 删除；连线选中后也可按 Delete 删除。</p>
   </section>
 </template>
 
@@ -409,7 +426,12 @@ const deleteSelectedEdge = () => {
 .workflow-node.selected { border-color: #818cf8; box-shadow: 0 0 0 2px rgb(129 140 248 / 0.26), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.type-condition { border-top-color: #f59e0b; }
 .workflow-node.type-confirm { border-top-color: #e879f9; }
+.workflow-node.type-ai { border-top-color: #38bdf8; }
 .workflow-node.type-end { border-top-color: #34d399; }
+.workflow-node.diff-added { border-color: #22c55e; box-shadow: 0 0 0 2px rgb(34 197 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.diff-removed { border-color: #f43f5e; box-shadow: 0 0 0 2px rgb(244 63 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.diff-changed { border-color: #f59e0b; box-shadow: 0 0 0 2px rgb(245 158 11 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.diff-unchanged { opacity: 0.72; }
 .node-port { position: absolute; width: 15px; height: 15px; padding: 0; border: 2px solid #94a3b8; border-radius: 50%; background: #172033; cursor: crosshair; }
 .node-port:hover { border-color: #818cf8; background: #818cf8; }
 .input-port { left: -9px; top: 38px; }

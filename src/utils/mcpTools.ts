@@ -168,6 +168,7 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   'automation.run': '运行自动化卡片',
   'automation.status': '查询自动化状态',
   'automation.cancel': '取消自动化运行',
+  'automation.respond': '回应自动化交互',
   'automation.manage': '管理自动化卡片',
   'mcp.manage_dynamic_tool': '管理动态 MCP',
   'browser_mcp.manage_dynamic_tool': '管理动态 MCP',

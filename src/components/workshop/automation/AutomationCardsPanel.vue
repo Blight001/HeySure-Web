@@ -34,6 +34,7 @@ import {
 import { getDeviceMcpScope, type DeviceMcpScope } from '@/api/devices'
 import { useMessage } from '@/composables/useMessage'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import { useSnapshotHistory } from '@/composables/useSnapshotHistory'
 import WorkflowCanvasEditor from './WorkflowCanvasEditor.vue'
 
 interface DeviceLike {
@@ -69,11 +70,24 @@ type StepEditor = {
   onDenied: string
 }
 
+const AI_INTERVENTION_TOOL = '__workflow.ai_intervention'
+
 type WorkflowNodePosition = { x: number; y: number }
 type WorkflowCanvasConnection = {
   from: string
   to: string
   branch: 'next' | 'error' | 'true' | 'false' | 'denied'
+}
+type StepTargetField = 'next' | 'onError' | 'onTrue' | 'onFalse' | 'onDenied'
+type StepClipboard = {
+  step: StepEditor
+  sourceId: string
+  position: WorkflowNodePosition
+  pasteCount: number
+  restoreIncoming: boolean
+  restoreAsStart: boolean
+  cutPending: boolean
+  incoming: Array<{ stepId: string; field: StepTargetField }>
 }
 
 const tab = ref<'cards' | 'runs'>('cards')
@@ -87,6 +101,7 @@ const cardSearch = ref('')
 const cardStatus = ref('')
 const editorOpen = ref(false)
 const editorZIndex = usePopupZIndex(editorOpen)
+const editorFullscreen = ref(false)
 const editingId = ref('')
 const editor = reactive({
   name: '',
@@ -103,11 +118,15 @@ const editorSteps = ref<StepEditor[]>([])
 const selectedStepId = ref('')
 const canvasPositions = ref<Record<string, WorkflowNodePosition>>({})
 const editorCompatibility = ref<Record<string, any>>({})
-const publishDeviceId = ref('')
-const deviceScope = ref<DeviceMcpScope | null>(null)
+const publishDeviceIds = ref<string[]>([])
+const deviceScopes = ref<Record<string, DeviceMcpScope>>({})
 const validation = ref<{ valid: boolean; digest: string; warnings: string[] } | null>(null)
 const versions = ref<WorkflowCardVersion[]>([])
 const versionPreview = ref<WorkflowCardVersion | null>(null)
+const comparisonOpen = ref(false)
+const comparisonZIndex = usePopupZIndex(comparisonOpen)
+const comparisonDraft = ref<WorkflowDefinition | null>(null)
+let stepClipboard: StepClipboard | null = null
 
 const runModalCard = ref<WorkflowCard | null>(null)
 const runDeviceId = ref('')
@@ -117,10 +136,18 @@ const selectedSteps = ref<WorkflowStepRun[]>([])
 const confirmations = ref<WorkflowConfirmation[]>([])
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
-const toolDefs = computed(() => deviceScope.value?.toolDefs || {})
+const toolDefs = computed(() => {
+  const scopes = publishDeviceIds.value.map(id => deviceScopes.value[id]).filter(Boolean)
+  if (!scopes.length) return {}
+  const first = scopes[0].toolDefs || {}
+  return Object.fromEntries(Object.entries(first).filter(([name, definition]) => scopes.every(scope => {
+    const candidate = scope.toolDefs?.[name]
+    return candidate && JSON.stringify(candidate.input_schema || {}) === JSON.stringify(definition.input_schema || {})
+  })))
+})
 const toolNames = computed(() => Object.keys(toolDefs.value).sort())
 const selectedStep = computed(() => editorSteps.value.find(step => step.id === selectedStepId.value) || null)
-const activeStatuses = new Set(['pending', 'running', 'waiting_device', 'waiting_confirmation', 'retry_wait', 'paused_offline'])
+const activeStatuses = new Set(['pending', 'running', 'waiting_device', 'waiting_confirmation', 'waiting_ai', 'retry_wait', 'paused_offline'])
 const filteredCards = computed(() => {
   const query = cardSearch.value.trim().toLowerCase()
   return cards.value.filter(card =>
@@ -155,7 +182,7 @@ const emptyStep = (type: WorkflowStepType = 'mcp', index = editorSteps.value.len
   onTrue: '',
   onFalse: '',
   delaySeconds: 1,
-  message: '请确认继续执行此自动化步骤',
+  message: type === 'ai' ? '请核对当前流程上下文，并返回继续执行所需的参数' : '请确认继续执行此自动化步骤',
   onDenied: '',
 })
 
@@ -195,11 +222,14 @@ const loadRuns = async () => {
   }
 }
 
-const fromStep = (id: string, step: Record<string, any>): StepEditor => ({
-  ...emptyStep((step.type || 'mcp') as WorkflowStepType),
+const fromStep = (id: string, step: Record<string, any>): StepEditor => {
+  const isAi = step.type === 'mcp' && step.toolRef?.name === AI_INTERVENTION_TOOL
+  const type = (isAi ? 'ai' : step.type || 'mcp') as WorkflowStepType
+  return ({
+  ...emptyStep(type),
   id,
-  type: (step.type || 'mcp') as WorkflowStepType,
-  tool: String(step.toolRef?.name || ''),
+  type,
+  tool: isAi ? '' : String(step.toolRef?.name || ''),
   argumentsText: JSON.stringify(step.arguments || {}, null, 2),
   saveAs: String(step.saveAs || ''),
   next: String(step.next || ''),
@@ -213,11 +243,13 @@ const fromStep = (id: string, step: Record<string, any>): StepEditor => ({
   onTrue: String(step.onTrue || ''),
   onFalse: String(step.onFalse || ''),
   delaySeconds: Number(step.delaySeconds ?? step.seconds ?? 1),
-  message: String(step.message || step.riskSummary || '请确认继续执行此自动化步骤'),
-  onDenied: String(step.onDenied || ''),
-})
+  message: String((isAi ? step.arguments?.prompt : step.message || step.riskSummary) || '请确认继续执行此自动化步骤'),
+  onDenied: String(isAi && step.onError !== 'fail' ? step.onError || '' : step.onDenied || ''),
+  })
+}
 
 const openNew = () => {
+  detachClipboardFromSource()
   resetMessages()
   editingId.value = ''
   editor.name = '新自动化卡片'
@@ -237,11 +269,15 @@ const openNew = () => {
   editor.startStepId = 'finish'
   versions.value = []
   versionPreview.value = null
+  publishDeviceIds.value = []
+  deviceScopes.value = {}
   validation.value = null
   editorOpen.value = true
+  resetEditorHistory()
 }
 
 const openEdit = async (card: WorkflowCard) => {
+  detachClipboardFromSource()
   resetMessages()
   const full = await getWorkflowCard(card.id)
   editingId.value = full.id
@@ -260,9 +296,11 @@ const openEdit = async (card: WorkflowCard) => {
   const savedPositions = full.definition.compatibility?.editorLayout?.positions
   canvasPositions.value = savedPositions && typeof savedPositions === 'object' ? { ...savedPositions } : {}
   versions.value = (await listWorkflowCardVersions(card.id)).items
+  publishDeviceIds.value = [...(versions.value[0]?.contract_device_ids || [])]
   versionPreview.value = null
   validation.value = null
   editorOpen.value = true
+  resetEditorHistory()
 }
 
 const addStep = (type: WorkflowStepType, position: WorkflowNodePosition = { x: 48, y: 48 }) => {
@@ -301,6 +339,128 @@ const removeStep = (index: number) => {
 const removeSelectedStep = () => {
   const index = editorSteps.value.findIndex(step => step.id === selectedStepId.value)
   if (index >= 0) removeStep(index)
+}
+
+const cloneEditorStep = (step: StepEditor): StepEditor => JSON.parse(JSON.stringify(step)) as StepEditor
+
+const uniqueCopyName = (source: string, used: Set<string>) => {
+  const sourceName = source || 'step'
+  const withSuffix = (suffix: string) => `${sourceName.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`
+  let candidate = withSuffix('_copy')
+  let suffix = 2
+  while (used.has(candidate)) candidate = withSuffix(`_copy_${suffix++}`)
+  return candidate
+}
+
+const detachClipboardFromSource = () => {
+  if (!stepClipboard) return
+  stepClipboard.restoreIncoming = false
+  stepClipboard.restoreAsStart = false
+  stepClipboard.cutPending = false
+}
+
+const incomingTargets = (targetId: string) => {
+  const fields: StepTargetField[] = ['next', 'onError', 'onTrue', 'onFalse', 'onDenied']
+  return editorSteps.value.flatMap(step => fields
+    .filter(field => step[field] === targetId)
+    .map(field => ({ stepId: step.id, field })))
+}
+
+const copySelectedStep = (cut = false) => {
+  const step = selectedStep.value
+  if (!step) return false
+  stepClipboard = {
+    step: cloneEditorStep(step),
+    sourceId: step.id,
+    position: { ...(canvasPositions.value[step.id] || { x: 48, y: 48 }) },
+    pasteCount: 0,
+    restoreIncoming: cut,
+    restoreAsStart: cut && editor.startStepId === step.id,
+    cutPending: cut,
+    incoming: cut ? incomingTargets(step.id) : [],
+  }
+  if (cut) removeSelectedStep()
+  return true
+}
+
+const remapSelfTargets = (step: StepEditor, sourceId: string, nextId: string) => {
+  const fields: StepTargetField[] = ['next', 'onError', 'onTrue', 'onFalse', 'onDenied']
+  fields.forEach(field => { if (step[field] === sourceId) step[field] = nextId })
+}
+
+const pasteStep = () => {
+  if (!stepClipboard) return false
+  const clipboard = stepClipboard
+  const pasted = cloneEditorStep(clipboard.step)
+  pasted.id = uniqueCopyName(clipboard.sourceId, new Set(editorSteps.value.map(step => step.id)))
+  if (pasted.type === 'mcp' || pasted.type === 'ai') {
+    pasted.saveAs = uniqueCopyName(pasted.saveAs || 'result', new Set(editorSteps.value.map(step => step.saveAs)))
+  }
+  remapSelfTargets(pasted, clipboard.sourceId, pasted.id)
+  const offset = clipboard.cutPending ? 0 : 32 * (clipboard.pasteCount + 1)
+  editorSteps.value.push(pasted)
+  canvasPositions.value = {
+    ...canvasPositions.value,
+    [pasted.id]: { x: clipboard.position.x + offset, y: clipboard.position.y + offset },
+  }
+  if (clipboard.restoreIncoming) {
+    clipboard.incoming.forEach(({ stepId, field }) => {
+      const source = editorSteps.value.find(step => step.id === stepId)
+      if (source) source[field] = pasted.id
+    })
+  }
+  if (clipboard.restoreAsStart) editor.startStepId = pasted.id
+  clipboard.pasteCount += 1
+  clipboard.cutPending = false
+  clipboard.restoreIncoming = false
+  clipboard.restoreAsStart = false
+  selectedStepId.value = pasted.id
+  return true
+}
+
+const captureEditorSnapshot = () => ({
+  editor: { ...editor },
+  steps: JSON.parse(JSON.stringify(editorSteps.value)) as StepEditor[],
+  positions: JSON.parse(JSON.stringify(canvasPositions.value)) as Record<string, WorkflowNodePosition>,
+})
+
+type WorkflowEditorSnapshot = ReturnType<typeof captureEditorSnapshot>
+
+const restoreEditorSnapshot = (snapshot: WorkflowEditorSnapshot) => {
+  Object.assign(editor, snapshot.editor)
+  editorSteps.value = JSON.parse(JSON.stringify(snapshot.steps)) as StepEditor[]
+  canvasPositions.value = JSON.parse(JSON.stringify(snapshot.positions)) as Record<string, WorkflowNodePosition>
+  if (!editorSteps.value.some(step => step.id === selectedStepId.value)) {
+    selectedStepId.value = editor.startStepId || editorSteps.value[0]?.id || ''
+  }
+}
+
+const editorHistory = useSnapshotHistory<WorkflowEditorSnapshot>(restoreEditorSnapshot, {
+  limit: 100,
+  delay: 220,
+})
+
+const resetEditorHistory = () => editorHistory.reset(captureEditorSnapshot())
+
+const isEditableTarget = (target: EventTarget | null) => target instanceof Element
+  && Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+
+const handleEditorShortcut = (event: KeyboardEvent) => {
+  if (!editorOpen.value || comparisonOpen.value || event.defaultPrevented || isEditableTarget(event.target)) return
+  const key = event.key.toLowerCase()
+  const primary = (event.ctrlKey || event.metaKey) && !event.altKey
+  const hasSelection = Boolean(window.getSelection()?.toString())
+  let handled = false
+  if (primary && key === 'z') handled = event.shiftKey ? editorHistory.redo() : editorHistory.undo()
+  else if (primary && key === 'y') handled = editorHistory.redo()
+  else if (primary && key === 'c' && !hasSelection) handled = copySelectedStep()
+  else if (primary && key === 'x' && !hasSelection) handled = copySelectedStep(true)
+  else if (primary && key === 'v') handled = pasteStep()
+  else if (!primary && (event.key === 'Delete' || event.key === 'Backspace') && selectedStep.value) {
+    removeSelectedStep()
+    handled = true
+  }
+  if (handled) event.preventDefault()
 }
 
 const connectSteps = ({ from, to, branch }: WorkflowCanvasConnection) => {
@@ -400,6 +560,16 @@ const buildDefinition = (): WorkflowDefinition => {
         type: 'confirm', message: row.message, timeoutSeconds: Number(row.timeoutSeconds),
         next: row.next.trim(), ...(row.onDenied.trim() ? { onDenied: row.onDenied.trim() } : {}),
       }
+    } else if (row.type === 'ai') {
+      steps[id] = {
+        type: 'mcp',
+        toolRef: { namespace: 'device', name: AI_INTERVENTION_TOOL },
+        arguments: { prompt: row.message },
+        saveAs: row.saveAs.trim(),
+        timeoutSeconds: Number(row.timeoutSeconds),
+        next: row.next.trim(),
+        onError: row.onDenied.trim() || 'fail',
+      }
     } else {
       steps[id] = { type: 'end' }
     }
@@ -422,14 +592,6 @@ const buildDefinition = (): WorkflowDefinition => {
     },
   }
 }
-
-const draftPreview = computed(() => {
-  try {
-    return buildDefinition()
-  } catch (cause: any) {
-    return { preview_error: cause?.message || String(cause) }
-  }
-})
 
 const saveCard = async () => {
   resetMessages()
@@ -467,13 +629,13 @@ const validateCard = async () => {
 
 const publishCard = async () => {
   await saveCard()
-  if (error.value || !editingId.value || !publishDeviceId.value) {
-    if (!publishDeviceId.value) error.value = '请选择用于冻结工具契约的设备'
+  if (error.value || !editingId.value || !publishDeviceIds.value.length) {
+    if (!publishDeviceIds.value.length) error.value = '请至少选择一台用于冻结工具契约的设备'
     return
   }
   busy.value = true
   try {
-    await publishWorkflowCard(editingId.value, publishDeviceId.value)
+    await publishWorkflowCard(editingId.value, publishDeviceIds.value)
     versions.value = (await listWorkflowCardVersions(editingId.value)).items
     notice.value = '新版本已发布'
     await loadCards()
@@ -485,10 +647,11 @@ const publishCard = async () => {
 }
 
 const loadDeviceTools = async () => {
-  deviceScope.value = null
-  if (!publishDeviceId.value) return
+  deviceScopes.value = {}
+  if (!publishDeviceIds.value.length) return
   try {
-    deviceScope.value = await getDeviceMcpScope(publishDeviceId.value)
+    const pairs = await Promise.all(publishDeviceIds.value.map(async id => [id, await getDeviceMcpScope(id)] as const))
+    deviceScopes.value = Object.fromEntries(pairs)
   } catch (cause: any) {
     error.value = cause?.message || '设备工具加载失败'
   }
@@ -569,12 +732,6 @@ const loadRunDetail = async (run: WorkflowRun) => {
   confirmations.value = confirmationRows.items
 }
 
-const decide = async (approved: boolean) => {
-  if (!selectedRun.value) return
-  await confirmWorkflowRun(selectedRun.value.id, approved)
-  await loadRuns()
-}
-
 const cancelRun = async (run: WorkflowRun) => {
   await cancelWorkflowRun(run.id)
   await loadRuns()
@@ -599,6 +756,12 @@ const cloneCurrentCard = async () => {
   } finally {
     busy.value = false
   }
+}
+
+const decide = async (approved: boolean) => {
+  if (!selectedRun.value) return
+  await confirmWorkflowRun(selectedRun.value.id, approved)
+  await loadRuns()
 }
 
 const deleteCard = async (card: WorkflowCard) => {
@@ -669,33 +832,77 @@ const previewVersion = async (version: WorkflowCardVersion) => {
   versionPreview.value = editingId.value
     ? await getWorkflowCardVersion(editingId.value, version.id)
     : version
+  comparisonDraft.value = buildDefinition()
+  comparisonOpen.value = true
 }
+
+type DiffStatus = 'added' | 'removed' | 'changed' | 'unchanged'
+
+const definitionSteps = (definition: WorkflowDefinition | null) => Object.entries(definition?.steps || {})
+  .map(([id, step]) => fromStep(id, step))
+
+const definitionPositions = (definition: WorkflowDefinition | null) => {
+  const positions = definition?.compatibility?.editorLayout?.positions
+  return positions && typeof positions === 'object' ? positions as Record<string, WorkflowNodePosition> : {}
+}
+
+const comparisonVersionSteps = computed(() => definitionSteps(versionPreview.value?.definition || null))
+const comparisonDraftSteps = computed(() => definitionSteps(comparisonDraft.value))
+const comparisonVersionPositions = computed(() => definitionPositions(versionPreview.value?.definition || null))
+const comparisonDraftPositions = computed(() => definitionPositions(comparisonDraft.value))
+
+const comparisonStatuses = computed(() => {
+  const released = versionPreview.value?.definition?.steps || {}
+  const draft = comparisonDraft.value?.steps || {}
+  const version: Record<string, DiffStatus> = {}
+  const current: Record<string, DiffStatus> = {}
+  for (const id of new Set([...Object.keys(released), ...Object.keys(draft)])) {
+    if (!(id in draft)) version[id] = 'removed'
+    else if (!(id in released)) current[id] = 'added'
+    else {
+      const status = JSON.stringify(released[id]) === JSON.stringify(draft[id]) ? 'unchanged' : 'changed'
+      version[id] = status
+      current[id] = status
+    }
+  }
+  return { version, current }
+})
 
 const statusLabel = (status: string) => ({
   draft: '草稿', validated: '已校验', published: '已发布', deprecated: '已弃用',
   pending: '待领取', running: '推进中', waiting_device: '等待设备', waiting_confirmation: '等待确认',
-  retry_wait: '等待重试', paused_offline: '设备离线', succeeded: '成功', failed: '失败',
+  waiting_ai: '等待 AI', retry_wait: '等待重试', paused_offline: '设备离线', succeeded: '成功', failed: '失败',
   cancelled: '已取消', timed_out: '超时', dispatch_pending: '待派发', dispatching: '派发中',
 }[status] || status)
 
 const statusClass = (status: string) => {
   if (status === 'succeeded' || status === 'published') return 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10'
   if (['failed', 'timed_out', 'cancelled'].includes(status)) return 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/10'
-  if (['waiting_confirmation', 'paused_offline', 'retry_wait'].includes(status)) return 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10'
+  if (['waiting_confirmation', 'waiting_ai', 'paused_offline', 'retry_wait'].includes(status)) return 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10'
   return 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/10'
 }
 
-watch(publishDeviceId, loadDeviceTools)
+watch(publishDeviceIds, loadDeviceTools, { deep: true })
 watch(tab, value => { if (value === 'runs') loadRuns() })
+watch(editorOpen, value => { if (!value) editorFullscreen.value = false })
+watch(
+  [() => ({ ...editor }), editorSteps, canvasPositions],
+  () => { if (editorOpen.value) editorHistory.schedule(captureEditorSnapshot()) },
+  { deep: true },
+)
 
 let timer: number | undefined
 onMounted(async () => {
+  window.addEventListener('keydown', handleEditorShortcut)
   await Promise.all([loadCards(), loadRuns()])
   timer = window.setInterval(() => {
     if (runs.value.some(run => activeStatuses.has(run.status))) loadRuns()
   }, 2500)
 })
-onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleEditorShortcut)
+  if (timer) window.clearInterval(timer)
+})
 </script>
 
 <template>
@@ -777,8 +984,14 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
               <button v-if="['failed', 'timed_out', 'cancelled'].includes(selectedRun.status)" class="rounded border border-indigo-200 px-2 py-1 text-indigo-600" @click="retryRun(selectedRun)">新运行重试</button>
             </div>
             <div v-for="confirmation in confirmations.filter(item => item.status === 'pending')" :key="confirmation.id" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
-              <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">等待确认：{{ confirmation.risk_summary }}</div>
-              <div class="mt-1 flex gap-1"><button class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white" @click="decide(true)">批准</button><button class="rounded bg-rose-600 px-2 py-0.5 text-[10px] text-white" @click="decide(false)">拒绝</button></div>
+              <template v-if="confirmation.ai_config_id">
+                <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">{{ confirmation.type === 'ai_review' ? '等待 AI 核对' : '等待 AI 转达确认' }}：{{ confirmation.risk_summary }}</div>
+                <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">{{ confirmation.notified_at ? 'AI 已收到通知，正在处理' : '正在通知负责本次运行的 AI' }}</div>
+              </template>
+              <template v-else>
+                <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">安全策略确认：{{ confirmation.risk_summary }}</div>
+                <div class="mt-1 flex gap-1"><button class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white" @click="decide(true)">批准</button><button class="rounded bg-rose-600 px-2 py-0.5 text-[10px] text-white" @click="decide(false)">拒绝</button></div>
+              </template>
             </div>
             <div class="mt-3 text-[10px] font-semibold text-zinc-500">步骤</div>
             <div class="mt-1 space-y-1">
@@ -794,9 +1007,15 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
     </div>
 
     <Teleport to="body">
-    <div v-if="editorOpen" class="fixed inset-0 flex justify-center overflow-y-auto bg-zinc-950/45 p-3 backdrop-blur-sm" :style="{ zIndex: editorZIndex }" @click.self="editorOpen = false">
-      <div class="automation-editor-modal my-auto w-full max-w-[1500px] rounded-xl border p-4 shadow-2xl">
-        <div class="automation-editor-header flex items-center justify-between gap-3"><div class="automation-editor-title text-sm font-semibold">{{ editingId ? '编辑自动化卡片' : '新建自动化卡片' }}</div><button class="automation-editor-close" aria-label="关闭自动化卡片编辑器" @click="editorOpen = false">✕</button></div>
+    <div v-if="editorOpen" class="fixed inset-0 flex justify-center overflow-y-auto bg-zinc-950/45 backdrop-blur-sm" :class="editorFullscreen ? 'p-0' : 'p-3'" :style="{ zIndex: editorZIndex }" @click.self="editorOpen = false">
+      <div class="automation-editor-modal w-full border p-4 shadow-2xl" :class="editorFullscreen ? 'is-fullscreen min-h-app-viewport max-w-none rounded-none' : 'my-auto max-w-[1500px] rounded-xl'">
+        <div class="automation-editor-header flex items-center justify-between gap-3">
+          <div class="automation-editor-title text-sm font-semibold">{{ editingId ? '编辑自动化卡片' : '新建自动化卡片' }}</div>
+          <div class="flex items-center gap-1">
+            <button class="automation-editor-close" :aria-label="editorFullscreen ? '退出全屏编辑' : '全屏编辑'" :title="editorFullscreen ? '退出全屏' : '全屏编辑'" @click="editorFullscreen = !editorFullscreen">{{ editorFullscreen ? '↙' : '⛶' }}</button>
+            <button class="automation-editor-close" aria-label="关闭自动化卡片编辑器" title="关闭" @click="editorOpen = false">✕</button>
+          </div>
+        </div>
         <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
         <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
         <details class="automation-editor-section mt-3 rounded-lg border p-3">
@@ -836,7 +1055,7 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
               </div>
               <div class="mt-3 grid gap-2">
                 <label class="text-[9px] text-zinc-500">步骤 ID<input :value="selectedStep.id" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="renameSelectedStep" /></label>
-                <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
+                <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','ai','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
 
                 <template v-if="selectedStep.type === 'mcp'">
                   <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">选择设备工具</option><option v-for="tool in toolNames" :key="tool">{{ tool }}</option></select></label>
@@ -848,7 +1067,8 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 
                 <label v-else-if="selectedStep.type === 'condition'" class="text-[9px] text-zinc-500">条件表达式<textarea v-model="selectedStep.expressionText" rows="8" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                 <label v-else-if="selectedStep.type === 'delay'" class="text-[9px] text-zinc-500">延迟秒数<input v-model.number="selectedStep.delaySeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-                <template v-else-if="selectedStep.type === 'confirm'"><label class="text-[9px] text-zinc-500">确认提示<input v-model="selectedStep.message" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">确认超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label></template>
+                <template v-else-if="selectedStep.type === 'confirm'"><label class="text-[9px] text-zinc-500">需要 AI 向用户发送的确认问题<input v-model="selectedStep.message" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">确认超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label></template>
+                <template v-else-if="selectedStep.type === 'ai'"><label class="text-[9px] text-zinc-500">AI 核对说明<textarea v-model="selectedStep.message" rows="5" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">回调参数保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="ai_review" /></label><label class="text-[9px] text-zinc-500">AI 回调超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="rounded bg-sky-50 p-2 text-[9px] text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">回调参数可在后续节点中用 ${steps.保存名.result.字段} 引用。</div></template>
                 <div v-else class="rounded-lg bg-emerald-50 p-3 text-[10px] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">结束节点会生成卡片输出并终止运行。</div>
               </div>
             </template>
@@ -856,11 +1076,26 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
           </aside>
         </div>
 
-        <div class="mt-4 grid gap-2 md:grid-cols-2"><label class="text-[10px] text-zinc-500">契约设备<select v-model="publishDeviceId" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option value="">请选择设备</option><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || device.id }}</option></select></label><div class="text-[10px] text-zinc-500">设备上报工具：{{ toolNames.length }} 个。MCP 参数表单从当前 JSON Schema 自动生成。</div></div>
-        <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">已发布版本与草稿对比</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">v{{ version.version_number }}</button></div><div v-if="versionPreview?.definition" class="mt-1 grid gap-1 md:grid-cols-2"><div><div class="mb-1 text-[9px] text-zinc-400">所选版本</div><pre class="max-h-40 overflow-auto rounded bg-zinc-950 p-2 text-[9px] text-zinc-300">{{ JSON.stringify(versionPreview.definition, null, 2) }}</pre></div><div><div class="mb-1 text-[9px] text-zinc-400">当前草稿</div><pre class="max-h-40 overflow-auto rounded bg-zinc-950 p-2 text-[9px] text-zinc-300">{{ JSON.stringify(draftPreview, null, 2) }}</pre></div></div></div>
+        <div class="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]"><div><div class="text-[10px] text-zinc-500">契约设备（可多选）</div><div class="mt-1 grid max-h-32 gap-1 overflow-auto rounded border p-2 dark:border-zinc-700"><label v-for="device in onlineDevices" :key="device.id" class="flex items-center gap-2 text-[10px]"><input v-model="publishDeviceIds" type="checkbox" :value="device.id" /><span>{{ device.name || device.id }}</span><span class="ml-auto text-zinc-400">{{ device.deviceType || device.platform }}</span></label><div v-if="!onlineDevices.length" class="text-[10px] text-zinc-400">暂无在线设备</div></div></div><div class="text-[10px] leading-5 text-zinc-500">共同暴露且 Schema 一致的工具：{{ toolNames.length }} 个。发布时服务端会逐台复核；运行前还会再次检查目标设备在线状态与 MCP 暴露，派发时继续执行权限校验。</div></div>
+        <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">已发布版本与当前草稿</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">画布对比 v{{ version.version_number }}</button></div></div>
         <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">关闭</button><button :disabled="busy" class="rounded border border-zinc-300 px-3 py-1.5 text-xs" @click="saveCard">保存草稿</button><button :disabled="busy" class="rounded border border-emerald-300 px-3 py-1.5 text-xs text-emerald-600" @click="validateCard">校验</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="publishCard">发布版本</button></div></div>
       </div>
     </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="comparisonOpen && versionPreview?.definition && comparisonDraft" class="fixed inset-0 flex items-center justify-center overflow-auto bg-zinc-950/55 p-3 backdrop-blur-sm" :style="{ zIndex: comparisonZIndex }" @click.self="comparisonOpen = false">
+        <section class="automation-diff-modal w-full max-w-[1800px] rounded-xl border bg-white p-4 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+          <header class="flex flex-wrap items-center justify-between gap-3">
+            <div><div class="text-sm font-semibold">版本画布对比 · v{{ versionPreview.version_number }}</div><div class="mt-1 text-[10px] text-zinc-500">节点内容或连线目标变化均标记为“已修改”</div></div>
+            <div class="flex flex-wrap items-center gap-3 text-[10px]"><span class="text-emerald-500">● 新增</span><span class="text-rose-500">● 删除</span><span class="text-amber-500">● 修改</span><span class="text-zinc-400">● 未变化</span><button class="rounded border px-2 py-1" @click="comparisonOpen = false">关闭</button></div>
+          </header>
+          <div class="mt-3 grid gap-3 xl:grid-cols-2">
+            <div><div class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">已发布版本 v{{ versionPreview.version_number }}</div><WorkflowCanvasEditor readonly :steps="comparisonVersionSteps" :start-step-id="versionPreview.definition.startStepId" selected-step-id="" :positions="comparisonVersionPositions" :node-statuses="comparisonStatuses.version" /></div>
+            <div><div class="mb-1 text-xs font-semibold text-zinc-600 dark:text-zinc-300">当前草稿</div><WorkflowCanvasEditor readonly :steps="comparisonDraftSteps" :start-step-id="comparisonDraft.startStepId" selected-step-id="" :positions="comparisonDraftPositions" :node-statuses="comparisonStatuses.current" /></div>
+          </div>
+        </section>
+      </div>
     </Teleport>
 
     <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><label class="mt-3 block text-[10px] text-zinc-500">目标设备<select v-model="runDeviceId" class="mt-1 w-full rounded border p-2 text-xs dark:border-zinc-700 dark:bg-zinc-950"><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || device.id }}</option></select></label><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy || !runDeviceId" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
@@ -884,6 +1119,10 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
     linear-gradient(180deg, rgb(238 242 255 / 0.72), transparent 180px),
     var(--editor-surface);
   font-size: 14px;
+}
+
+.automation-editor-modal.is-fullscreen :deep(.workflow-canvas) {
+  height: max(620px, calc(100dvh - 390px));
 }
 
 .automation-editor-header {
@@ -927,6 +1166,14 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 .automation-editor-footer {
   padding-top: 14px;
   border-top: 1px solid #dbe3ee;
+}
+
+.automation-diff-modal :deep(.workflow-canvas) {
+  height: min(58vh, 640px);
+}
+
+.automation-diff-modal :deep(.canvas-editor) {
+  min-width: 0;
 }
 
 .automation-editor-modal :deep(.text-\[9px\]) {

@@ -1,7 +1,7 @@
 import { del, get, patch, post } from './http'
 
 export type WorkflowCardStatus = 'draft' | 'validated' | 'published' | 'deprecated'
-export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'confirm' | 'end'
+export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'confirm' | 'ai' | 'end'
 
 export interface WorkflowDefinition {
   schemaVersion: 1
@@ -36,6 +36,7 @@ export interface WorkflowCardVersion {
   schema_version: number
   definition_digest: string
   tool_contracts: Record<string, any>
+  contract_device_ids: string[]
   published_by: number
   published_at: number
   definition?: WorkflowDefinition
@@ -72,10 +73,10 @@ export const validateWorkflowCard = (cardId: string) =>
     `/api/workflow-cards/${encodeURIComponent(cardId)}/validate`, {}, { fallbackError: '卡片校验失败' },
   )
 
-export const publishWorkflowCard = (cardId: string, deviceId?: string) =>
+export const publishWorkflowCard = (cardId: string, deviceIds: string[] = []) =>
   post<WorkflowCardVersion>(
     `/api/workflow-cards/${encodeURIComponent(cardId)}/publish`,
-    { device_id: deviceId || null },
+    { device_ids: deviceIds },
     { fallbackError: '卡片发布失败' },
   )
 
