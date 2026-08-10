@@ -7,6 +7,7 @@ import { stripMcpCallBlocks } from '@/utils/mcpFormat'
 import { getSystemPromptPreview } from '@/api/chat'
 import { listMcpTools } from '@/api/mcp'
 import { renderGroupedMcpToolCatalog, stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
+import type { ChatAttachment } from '@/api/chat'
 
 const DEFAULT_MCP_DYNAMIC_RULE = `系统提示的[动态 MCP 说明]目录会一次性列出全部可调用工具的名称与简介，模型据此直接定位。需要参数时用 mcp.describe+tool（支持 tool 单个、tools 批量或 query 关键词搜索）取 schema；被加载的目标工具会在随后轮次直接可调用。
 
@@ -24,6 +25,7 @@ interface ConversationInputMessage {
   system_prompt?: string
   front_prompt_details?: string
   created_at?: number
+  attachments?: ChatAttachment[]
 }
 
 interface ConversationMessage extends ConversationInputMessage {

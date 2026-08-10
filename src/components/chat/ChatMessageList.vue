@@ -7,6 +7,7 @@ import AppIcon from '@/components/common/AppIcon.vue'
 import type { InlineContent as InlineContentType } from '@/utils/chatParser'
 import { buildChatRenderItems } from '@/utils/chatMessageGroups'
 import { formatDurationMs } from '@/utils/datetime'
+import type { ChatAttachment } from '@/api/chat'
 
 interface Message {
   role: 'user' | 'assistant' | 'system'
@@ -19,6 +20,7 @@ interface Message {
   tags?: string
   created_at?: number
   latency?: number
+  attachments?: ChatAttachment[]
 }
 
 const props = defineProps<{

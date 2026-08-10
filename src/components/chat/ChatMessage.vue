@@ -7,6 +7,7 @@ import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { parseMcpToolBubbleDetails } from '@/utils/mcpFormat'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
+import type { ChatAttachment } from '@/api/chat'
 
 const emit = defineEmits<{
   (e: 'delete', idx: number): void
@@ -26,6 +27,7 @@ const props = defineProps<{
     id?: number
     tags?: string
     created_at?: number
+    attachments?: ChatAttachment[]
   }
   appliedEdits: string[]
   appliedSignatures: string[]
@@ -279,6 +281,16 @@ const attachedFiles = computed(() => {
 
 const attachedPathLabel = (path: string) =>
   String(path || '').trim().endsWith('/') ? `${String(path || '').trim()}（文件夹）` : String(path || '').trim()
+
+const uploadedMessageAttachments = computed(() => Array.isArray(props.message.attachments)
+  ? props.message.attachments.filter(item => item && item.file_name)
+  : [])
+
+const formatAttachmentBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 </script>
 
@@ -570,6 +582,39 @@ const attachedPathLabel = (path: string) =>
         <strong>任务结束</strong>
         <span v-if="props.taskDurationLabel" class="task-boundary-duration">{{ props.taskDurationLabel }}</span>
         <span class="task-boundary-wave"></span>
+      </div>
+
+      <div
+        v-if="props.message.role === 'user' && !isSystemNoticeMessage && uploadedMessageAttachments.length > 0"
+        class="mt-2 grid max-w-full grid-cols-1 gap-2 sm:grid-cols-2"
+      >
+        <a
+          v-for="attachment in uploadedMessageAttachments"
+          :key="attachment.id || attachment.file_ref"
+          :href="attachment.url"
+          target="_blank"
+          rel="noopener"
+          class="group/attachment flex min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-indigo-200/80 bg-indigo-50/60 p-2 text-left transition-colors hover:border-indigo-300 hover:bg-indigo-50 dark:border-indigo-700/60 dark:bg-indigo-950/25 dark:hover:border-indigo-600"
+          :title="`${attachment.file_name}\n${attachment.workspace_path}`"
+        >
+          <img
+            v-if="attachment.is_image && attachment.url"
+            :src="attachment.url"
+            :alt="attachment.file_name"
+            class="h-16 w-16 shrink-0 rounded-lg object-cover"
+            loading="lazy"
+          />
+          <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/80 text-indigo-500 dark:bg-zinc-900/70 dark:text-indigo-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 2.25H6A2.25 2.25 0 0 0 3.75 4.5v15A2.25 2.25 0 0 0 6 21.75h12A2.25 2.25 0 0 0 20.25 19.5V6.75L15.75 2.25Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 2.25V6.75H20.25" />
+            </svg>
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-xs font-medium text-indigo-700 dark:text-indigo-200">{{ attachment.file_name }}</span>
+            <span class="mt-0.5 block truncate text-[10px] text-indigo-400 dark:text-indigo-400">{{ formatAttachmentBytes(attachment.bytes) }} · {{ attachment.workspace_path }}</span>
+          </span>
+        </a>
       </div>
 
       <div

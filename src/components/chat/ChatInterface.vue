@@ -43,6 +43,13 @@ interface ChatMessage {
   blocks?: ActionBlock[]
   inlineContent?: InlineContentType[]
   display_text?: string
+  attachments?: chatApi.ChatAttachment[]
+}
+
+interface PendingUploadAttachment extends chatApi.ChatAttachment {
+  client_id: string
+  preview_url?: string
+  status: 'uploading' | 'ready'
 }
 
 interface SessionItem {
@@ -101,6 +108,8 @@ const preferredInitialSessionId = computed(() => String(props.initialSessionId |
 const isFileSelectorOpen = ref(false)
 const currentPath = ref('')
 const chatInput = ref('')
+const uploadedAttachments = ref<PendingUploadAttachment[]>([])
+const uploadingCount = computed(() => uploadedAttachments.value.filter(item => item.status === 'uploading').length)
 const chatMessages = ref<ChatMessage[]>([])
 const isTyping = ref(false)
 const currentRunId = ref('')
@@ -114,6 +123,73 @@ const liveAssistantText = ref('')
 const liveTargetText = ref('')
 const liveCursor = ref(0)
 const shownRunErrorIds = ref<Set<string>>(new Set())
+
+const revokeUploadPreview = (item: PendingUploadAttachment) => {
+  if (item.preview_url?.startsWith('blob:')) URL.revokeObjectURL(item.preview_url)
+}
+
+const clearUploadedAttachments = () => {
+  uploadedAttachments.value.forEach(revokeUploadPreview)
+  uploadedAttachments.value = []
+}
+
+const removeUploadedAttachment = (clientId: string) => {
+  const item = uploadedAttachments.value.find(entry => entry.client_id === clientId)
+  if (item) revokeUploadPreview(item)
+  uploadedAttachments.value = uploadedAttachments.value.filter(entry => entry.client_id !== clientId)
+}
+
+const uploadLocalFiles = async (files: File[]) => {
+  const slots = Math.max(0, 5 - uploadedAttachments.value.length)
+  if (slots <= 0) {
+    alert({ message: '每条消息最多上传 5 个附件', type: 'warning' })
+    return
+  }
+  const accepted = files.slice(0, slots)
+  if (files.length > accepted.length) {
+    alert({ message: '每条消息最多上传 5 个附件，超出的文件未加入', type: 'warning' })
+  }
+  for (const file of accepted) {
+    if (file.size > 30 * 1024 * 1024) {
+      alert({ message: `${file.name} 超过 30 MB，未上传`, type: 'warning' })
+      continue
+    }
+    const clientId = `upload_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const placeholder: PendingUploadAttachment = {
+      client_id: clientId,
+      file_ref: '',
+      workspace_path: '',
+      file_name: file.name,
+      mime_type: file.type || 'application/octet-stream',
+      bytes: file.size,
+      is_image: file.type.startsWith('image/'),
+      preview_url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      status: 'uploading',
+    }
+    uploadedAttachments.value = [...uploadedAttachments.value, placeholder]
+    try {
+      const uploaded = await chatApi.uploadChatAttachment(
+        chatCtx.value,
+        currentSessionId.value || 'default',
+        file,
+      )
+      const index = uploadedAttachments.value.findIndex(item => item.client_id === clientId)
+      if (index < 0) continue
+      const current = uploadedAttachments.value[index]
+      uploadedAttachments.value[index] = {
+        ...uploaded,
+        client_id: clientId,
+        preview_url: current.preview_url,
+        status: 'ready',
+      }
+      uploadedAttachments.value = [...uploadedAttachments.value]
+      emit('refreshFiles')
+    } catch (error: any) {
+      removeUploadedAttachment(clientId)
+      alert({ message: `${file.name} 上传失败：${error?.message || '未知错误'}`, type: 'error' })
+    }
+  }
+}
 
 // Trackers for turn-boundary detection (reset after non-empty live text/reasoning, or
 // waiting_mcp -> generating). Used to eagerly fetch incremental history so that
@@ -2215,9 +2291,14 @@ const drainPendingQueue = async () => {
 
 const sendChat = async (overrideContent?: string, options: { silent?: boolean } = {}) => {
   const content = (overrideContent ?? chatInput.value).trim()
+  const readyUploads = uploadedAttachments.value.filter(item => item.status === 'ready' && item.file_ref)
   const silent = !!options.silent
   if (silent) return
-  if (!content) return
+  if (!content && readyUploads.length === 0) return
+  if (uploadingCount.value > 0) {
+    alert({ message: '附件仍在上传，请稍候再发送', type: 'warning' })
+    return
+  }
   if (!getAuthToken()) return
 
   // 空白对话：首条消息发出时再真正创建会话，避免每次点角色就刷一堆空会话。
@@ -2233,13 +2314,15 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
     chatInput.value = ''
     try {
       const res = await chatApi.injectMessage({
-        content,
+        content: content || `已上传 ${readyUploads.length} 个附件`,
         session_id: currentSessionId.value,
         session_name: sessionList.value.find(s => s.id === currentSessionId.value)?.name || BLANK_SESSION_NAME,
         ai_config_id: props.aiConfigId,
         ai_kind: aiKindValue.value,
+        attachments: readyUploads.map(item => ({ file_ref: item.file_ref })),
       })
       if (res?.active) {
+        if (readyUploads.length > 0) clearUploadedAttachments()
         // 消息已投递给运行中的 run：立刻把用户气泡拉出来，并确保在轮询这个 run。
         await fetchRunHistoryIncrementalOnce()
         if (!isRunActive.value) await checkActiveRun()
@@ -2247,6 +2330,10 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       }
     } catch {
       // 后端不可用时退回旧行为：本地排队，等本轮结束续发。
+      if (readyUploads.length > 0) {
+        alert({ message: '附件暂时无法投递，已保留在输入框，请稍后重试', type: 'error' })
+        return
+      }
       enqueuePending(content)
       return
     }
@@ -2262,7 +2349,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
 
   const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || BLANK_SESSION_NAME
   const shouldAutoTitle = isPlaceholderSessionName(currentSessionName)
-  const visibleUserContent = content
+  const visibleUserContent = content || `已上传 ${readyUploads.length} 个附件`
   const fullContentWithContext = [visibleUserContent, attachedPathStr]
     .filter(Boolean)
     .join('\n\n')
@@ -2285,8 +2372,10 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       session_name: shouldAutoTitle ? buildAutoSessionTitle(visibleUserContent) : currentSessionName,
       ai_config_id: props.aiConfigId,
       ai_kind: aiKindValue.value,
+      attachments: readyUploads.map(item => ({ file_ref: item.file_ref })),
     })
     currentRunId.value = started.run_id
+    if (readyUploads.length > 0) clearUploadedAttachments()
     if (selectedReadableFiles.length > 0) {
       emit('update:selectedFiles', [])
     }
@@ -2351,6 +2440,7 @@ const initializeSessions = async () => {
 }
 
 watch(() => [props.aiConfigId, preferredInitialSessionId.value] as const, async () => {
+  clearUploadedAttachments()
   stopExternalControlPolling()
   stopRunPolling()
   stopSessionSyncPolling()
@@ -2466,6 +2556,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearUploadedAttachments()
   clearFrontPromptPopupClose()
   window.removeEventListener('resize', syncFrontPromptViewportMode)
   window.visualViewport?.removeEventListener('resize', updateFrontPromptPopupPosition)
@@ -2706,6 +2797,8 @@ onBeforeUnmount(() => {
         :selectable-file-root="selectableFileRoot"
         :toolGroups="attachableToolGroups"
         :selectedToolGroups="selectedToolGroupKeys"
+        :uploadedAttachments="uploadedAttachments"
+        :uploadingCount="uploadingCount"
         @toggleToolGroup="toggleToolGroup"
         @send="sendChat"
         @stop="stopCurrentRun"
@@ -2716,6 +2809,8 @@ onBeforeUnmount(() => {
         @toggleFile="toggleFileSelection"
         @clearFiles="clearAttachments"
         @refreshFiles="handleRefreshFiles"
+        @uploadFiles="uploadLocalFiles"
+        @removeUpload="removeUploadedAttachment"
       />
     </div>
   </div>

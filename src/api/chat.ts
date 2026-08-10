@@ -31,6 +31,35 @@ export interface ChatSessionRow {
   updated_at?: number | string | null
 }
 
+export interface ChatAttachment {
+  id?: number
+  file_ref: string
+  workspace_path: string
+  file_name: string
+  mime_type: string
+  bytes: number
+  is_image: boolean
+  url?: string
+}
+
+export const uploadChatAttachment = (
+  ctx: AiContext,
+  sessionId: string,
+  file: File,
+) => {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  form.append('ai_kind', ctx.aiKind)
+  form.append('session_id', sessionId || 'default')
+  if (ctx.aiConfigId !== undefined) form.append('ai_config_id', String(ctx.aiConfigId))
+  return request<ChatAttachment>('/api/chat/attachments/upload', {
+    method: 'POST',
+    body: form,
+    rawBody: true,
+    fallbackError: '附件上传失败',
+  })
+}
+
 export const listChatSessions = (ctx: AiContext) =>
   get<ChatSessionRow[]>('/api/chat/sessions', {
     query: queryForAi(ctx),
@@ -122,6 +151,7 @@ export const startRun = (payload: {
   session_name: string
   ai_config_id?: number
   ai_kind: AiKind
+  attachments?: Array<{ file_ref: string }>
 }) => post<{ run_id: string }>('/api/chat/run/start', payload, { fallbackError: 'run start failed' })
 
 export const injectMessage = (payload: {
@@ -130,6 +160,7 @@ export const injectMessage = (payload: {
   session_name: string
   ai_config_id?: number
   ai_kind: AiKind
+  attachments?: Array<{ file_ref: string }>
 }) =>
   post<{ active: boolean; run_id?: string; user_message_id?: number }>(
     '/api/chat/run/inject',
