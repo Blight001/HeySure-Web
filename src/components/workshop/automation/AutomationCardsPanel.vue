@@ -67,6 +67,7 @@ type StepEditor = {
   delaySeconds: number
   message: string
   onDenied: string
+  extraText: string
 }
 
 const AI_INTERVENTION_TOOL = '__workflow.ai_intervention'
@@ -143,6 +144,8 @@ const runInputText = ref('{}')
 const selectedRun = ref<WorkflowRun | null>(null)
 const selectedSteps = ref<WorkflowStepRun[]>([])
 const confirmations = ref<WorkflowConfirmation[]>([])
+const pendingConfirmations = ref<Array<{ run: WorkflowRun; confirmation: WorkflowConfirmation }>>([])
+const confirmationClock = ref(Date.now())
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
 
@@ -166,7 +169,7 @@ const filteredCards = computed(() => {
 const cardRunSummary = (cardId: string) => {
   const items = runs.value.filter(run => run.card_id === cardId)
   const terminal = items.filter(run => ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(run.status))
-  const succeeded = terminal.filter(run => run.status === 'succeeded').length
+  const succeeded = terminal.filter(run => run.status === 'succeeded' && run.output?.status !== 'manual_required').length
   return {
     rate: terminal.length ? `${Math.round((succeeded / terminal.length) * 100)}%` : '—',
     latest: items[0]?.created_at ? new Date(items[0].created_at * 1000).toLocaleString() : '暂无',
@@ -194,6 +197,7 @@ const emptyStep = (type: WorkflowStepType = 'mcp', index = editorSteps.value.len
   delaySeconds: 1,
   message: type === 'ai' ? '请核对当前流程上下文，并返回继续执行所需的参数' : '请确认继续执行此自动化步骤',
   onDenied: '',
+  extraText: '{}',
 })
 
 const parseJson = <T,>(raw: string, label: string): T => {
@@ -223,6 +227,14 @@ const loadCards = async () => {
 const loadRuns = async () => {
   try {
     runs.value = (await listWorkflowRuns({ limit: 200 })).items
+    const waiting = runs.value.filter(item => ['waiting_confirmation', 'waiting_ai'].includes(item.status))
+    const pendingRows = await Promise.all(waiting.map(async run => ({
+      run,
+      items: (await listWorkflowConfirmations(run.id)).items,
+    })))
+    pendingConfirmations.value = pendingRows.flatMap(({ run, items }) => items
+      .filter(confirmation => confirmation.status === 'pending' && confirmation.type !== 'ai_review')
+      .map(confirmation => ({ run, confirmation })))
     if (selectedRun.value) {
       selectedRun.value = runs.value.find(item => item.id === selectedRun.value?.id) || selectedRun.value
       await loadRunDetail(selectedRun.value)
@@ -235,6 +247,12 @@ const loadRuns = async () => {
 const fromStep = (id: string, step: Record<string, any>): StepEditor => {
   const isAi = step.type === 'mcp' && step.toolRef?.name === AI_INTERVENTION_TOOL
   const type = (isAi ? 'ai' : step.type || 'mcp') as WorkflowStepType
+  const knownKeys = new Set([
+    'type', 'title', 'toolRef', 'arguments', 'saveAs', 'next', 'onError', 'timeoutSeconds',
+    'resultProjection', 'retryPolicy', 'expression', 'onTrue', 'onFalse', 'delaySeconds',
+    'seconds', 'message', 'riskSummary', 'onDenied',
+  ])
+  const extra = Object.fromEntries(Object.entries(step).filter(([key]) => !knownKeys.has(key)))
   return ({
   ...emptyStep(type),
   id,
@@ -257,6 +275,7 @@ const fromStep = (id: string, step: Record<string, any>): StepEditor => {
   delaySeconds: Number(step.delaySeconds ?? step.seconds ?? 1),
   message: String((isAi ? step.arguments?.prompt : step.message || step.riskSummary) || '请确认继续执行此自动化步骤'),
   onDenied: String(isAi && step.onError !== 'fail' ? step.onError || '' : step.onDenied || ''),
+  extraText: JSON.stringify(extra, null, 2),
   })
 }
 
@@ -505,6 +524,7 @@ const buildDefinition = (): WorkflowDefinition => {
   const steps: Record<string, Record<string, any>> = {}
   for (const row of editorSteps.value) {
     const id = row.id.trim()
+    const extra = parseJson<Record<string, any>>(row.extraText || '{}', `步骤 ${id} 扩展配置`)
     if (row.type === 'mcp') {
       if (!row.deviceId.trim()) {
         throw new Error(`步骤 ${id}：请先选择此节点绑定的契约设备`)
@@ -520,6 +540,7 @@ const buildDefinition = (): WorkflowDefinition => {
         throw new Error(`步骤 ${id}：设备 ${row.deviceId} 当前未上报工具 ${row.tool}`)
       }
       const step: Record<string, any> = {
+        ...extra,
         type: 'mcp',
         toolRef: { namespace: 'device', deviceId: row.deviceId, name: row.tool },
         arguments: parseJson(row.argumentsText, `步骤 ${id} 参数`),
@@ -543,20 +564,23 @@ const buildDefinition = (): WorkflowDefinition => {
       steps[id] = step
     } else if (row.type === 'condition') {
       steps[id] = {
+        ...extra,
         type: 'condition',
         expression: parseJson(row.expressionText, `步骤 ${id} 条件`),
         onTrue: row.onTrue.trim(),
         onFalse: row.onFalse.trim(),
       }
     } else if (row.type === 'delay') {
-      steps[id] = { type: 'delay', delaySeconds: Number(row.delaySeconds), next: row.next.trim() }
+      steps[id] = { ...extra, type: 'delay', delaySeconds: Number(row.delaySeconds), next: row.next.trim() }
     } else if (row.type === 'confirm') {
       steps[id] = {
+        ...extra,
         type: 'confirm', message: row.message, timeoutSeconds: Number(row.timeoutSeconds),
         next: row.next.trim(), ...(row.onDenied.trim() ? { onDenied: row.onDenied.trim() } : {}),
       }
     } else if (row.type === 'ai') {
       steps[id] = {
+        ...extra,
         type: 'mcp',
         toolRef: { namespace: 'device', name: AI_INTERVENTION_TOOL },
         arguments: { prompt: row.message },
@@ -566,7 +590,7 @@ const buildDefinition = (): WorkflowDefinition => {
         onError: row.onDenied.trim() || 'fail',
       }
     } else {
-      steps[id] = { type: 'end' }
+      steps[id] = { ...extra, type: 'end' }
     }
     steps[id].title = row.title.trim() || id
   }
@@ -750,8 +774,20 @@ const cloneCurrentCard = async () => {
 
 const decide = async (approved: boolean) => {
   if (!selectedRun.value) return
-  await confirmWorkflowRun(selectedRun.value.id, approved)
+  const updated = await confirmWorkflowRun(selectedRun.value.id, approved)
+  selectedRun.value = updated
   await loadRuns()
+}
+
+const openPendingConfirmation = async (item: { run: WorkflowRun }) => {
+  tab.value = 'runs'
+  await loadRunDetail(item.run)
+}
+
+const confirmationRemaining = (expiresAt: number) => {
+  const seconds = Math.max(0, Math.ceil(expiresAt - confirmationClock.value / 1000))
+  const minutes = Math.floor(seconds / 60)
+  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 const deleteCurrentCard = async () => {
@@ -866,6 +902,13 @@ const statusLabel = (status: string) => ({
   cancelled: '已取消', timed_out: '超时', dispatch_pending: '待派发', dispatching: '派发中',
 }[status] || status)
 
+const runStatusLabel = (run: WorkflowRun) => {
+  if (run.status === 'succeeded' && run.output?.status === 'published') return '已发布'
+  if (run.status === 'succeeded' && run.output?.status === 'manual_required') return '需要人工接管'
+  if (run.status === 'succeeded' && run.output?.status === 'ready_for_review') return '待人工检查'
+  return statusLabel(run.status)
+}
+
 const statusClass = (status: string) => {
   if (status === 'succeeded' || ['active', 'published'].includes(status)) return 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10'
   if (['failed', 'timed_out', 'cancelled'].includes(status)) return 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/10'
@@ -887,6 +930,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleEditorShortcut)
   await Promise.all([loadCards(), loadRuns()])
   timer = window.setInterval(() => {
+    confirmationClock.value = Date.now()
     if (runs.value.some(run => activeStatuses.has(run.status))) loadRuns()
   }, 2500)
 })
@@ -905,6 +949,21 @@ onBeforeUnmount(() => {
       </div>
       <span class="rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-900/50">{{ cards.length }} 张</span>
     </header>
+
+    <div v-if="pendingConfirmations.length" class="mt-3 space-y-2">
+      <button
+        v-for="item in pendingConfirmations"
+        :key="item.confirmation.id"
+        class="flex w-full items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-100/90 px-3 py-2 text-left dark:border-amber-500/40 dark:bg-amber-500/15"
+        @click="openPendingConfirmation(item)"
+      >
+        <span class="min-w-0">
+          <span class="block truncate text-[11px] font-semibold text-amber-800 dark:text-amber-200">待人工确认：{{ cards.find(card => card.id === item.run.card_id)?.name || item.run.card_id }}</span>
+          <span class="mt-0.5 block text-[9px] text-amber-700/80 dark:text-amber-200/70">批准一次后自动执行本次固定版本；30 分钟内有效</span>
+        </span>
+        <span class="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-medium text-white">{{ confirmationRemaining(item.confirmation.expires_at) }} · 查看</span>
+      </button>
+    </div>
 
     <div class="mt-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -952,7 +1011,7 @@ onBeforeUnmount(() => {
           <button v-for="run in runs" :key="run.id" class="w-full rounded-lg border border-zinc-200 bg-white/75 p-2 text-left dark:border-zinc-700 dark:bg-zinc-900/55" @click="loadRunDetail(run)">
             <div class="flex items-center justify-between gap-2">
               <span class="truncate text-[11px] font-medium">{{ cards.find(card => card.id === run.card_id)?.name || run.card_id }}</span>
-              <span class="rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(run.status)">{{ statusLabel(run.status) }}</span>
+              <span class="rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(run.output?.status === 'manual_required' ? 'failed' : run.status)">{{ runStatusLabel(run) }}</span>
             </div>
             <div class="mt-1 text-[9px] text-zinc-400">{{ run.device_id }} · {{ run.current_step_id || '完成' }} · {{ new Date(run.created_at * 1000).toLocaleString() }}</div>
           </button>
@@ -963,7 +1022,7 @@ onBeforeUnmount(() => {
           <template v-else>
             <div class="flex items-center justify-between">
               <div class="text-xs font-semibold">运行详情</div>
-              <span class="rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(selectedRun.status)">{{ statusLabel(selectedRun.status) }}</span>
+              <span class="rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(selectedRun.output?.status === 'manual_required' ? 'failed' : selectedRun.status)">{{ runStatusLabel(selectedRun) }}</span>
             </div>
             <div class="mt-1 break-all text-[9px] text-zinc-400">{{ selectedRun.id }}</div>
             <div v-if="selectedRun.error" class="mt-2 rounded bg-rose-50 p-2 text-[10px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ selectedRun.error.code }}：{{ selectedRun.error.message }}</div>
@@ -973,12 +1032,13 @@ onBeforeUnmount(() => {
               <button v-if="['failed', 'timed_out', 'cancelled'].includes(selectedRun.status)" class="rounded border border-indigo-200 px-2 py-1 text-indigo-600" @click="retryRun(selectedRun)">新运行重试</button>
             </div>
             <div v-for="confirmation in confirmations.filter(item => item.status === 'pending')" :key="confirmation.id" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
-              <template v-if="confirmation.ai_config_id">
+              <template v-if="confirmation.type === 'ai_review'">
                 <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">{{ confirmation.type === 'ai_review' ? '等待 AI 核对' : '等待 AI 转达确认' }}：{{ confirmation.risk_summary }}</div>
                 <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">{{ confirmation.notified_at ? 'AI 已收到通知，正在处理' : '正在通知负责本次运行的 AI' }}</div>
               </template>
               <template v-else>
-                <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">安全策略确认：{{ confirmation.risk_summary }}</div>
+                <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">人工授权：{{ confirmation.risk_summary }}</div>
+                <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">剩余 {{ confirmationRemaining(confirmation.expires_at) }}；{{ confirmation.ai_config_id ? '负责 AI 已收到转达任务，网页也可直接处理' : '30 分钟内有效' }}</div>
                 <div class="mt-1 flex gap-1"><button class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white" @click="decide(true)">批准</button><button class="rounded bg-rose-600 px-2 py-0.5 text-[10px] text-white" @click="decide(false)">拒绝</button></div>
               </template>
             </div>

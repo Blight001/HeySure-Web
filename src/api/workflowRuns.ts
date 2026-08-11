@@ -44,7 +44,7 @@ export interface WorkflowConfirmation {
   id: string
   run_id: string
   step_id: string
-  type: 'explicit' | 'forced' | 'ai_review' | 'user_via_ai'
+  type: 'explicit' | 'forced' | 'ai_review' | 'user_via_ai' | 'user_via_ai_dispatch'
   status: string
   risk_summary: string
   expires_at: number
