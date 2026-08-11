@@ -298,7 +298,8 @@ const isCustomDevice = (device: ConnectedDevice) => String(device.deviceType || 
 // 各分类函数优先用服务端归一化的 deviceType（自定义设备的 platform 是任意字符串，
 // 不能再用关键词启发式判断），缺失时退回旧的 platform 启发式。
 const isLibraryDevice = (device: ConnectedDevice) => {
-  if (device.deviceType) return device.deviceType === 'workshop'
+  if (device.deviceType) return ['workshop', 'library'].includes(device.deviceType)
+  if (device.isWorkshop || String(device.id || '').startsWith('workshop_builtin_')) return true
   const platform = String(device.platform || '').toLowerCase()
   return platform.includes('workshop')
 }

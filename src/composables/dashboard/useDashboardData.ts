@@ -35,6 +35,7 @@ export interface ConnectedDevice {
   isWindowsDesktop?: boolean
   isBrowserExtension?: boolean
   isAndroid?: boolean
+  isWorkshop?: boolean
   /** 服务端归一化设备类型：desktop/browser/android/workshop/toolbox/custom。 */
   deviceType?: string
   /** 设备注册时自选的图标 URL；空 = 网页默认样式。 */
@@ -430,6 +431,7 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     isWindowsDesktop: !!raw?.isWindowsDesktop,
     isBrowserExtension: !!raw?.isBrowserExtension,
     isAndroid: !!raw?.isAndroid,
+    isWorkshop: !!raw?.isWorkshop,
     deviceType: raw?.deviceType ? String(raw.deviceType).toLowerCase() : undefined,
     icon: raw?.icon ? String(raw.icon) : undefined,
     remark: raw?.remark ? String(raw.remark) : undefined,
