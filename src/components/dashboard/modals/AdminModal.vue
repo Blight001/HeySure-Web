@@ -82,6 +82,7 @@ const tasksLoading = ref(false)
 const busyRun = ref<string>('')
 const busyService = ref<string>('')
 const busyAllServices = ref(false)
+const rebuildingAll = ref(false)
 
 // ---- Users ----
 const users = ref<AdminUser[]>([])
@@ -384,6 +385,23 @@ const restartAllServices = async () => {
     await alert({ message: (err as Error).message, type: 'error' })
   } finally {
     busyAllServices.value = false
+  }
+}
+
+const rebuildAllContainers = async () => {
+  const ok = await confirm({
+    message: '确认重构全部容器？系统将重新构建镜像并重建所有 Docker 容器，管理控制台会暂时断开，完成后请刷新页面。',
+    type: 'warning',
+  })
+  if (!ok) return
+  rebuildingAll.value = true
+  try {
+    await adminApi.rebuildAllContainers()
+    await alert({ message: '全部容器已进入后台重构队列，控制台可能暂时断开。', type: 'success' })
+  } catch (err) {
+    await alert({ message: (err as Error).message, type: 'error' })
+  } finally {
+    rebuildingAll.value = false
   }
 }
 
@@ -1530,6 +1548,11 @@ const avatarFor = (u: AdminUser) =>
               <div class="flex items-center justify-between mb-2">
                 <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">子服务运行状态</h3>
                 <div class="flex items-center gap-2">
+                  <button
+                    class="text-xs px-2 py-1 rounded-lg border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-700 dark:text-rose-300 dark:hover:bg-rose-900/20 disabled:opacity-50"
+                    :disabled="rebuildingAll || busyAllServices || servicesLoading"
+                    @click="rebuildAllContainers"
+                  >{{ rebuildingAll ? '重构中…' : '⟳ 重构全部容器' }}</button>
                   <button
                     class="text-xs px-2 py-1 rounded-lg border border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/20 disabled:opacity-50"
                     :disabled="busyAllServices || servicesLoading"

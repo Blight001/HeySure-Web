@@ -103,6 +103,11 @@ export const stopTask = (runId: string) =>
     fallbackError: '停止子任务失败',
   })
 
+export const rebuildAllContainers = () =>
+  post<{ ok: boolean; started: boolean }>('/api/admin/services/rebuild-all', undefined, {
+    fallbackError: '重构全部容器失败',
+  })
+
 export const restartService = (key: string) =>
   post<{ ok: boolean; key: string; name: string; restarting: boolean; command?: string[] }>(
     `/api/admin/services/${key}/restart`,

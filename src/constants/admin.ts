@@ -73,6 +73,7 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   create_user: '创建用户',
   restart_service: '重启服务',
   restart_all_services: '全部重启',
+  rebuild_all_services: '重构全部容器',
   stop_task: '停止子任务',
   file_write: '保存文件',
   file_mkdir: '新建文件夹',
