@@ -42,7 +42,13 @@ const emit = defineEmits<{
 }>()
 
 type CanvasEdge = WorkflowCanvasConnection & { id: string; label: string }
-type OutputPort = { branch: WorkflowCanvasConnection['branch']; label: string; tone: string }
+type PortPlacement = 'right' | 'bottom'
+type OutputPort = {
+  branch: WorkflowCanvasConnection['branch']
+  label: string
+  tone: string
+  placement: PortPlacement
+}
 
 const NODE_WIDTH = 184
 const NODE_HEIGHT = 92
@@ -52,6 +58,17 @@ const offset = ref({ x: 24, y: 24 })
 const selectedEdgeId = ref('')
 const connection = ref<{ from: string; branch: WorkflowCanvasConnection['branch'] } | null>(null)
 const previewPoint = ref<WorkflowNodePosition | null>(null)
+type TouchGesture =
+  | { kind: 'pan'; client: WorkflowNodePosition; offset: WorkflowNodePosition }
+  | { kind: 'node'; client: WorkflowNodePosition; stepId: string; position: WorkflowNodePosition }
+  | { kind: 'connection'; from: string; branch: WorkflowCanvasConnection['branch'] }
+  | {
+      kind: 'pinch'
+      distance: number
+      scale: number
+      anchor: WorkflowNodePosition
+    }
+let touchGesture: TouchGesture | null = null
 
 const typeLabels: Record<WorkflowStepType, string> = {
   mcp: '设备 MCP', condition: '判断分支', delay: '等待', confirm: '用户确认', ai: 'AI 介入', end: '结束',
@@ -78,18 +95,18 @@ const positionFor = (stepId: string) => {
 
 const outputPorts = (step: CanvasStep): OutputPort[] => {
   if (step.type === 'condition') return [
-    { branch: 'true', label: 'true', tone: 'success' },
-    { branch: 'false', label: 'false', tone: 'danger' },
+    { branch: 'true', label: 'true', tone: 'success', placement: 'right' },
+    { branch: 'false', label: 'false', tone: 'danger', placement: 'right' },
   ]
   if (step.type === 'mcp') return [
-    { branch: 'next', label: '完成', tone: 'normal' },
-    { branch: 'error', label: '失败', tone: 'danger' },
+    { branch: 'next', label: '完成', tone: 'normal', placement: 'right' },
+    { branch: 'error', label: '失败', tone: 'danger', placement: 'bottom' },
   ]
   if (step.type === 'confirm' || step.type === 'ai') return [
-    { branch: 'next', label: '批准', tone: 'success' },
-    { branch: 'denied', label: '拒绝', tone: 'danger' },
+    { branch: 'next', label: '批准', tone: 'success', placement: 'right' },
+    { branch: 'denied', label: '拒绝', tone: 'danger', placement: 'right' },
   ]
-  if (step.type === 'delay') return [{ branch: 'next', label: '继续', tone: 'normal' }]
+  if (step.type === 'delay') return [{ branch: 'next', label: '继续', tone: 'normal', placement: 'right' }]
   return []
 }
 
@@ -112,29 +129,55 @@ const edges = computed<CanvasEdge[]>(() => {
 })
 
 const portY = (step: CanvasStep, branch: WorkflowCanvasConnection['branch']) => {
-  const ports = outputPorts(step)
+  const ports = outputPorts(step).filter(port => port.placement === 'right')
   const index = Math.max(0, ports.findIndex(port => port.branch === branch))
   return ports.length <= 1 ? NODE_HEIGHT / 2 : 31 + index * 30
 }
 
+const outputPort = (step: CanvasStep, branch: WorkflowCanvasConnection['branch']) =>
+  outputPorts(step).find(port => port.branch === branch)
+
+const outputPoint = (step: CanvasStep, branch: WorkflowCanvasConnection['branch']) => {
+  const position = positionFor(step.id)
+  const placement = outputPort(step, branch)?.placement || 'right'
+  return {
+    placement,
+    point: placement === 'bottom'
+      ? { x: position.x + NODE_WIDTH / 2, y: position.y + NODE_HEIGHT }
+      : { x: position.x + NODE_WIDTH, y: position.y + portY(step, branch) },
+  }
+}
+
 const edgePoints = (edge: CanvasEdge) => {
   const sourceStep = props.steps.find(step => step.id === edge.from)
-  const source = positionFor(edge.from)
   const target = positionFor(edge.to)
+  const source = sourceStep
+    ? outputPoint(sourceStep, edge.branch)
+    : { placement: 'right' as PortPlacement, point: positionFor(edge.from) }
   return {
-    from: { x: source.x + NODE_WIDTH, y: source.y + portY(sourceStep || { id: '', type: 'end' }, edge.branch) },
+    from: source.point,
+    fromPlacement: source.placement,
     to: { x: target.x, y: target.y + NODE_HEIGHT / 2 },
   }
 }
 
-const edgePathFromPoints = (from: WorkflowNodePosition, to: WorkflowNodePosition) => {
+const edgePathFromPoints = (
+  from: WorkflowNodePosition,
+  to: WorkflowNodePosition,
+  fromPlacement: PortPlacement = 'right',
+) => {
+  if (fromPlacement === 'bottom') {
+    const bendY = Math.max(64, Math.abs(to.y - from.y) * 0.42)
+    const bendX = Math.max(64, Math.abs(to.x - from.x) * 0.36)
+    return `M ${from.x} ${from.y} C ${from.x} ${from.y + bendY}, ${to.x - bendX} ${to.y}, ${to.x} ${to.y}`
+  }
   const bend = Math.max(72, Math.abs(to.x - from.x) * 0.45)
   return `M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${to.x - bend} ${to.y}, ${to.x} ${to.y}`
 }
 
 const edgePath = (edge: CanvasEdge) => {
   const points = edgePoints(edge)
-  return edgePathFromPoints(points.from, points.to)
+  return edgePathFromPoints(points.from, points.to, points.fromPlacement)
 }
 
 const nodeMeta = (step: CanvasStep) => {
@@ -152,6 +195,7 @@ const updatePosition = (stepId: string, position: WorkflowNodePosition) => {
 
 const startNodeDrag = (event: PointerEvent, step: CanvasStep) => {
   if (props.readonly) return
+  if (event.pointerType === 'touch') return
   if (event.button !== 0 || (event.target as HTMLElement).closest('[data-port]')) return
   event.preventDefault()
   emit('select', step.id)
@@ -170,7 +214,7 @@ const startNodeDrag = (event: PointerEvent, step: CanvasStep) => {
   window.addEventListener('pointerup', stop)
 }
 
-const canvasPoint = (event: PointerEvent | DragEvent): WorkflowNodePosition => {
+const canvasPoint = (event: { clientX: number; clientY: number }): WorkflowNodePosition => {
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect) return { x: 0, y: 0 }
   return {
@@ -185,6 +229,7 @@ const startConnection = (
   branch: WorkflowCanvasConnection['branch'],
 ) => {
   if (props.readonly) return
+  if (event.pointerType === 'touch') return
   event.preventDefault()
   event.stopPropagation()
   emit('select', step.id)
@@ -211,12 +256,12 @@ const previewPath = computed(() => {
   if (!connection.value || !previewPoint.value) return ''
   const step = props.steps.find(item => item.id === connection.value?.from)
   if (!step) return ''
-  const position = positionFor(step.id)
-  const from = { x: position.x + NODE_WIDTH, y: position.y + portY(step, connection.value.branch) }
-  return edgePathFromPoints(from, previewPoint.value)
+  const source = outputPoint(step, connection.value.branch)
+  return edgePathFromPoints(source.point, previewPoint.value, source.placement)
 })
 
 const startPan = (event: PointerEvent) => {
+  if (event.pointerType === 'touch') return
   if (event.button !== 0 || (event.target as Element).closest('[data-node], [data-port], [data-edge]')) return
   event.preventDefault()
   emit('select', '')
@@ -234,8 +279,128 @@ const startPan = (event: PointerEvent) => {
   window.addEventListener('pointerup', stop)
 }
 
-const setZoom = (next: number) => { scale.value = Math.min(1.8, Math.max(0.5, Math.round(next * 10) / 10)) }
+const clampZoom = (next: number) => Math.min(1.8, Math.max(0.5, next))
+const setZoom = (next: number) => { scale.value = Math.round(clampZoom(next) * 10) / 10 }
 const resetView = () => { scale.value = 1; offset.value = { x: 24, y: 24 } }
+
+const touchClientPoint = (touch: Touch): WorkflowNodePosition => ({ x: touch.clientX, y: touch.clientY })
+const touchDistance = (first: Touch, second: Touch) => Math.hypot(
+  second.clientX - first.clientX,
+  second.clientY - first.clientY,
+)
+const touchMidpoint = (first: Touch, second: Touch): WorkflowNodePosition => ({
+  x: (first.clientX + second.clientX) / 2,
+  y: (first.clientY + second.clientY) / 2,
+})
+
+const beginPinch = (first: Touch, second: Touch) => {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return
+  const midpoint = touchMidpoint(first, second)
+  touchGesture = {
+    kind: 'pinch',
+    distance: Math.max(1, touchDistance(first, second)),
+    scale: scale.value,
+    anchor: {
+      x: (midpoint.x - rect.left - offset.value.x) / scale.value,
+      y: (midpoint.y - rect.top - offset.value.y) / scale.value,
+    },
+  }
+  connection.value = null
+  previewPoint.value = null
+}
+
+const startCanvasTouch = (event: TouchEvent) => {
+  event.preventDefault()
+  if (event.touches.length >= 2) {
+    beginPinch(event.touches[0], event.touches[1])
+    return
+  }
+  const touch = event.touches[0]
+  if (!touch) return
+  const target = event.target as HTMLElement
+  const output = target.closest<HTMLElement>('[data-output-step]')
+  if (!props.readonly && output?.dataset.outputStep && output.dataset.outputBranch) {
+    const branch = output.dataset.outputBranch as WorkflowCanvasConnection['branch']
+    emit('select', output.dataset.outputStep)
+    connection.value = { from: output.dataset.outputStep, branch }
+    previewPoint.value = canvasPoint(touch)
+    touchGesture = { kind: 'connection', from: output.dataset.outputStep, branch }
+    return
+  }
+  const node = target.closest<HTMLElement>('[data-node-step]')
+  if (!props.readonly && node?.dataset.nodeStep) {
+    emit('select', node.dataset.nodeStep)
+    selectedEdgeId.value = ''
+    touchGesture = {
+      kind: 'node',
+      client: touchClientPoint(touch),
+      stepId: node.dataset.nodeStep,
+      position: { ...positionFor(node.dataset.nodeStep) },
+    }
+    return
+  }
+  emit('select', '')
+  selectedEdgeId.value = ''
+  touchGesture = { kind: 'pan', client: touchClientPoint(touch), offset: { ...offset.value } }
+}
+
+const moveCanvasTouch = (event: TouchEvent) => {
+  event.preventDefault()
+  if (event.touches.length >= 2) {
+    if (touchGesture?.kind !== 'pinch') beginPinch(event.touches[0], event.touches[1])
+    if (touchGesture?.kind !== 'pinch') return
+    const rect = canvasRef.value?.getBoundingClientRect()
+    if (!rect) return
+    const midpoint = touchMidpoint(event.touches[0], event.touches[1])
+    const nextScale = clampZoom(
+      touchGesture.scale * touchDistance(event.touches[0], event.touches[1]) / touchGesture.distance,
+    )
+    const appliedScale = Math.round(nextScale * 100) / 100
+    scale.value = appliedScale
+    offset.value = {
+      x: midpoint.x - rect.left - touchGesture.anchor.x * appliedScale,
+      y: midpoint.y - rect.top - touchGesture.anchor.y * appliedScale,
+    }
+    return
+  }
+  const touch = event.touches[0]
+  if (!touch || !touchGesture) return
+  const delta = {
+    x: touch.clientX - ('client' in touchGesture ? touchGesture.client.x : touch.clientX),
+    y: touch.clientY - ('client' in touchGesture ? touchGesture.client.y : touch.clientY),
+  }
+  if (touchGesture.kind === 'pan') {
+    offset.value = { x: touchGesture.offset.x + delta.x, y: touchGesture.offset.y + delta.y }
+  } else if (touchGesture.kind === 'node') {
+    updatePosition(touchGesture.stepId, {
+      x: Math.max(0, touchGesture.position.x + delta.x / scale.value),
+      y: Math.max(0, touchGesture.position.y + delta.y / scale.value),
+    })
+  } else if (touchGesture.kind === 'connection') {
+    previewPoint.value = canvasPoint(touch)
+  }
+}
+
+const finishCanvasTouch = (event: TouchEvent) => {
+  event.preventDefault()
+  if (touchGesture?.kind === 'connection' && event.changedTouches[0]) {
+    const touch = event.changedTouches[0]
+    const target = (document.elementFromPoint(touch.clientX, touch.clientY) as HTMLElement | null)
+      ?.closest<HTMLElement>('[data-input-step]')
+    if (target?.dataset.inputStep && target.dataset.inputStep !== touchGesture.from) {
+      emit('connect', { from: touchGesture.from, to: target.dataset.inputStep, branch: touchGesture.branch })
+    }
+  }
+  connection.value = null
+  previewPoint.value = null
+  if (event.touches.length === 1) {
+    const touch = event.touches[0]
+    touchGesture = { kind: 'pan', client: touchClientPoint(touch), offset: { ...offset.value } }
+  } else {
+    touchGesture = null
+  }
+}
 
 const autoLayout = () => {
   const ids = props.steps.map(step => step.id)
@@ -310,16 +475,9 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
 <template>
   <section class="canvas-editor">
     <header class="canvas-toolbar">
-      <div>
-        <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">流程画布</div>
-        <div class="text-[10px] text-zinc-500">拖动节点和端点完成编排，双击节点可设为入口</div>
-      </div>
-      <div class="flex flex-wrap items-center gap-1 text-[10px]">
-        <button v-if="!readonly" class="canvas-button" type="button" @click="autoLayout">自动排版</button>
+      <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">流程画布</div>
+      <div class="flex items-center gap-1 text-[10px]">
         <button v-if="selectedEdgeId" class="canvas-button text-rose-500" type="button" @click="deleteSelectedEdge">删除连线</button>
-        <button class="canvas-button" type="button" @click="setZoom(scale - 0.1)">−</button>
-        <button class="canvas-button min-w-12" type="button" @click="resetView">{{ Math.round(scale * 100) }}%</button>
-        <button class="canvas-button" type="button" @click="setZoom(scale + 0.1)">＋</button>
       </div>
     </header>
 
@@ -340,6 +498,10 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
       class="workflow-canvas"
       tabindex="0"
       @pointerdown="startPan"
+      @touchstart="startCanvasTouch"
+      @touchmove="moveCanvasTouch"
+      @touchend="finishCanvasTouch"
+      @touchcancel="finishCanvasTouch"
       @wheel.prevent="setZoom(scale + ($event.deltaY < 0 ? 0.1 : -0.1))"
       @dragover.prevent
       @drop.prevent="onDrop"
@@ -369,8 +531,9 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
           v-for="(step, index) in steps"
           :key="step.id"
           data-node
+          :data-node-step="step.id"
           class="workflow-node"
-          :class="[`type-${step.type}`, nodeStatuses?.[step.id] ? `diff-${nodeStatuses[step.id]}` : '', { selected: selectedStepId === step.id }]"
+          :class="[`type-${step.type}`, nodeStatuses?.[step.id] ? `diff-${nodeStatuses[step.id]}` : '', { selected: selectedStepId === step.id, 'is-start': startStepId === step.id, 'is-end': step.type === 'end' }]"
           :style="{ left: `${positionFor(step.id).x}px`, top: `${positionFor(step.id).y}px` }"
           @pointerdown="startNodeDrag($event, step)"
           @click.stop="emit('select', step.id); selectedEdgeId = ''"
@@ -387,11 +550,14 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
             v-for="port in outputPorts(step)"
             :key="port.branch"
             class="output-port-wrap"
-            :style="{ top: `${portY(step, port.branch) - 7}px` }"
+            :class="`is-${port.placement}`"
+            :style="port.placement === 'right' ? { top: `${portY(step, port.branch) - 7}px` } : undefined"
           >
             <span class="port-label" :class="`tone-${port.tone}`">{{ port.label }}</span>
             <button
               data-port
+              :data-output-step="step.id"
+              :data-output-branch="port.branch"
               class="node-port output-port"
               :class="`tone-${port.tone}`"
               type="button"
@@ -403,9 +569,13 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
         </article>
       </div>
       <div v-if="steps.length === 0" class="absolute inset-0 grid place-items-center text-xs text-slate-400">从上方添加第一个流程节点</div>
+      <div class="canvas-view-controls" @pointerdown.stop @touchstart.stop @touchmove.stop @touchend.stop>
+        <button v-if="!readonly" class="canvas-button" type="button" @click="autoLayout">自动排版</button>
+        <button class="canvas-button" type="button" aria-label="缩小画布" @click="setZoom(scale - 0.1)">−</button>
+        <button class="canvas-button min-w-12" type="button" title="重置画布视图" @click="resetView">{{ Math.round(scale * 100) }}%</button>
+        <button class="canvas-button" type="button" aria-label="放大画布" @click="setZoom(scale + 0.1)">＋</button>
+      </div>
     </div>
-
-    <p v-if="!readonly" class="text-[10px] leading-5 text-zinc-500">点击节点在右侧编辑属性；从输出端点拖到目标输入端点建立或替换连线。支持 Ctrl/Cmd+C/X/V 复制剪切粘贴、Ctrl/Cmd+Z 撤销、Ctrl/Cmd+Y 重做及 Delete 删除；连线选中后也可按 Delete 删除。</p>
   </section>
 </template>
 
@@ -416,6 +586,8 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
 .canvas-button:hover { border-color: #818cf8; color: var(--editor-heading, #3730a3); background: var(--editor-field-focus, #f1f5ff); }
 .canvas-button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(99 102 241 / 0.18); }
 .workflow-canvas { position: relative; height: clamp(500px, 58vh, 680px); overflow: hidden; border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; background-image: radial-gradient(circle, rgb(148 163 184 / 0.25) 1px, transparent 1px); background-size: 20px 20px; cursor: grab; touch-action: none; }
+.canvas-view-controls { position: absolute; right: 12px; bottom: 12px; z-index: 20; display: flex; align-items: center; gap: 4px; padding: 5px; border: 1px solid rgb(100 116 139 / 0.7); border-radius: 10px; background: rgb(15 23 42 / 0.86); box-shadow: 0 8px 24px rgb(0 0 0 / 0.28); backdrop-filter: blur(8px); }
+.canvas-view-controls .canvas-button { min-height: 34px; color: #e2e8f0; border-color: #475569; background: rgb(30 41 59 / 0.94); }
 .workflow-viewport { position: absolute; inset: 0 auto auto 0; width: 2200px; height: 1400px; transform-origin: 0 0; }
 .workflow-svg { position: absolute; inset: 0; overflow: visible; }
 .workflow-edge { fill: none; stroke: #64748b; stroke-width: 2.2; pointer-events: none; }
@@ -423,12 +595,17 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
 .edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
 .edge-preview { fill: none; stroke: #818cf8; stroke-width: 2; stroke-dasharray: 7 5; }
 .edge-label { fill: #f1f5f9; font: 700 12px ui-sans-serif, system-ui; paint-order: stroke; stroke: #0f172a; stroke-width: 3px; }
-.workflow-node { position: absolute; width: 184px; height: 92px; box-sizing: border-box; padding: 10px 15px; border: 1px solid #64748b; border-radius: 11px; color: #f8fafc; background: #1e293b; box-shadow: 0 10px 24px rgb(0 0 0 / 0.28); cursor: move; user-select: none; }
-.workflow-node.selected { border-color: #818cf8; box-shadow: 0 0 0 2px rgb(129 140 248 / 0.26), 0 10px 24px rgb(0 0 0 / 0.28); }
-.workflow-node.type-condition { border-top-color: #f59e0b; }
-.workflow-node.type-confirm { border-top-color: #e879f9; }
-.workflow-node.type-ai { border-top-color: #38bdf8; }
-.workflow-node.type-end { border-top-color: #34d399; }
+.workflow-node { position: absolute; width: 184px; height: 92px; box-sizing: border-box; padding: 10px 15px; border: 1px solid #64748b; border-radius: 11px; color: #f8fafc; background: rgb(30 41 59 / 0.82); box-shadow: 0 10px 24px rgb(0 0 0 / 0.28); cursor: move; user-select: none; backdrop-filter: blur(7px); }
+.workflow-node.selected { outline: 2px solid rgb(196 181 253 / 0.9); outline-offset: 3px; }
+.workflow-node.type-mcp { border-color: #60a5fa; background: rgb(37 99 235 / 0.22); }
+.workflow-node.type-condition { border-color: #f59e0b; background: rgb(245 158 11 / 0.2); }
+.workflow-node.type-delay { border-color: #2dd4bf; background: rgb(13 148 136 / 0.2); }
+.workflow-node.type-confirm { border-color: #e879f9; background: rgb(192 38 211 / 0.2); }
+.workflow-node.type-ai { border-color: #38bdf8; background: rgb(14 165 233 / 0.2); }
+.workflow-node.type-end { border-color: #60a5fa; background: rgb(37 99 235 / 0.2); }
+.workflow-node.is-start { border-color: #4ade80; box-shadow: 0 0 0 2px rgb(74 222 128 / 0.42), 0 0 22px rgb(34 197 94 / 0.5), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.is-end { border-color: #60a5fa; box-shadow: 0 0 0 2px rgb(96 165 250 / 0.42), 0 0 22px rgb(59 130 246 / 0.52), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.is-start.is-end { box-shadow: 0 0 0 2px rgb(74 222 128 / 0.48), 0 0 18px rgb(34 197 94 / 0.45), 0 0 30px rgb(59 130 246 / 0.42), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.diff-added { border-color: #22c55e; box-shadow: 0 0 0 2px rgb(34 197 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.diff-removed { border-color: #f43f5e; box-shadow: 0 0 0 2px rgb(244 63 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.diff-changed { border-color: #f59e0b; box-shadow: 0 0 0 2px rgb(245 158 11 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
@@ -437,9 +614,11 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
 .node-port:hover { border-color: #818cf8; background: #818cf8; }
 .input-port { left: -9px; top: 38px; }
 .output-port-wrap { position: absolute; right: -9px; height: 15px; }
+.output-port-wrap.is-bottom { right: auto; bottom: -8px; left: 50%; transform: translateX(-50%); }
 .output-port { position: relative; inset: auto; display: block; }
 .port-label { position: absolute; right: 19px; top: -2px; color: #e2e8f0; font-size: 11px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 2px #0f172a; }
+.output-port-wrap.is-bottom .port-label { top: -20px; right: auto; left: 50%; transform: translateX(-50%); }
 .tone-success { border-color: #34d399; color: #6ee7b7; }
 .tone-danger { border-color: #fb7185; color: #fda4af; }
-@media (max-width: 900px) { .canvas-toolbar { align-items: flex-start; flex-direction: column; } .workflow-canvas { height: 480px; } }
+@media (max-width: 900px) { .workflow-canvas { height: 480px; } .canvas-view-controls { right: 8px; bottom: 8px; max-width: calc(100% - 16px); } .canvas-view-controls .canvas-button { padding: 6px 8px; } }
 </style>

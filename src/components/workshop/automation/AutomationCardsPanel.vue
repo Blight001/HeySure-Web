@@ -150,6 +150,19 @@ const confirmationClock = ref(Date.now())
 const confirmationBusyId = ref('')
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
+const contractDevices = computed(() => [...(props.devices || [])].sort((first, second) => {
+  const onlineOrder = Number(second.online !== false) - Number(first.online !== false)
+  if (onlineOrder) return onlineOrder
+  return String(first.name || first.id).localeCompare(String(second.name || second.id), 'zh-CN')
+}))
+const selectedContractDeviceLabel = computed(() => {
+  if (!publishDeviceIds.value.length) return '请选择契约设备'
+  const labels = publishDeviceIds.value.map(id => {
+    const device = props.devices.find(item => item.id === id)
+    return device?.name || id
+  })
+  return labels.length <= 2 ? labels.join('、') : `${labels.slice(0, 2).join('、')} 等 ${labels.length} 台`
+})
 
 const toolDefsForStep = (row: StepEditor) => deviceScopes.value[row.deviceId]?.toolDefs || {}
 const toolNamesForStep = (row: StepEditor) => Object.keys(toolDefsForStep(row)).sort()
@@ -1125,6 +1138,39 @@ onBeforeUnmount(() => {
           </div>
         </details>
 
+        <details class="contract-device-select relative mt-3 rounded-lg border">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs marker:hidden">
+            <span>契约设备（多选）</span>
+            <span class="min-w-0 truncate text-right font-medium text-indigo-600 dark:text-indigo-300">{{ selectedContractDeviceLabel }}</span>
+          </summary>
+          <div class="contract-device-options border-t p-2.5">
+            <div class="grid max-h-48 gap-1 overflow-y-auto overscroll-contain pr-1 custom-scrollbar sm:grid-cols-2 lg:grid-cols-3">
+              <label
+                v-for="device in contractDevices"
+                :key="device.id"
+                class="flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-[10px]"
+                :class="device.online === false ? 'opacity-60' : ''"
+              >
+                <input
+                  v-model="publishDeviceIds"
+                  type="checkbox"
+                  :value="device.id"
+                  :disabled="device.online === false && !publishDeviceIds.includes(device.id)"
+                />
+                <span class="min-w-0 truncate">{{ device.name || device.id }}</span>
+                <span class="ml-auto shrink-0 text-zinc-400">{{ device.online === false ? '离线' : (device.deviceType || device.platform) }}</span>
+              </label>
+              <div v-if="!contractDevices.length" class="text-[10px] text-zinc-400">暂无可选设备</div>
+            </div>
+            <div class="mt-2 text-[10px] leading-5 text-zinc-500">
+              <span v-if="deviceToolsLoading">正在读取所选设备的 MCP 工具…</span>
+              <span v-else-if="deviceToolsError" class="text-rose-500">{{ deviceToolsError }}</span>
+              <span v-else>已读取 {{ Object.keys(deviceScopes).length }} 台契约设备的独立工具清单。</span>
+              每个 MCP 节点可分别绑定一台已选设备及其工具。
+            </div>
+          </div>
+        </details>
+
         <div class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
           <WorkflowCanvasEditor
             :steps="editorSteps"
@@ -1142,7 +1188,7 @@ onBeforeUnmount(() => {
           <aside class="automation-editor-inspector max-h-[680px] overflow-auto rounded-xl border p-3">
             <template v-if="selectedStep">
               <div class="flex items-center justify-between gap-2">
-                <div><div class="automation-editor-subtitle text-xs font-semibold">节点属性</div><div class="mt-0.5 text-[9px] text-zinc-400">连线请直接在画布中拖动端点</div></div>
+                <div class="automation-editor-subtitle text-xs font-semibold">节点属性</div>
                 <div class="flex gap-1"><button class="rounded border px-2 py-1 text-[9px] text-indigo-600" @click="editor.startStepId = selectedStep.id">设为入口</button><button class="rounded border border-rose-200 px-2 py-1 text-[9px] text-rose-500" @click="removeSelectedStep">删除</button></div>
               </div>
               <div class="mt-3 grid gap-2">
@@ -1169,7 +1215,6 @@ onBeforeUnmount(() => {
           </aside>
         </div>
 
-        <div class="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.7fr)]"><div><div class="text-[10px] text-zinc-500">契约设备（可多选）</div><div class="mt-1 grid max-h-32 gap-1 overflow-auto rounded border p-2 dark:border-zinc-700"><label v-for="device in onlineDevices" :key="device.id" class="flex items-center gap-2 text-[10px]"><input v-model="publishDeviceIds" type="checkbox" :value="device.id" /><span>{{ device.name || device.id }}</span><span class="ml-auto text-zinc-400">{{ device.deviceType || device.platform }}</span></label><div v-if="!onlineDevices.length" class="text-[10px] text-zinc-400">暂无在线设备</div></div></div><div class="text-[10px] leading-5 text-zinc-500"><span v-if="deviceToolsLoading">正在读取所选设备的 MCP 工具…</span><span v-else-if="deviceToolsError" class="text-rose-500">{{ deviceToolsError }}</span><span v-else>已读取 {{ Object.keys(deviceScopes).length }} 台契约设备的独立工具清单。</span> 每个 MCP 节点分别绑定一台设备及该设备上的工具；保存新版本时冻结节点的设备、工具与 Schema，运行时按节点派发并继续执行在线状态与权限校验。</div></div>
         <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">历史版本与当前未保存修改</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">画布对比 v{{ version.version_number }}</button></div></div>
         <div class="automation-editor-footer mt-4 flex flex-wrap items-center justify-between gap-2"><div class="flex gap-2"><button v-if="editingId" :disabled="busy" class="rounded border border-rose-200 px-3 py-1.5 text-xs text-rose-600 dark:border-rose-500/30 dark:text-rose-300" @click="deleteCurrentCard">删除卡片</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="cloneCurrentCard">复制</button><button v-if="editingId" :disabled="busy" class="rounded border px-3 py-1.5 text-xs" @click="exportCurrentCard">导出</button></div><div class="flex flex-wrap justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="editorOpen = false">舍弃修改</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="saveCard">{{ editingId ? '保存为新版本' : '创建卡片' }}</button></div></div>
       </div>
@@ -1254,6 +1299,39 @@ onBeforeUnmount(() => {
 .automation-editor-inspector {
   border-color: var(--editor-border) !important;
   background: var(--editor-panel) !important;
+}
+
+.contract-device-select {
+  border-color: var(--editor-border) !important;
+  background: var(--editor-panel);
+}
+
+.contract-device-select[open] > summary {
+  background: rgb(99 102 241 / 0.08);
+}
+
+.contract-device-select > summary::after {
+  content: '⌄';
+  flex: 0 0 auto;
+  color: var(--editor-muted);
+  transition: transform 150ms ease;
+}
+
+.contract-device-select > summary::-webkit-details-marker {
+  display: none;
+}
+
+.contract-device-select[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.contract-device-options {
+  border-color: var(--editor-border) !important;
+}
+
+.contract-device-options label {
+  border-color: var(--editor-border) !important;
+  background: var(--editor-field);
 }
 
 .automation-editor-footer {
