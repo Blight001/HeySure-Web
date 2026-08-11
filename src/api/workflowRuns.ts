@@ -53,6 +53,27 @@ export interface WorkflowConfirmation {
   notified_at?: number | null
 }
 
+export interface WorkflowConfirmationNotice {
+  confirmation_id: string
+  run_id: string
+  requested_user_id: number
+  card_id: string
+  card_name: string
+  risk_level: string
+  actor_name: string
+  risk_summary: string
+  type: string
+  status: string
+  created_at: number
+  expires_at: number
+}
+
+export const listPendingWorkflowConfirmations = (limit = 100) =>
+  get<{ items: WorkflowConfirmationNotice[] }>('/api/workflow-confirmations/pending', {
+    query: { limit },
+    fallbackError: '待确认事项加载失败',
+  })
+
 export const startWorkflowRun = (
   cardId: string,
   body: { device_id: string; input: Record<string, any>; version_id?: string; idempotency_key: string },

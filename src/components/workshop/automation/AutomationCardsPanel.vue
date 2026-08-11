@@ -980,7 +980,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3 dark:border-indigo-500/25 dark:bg-indigo-500/5">
+  <section class="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl border border-indigo-200/80 bg-indigo-50/50 p-3 touch-pan-y custom-scrollbar dark:border-indigo-500/25 dark:bg-indigo-500/5">
     <header class="flex items-center justify-between gap-2">
       <div class="min-w-0 text-left">
         <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">自动化卡片</div>

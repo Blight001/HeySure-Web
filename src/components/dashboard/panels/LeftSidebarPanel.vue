@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import BrainCorePanel from './BrainCorePanel.vue'
 
@@ -74,12 +74,23 @@ const emit = defineEmits<{
 const activeTab = ref<'brain' | 'knowledge' | 'workshop' | 'work'>('brain')
 const requestedWorkflowRunId = ref('')
 
-onMounted(() => {
-  const runId = new URLSearchParams(window.location.search).get('workflow_confirmation')?.trim() || ''
+const openWorkflowConfirmation = (rawRunId: string) => {
+  const runId = rawRunId.trim()
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(runId)) return
   requestedWorkflowRunId.value = runId
   activeTab.value = 'work'
+}
+
+const onWorkflowConfirmation = (event: Event) => {
+  openWorkflowConfirmation(String((event as CustomEvent<{ runId?: string }>).detail?.runId || ''))
+}
+
+onMounted(() => {
+  openWorkflowConfirmation(new URLSearchParams(window.location.search).get('workflow_confirmation') || '')
+  window.addEventListener('heysure:open-workflow-confirmation', onWorkflowConfirmation)
 })
+
+onBeforeUnmount(() => window.removeEventListener('heysure:open-workflow-confirmation', onWorkflowConfirmation))
 
 watch(() => props.focusSignal, () => {
   if (props.focusedAiConfigId) activeTab.value = 'brain'

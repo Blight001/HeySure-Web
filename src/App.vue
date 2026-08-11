@@ -10,6 +10,7 @@ const HomePage = defineAsyncComponent(() => import('@/components/home/HomePage.v
 const LoginModal = defineAsyncComponent(() => import('@/components/common/LoginModal.vue'))
 const ProfileModal = defineAsyncComponent(() => import('@/components/common/ProfileModal.vue'))
 const MessageDialog = defineAsyncComponent(() => import('@/components/common/MessageDialog.vue'))
+const GlobalNotificationLayer = defineAsyncComponent(() => import('@/components/common/GlobalNotificationLayer.vue'))
 
 const { user, handleLoginSuccess, updateUser, logout } = useAuth()
 const initialUiPreferences = getInitialUiPreferences()
@@ -209,6 +210,8 @@ onBeforeUnmount(() => {
     />
 
     <MessageDialog />
+
+    <GlobalNotificationLayer v-if="user" />
 
     <Transition name="startup-splash">
       <div
