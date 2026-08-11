@@ -27,6 +27,7 @@ import AmbientBackground from '@/components/common/AmbientBackground.vue'
 import { resolveAvatarUrl } from '@/utils/avatar'
 
 const SystemSettingsPanel = defineAsyncComponent(() => import('./panels/SystemSettingsPanel.vue'))
+const GlobalNotificationLayer = defineAsyncComponent(() => import('@/components/common/GlobalNotificationLayer.vue'))
 const LeftSidebarPanel = defineAsyncComponent(() => import('./panels/LeftSidebarPanel.vue'))
 const WorldArenaPanel = defineAsyncComponent(() => import('./panels/WorldArenaPanel.vue'))
 const ChatInterface = defineAsyncComponent(() => import('@/components/chat/ChatInterface.vue'))
@@ -961,6 +962,7 @@ onUnmounted(() => {
         >
           <AppIcon name="book" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
         </button>
+        <GlobalNotificationLayer />
         <button
           class="ml-1 sm:ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
           title="系统设置"

@@ -12,6 +12,7 @@
  */
 export type AppIconName =
   | 'gear'
+  | 'bell'
   | 'shield'
   | 'pen'
   | 'exit'
@@ -55,6 +56,11 @@ export const APP_ICONS: Record<AppIconName, string> = {
     '<circle cx="12" cy="12" r="6.1"/>'
     + '<circle cx="12" cy="12" r="2.3"/>'
     + '<path stroke-width="2.2" d="M12 2.7v2.7M12 18.6v2.7M2.7 12h2.7M18.6 12h2.7M5.42 5.42l1.91 1.91M16.67 16.67l1.91 1.91M18.58 5.42l-1.91 1.91M7.33 16.67l-1.91 1.91"/>',
+
+  // 通知铃：顶栏消息入口
+  bell:
+    '<path d="M6.6 9.7a5.4 5.4 0 0110.8 0c0 5.1 2.1 5.5 2.1 7H4.5c0-1.5 2.1-1.9 2.1-7z"/>'
+    + '<path d="M9.6 19.1a2.65 2.65 0 004.8 0"/>',
 
   // 盾牌（管理员）
   shield:

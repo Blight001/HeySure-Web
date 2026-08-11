@@ -12,6 +12,7 @@ import {
   markUserNotificationRead,
   type UserNotification,
 } from '@/api/userNotifications'
+import AppIcon from '@/components/common/AppIcon.vue'
 
 const confirmations = ref<WorkflowConfirmationNotice[]>([])
 const messages = ref<UserNotification[]>([])
@@ -22,7 +23,6 @@ const busyId = ref('')
 const snoozedRunId = ref('')
 const approvalArmedId = ref('')
 const clock = ref(Date.now())
-const dismissedToastIds = ref(new Set<string>())
 let pollTimer: number | undefined
 let clockTimer: number | undefined
 let armTimer: number | undefined
@@ -31,9 +31,6 @@ const currentConfirmation = computed(() =>
   confirmations.value.find(item => item.run_id !== snoozedRunId.value) || null,
 )
 const unreadCount = computed(() => messages.value.length)
-const toastMessage = computed(() => messages.value.find(
-  item => item.app_push_required && !dismissedToastIds.value.has(item.notification_id),
-) || null)
 
 const remaining = (expiresAt: number) => {
   const seconds = Math.max(0, Math.ceil((expiresAt * 1000 - clock.value) / 1000))
@@ -109,10 +106,6 @@ const markAllRead = async () => {
   panelOpen.value = false
 }
 
-const dismissToast = (item: UserNotification) => {
-  dismissedToastIds.value = new Set([...dismissedToastIds.value, item.notification_id])
-}
-
 const onVisibility = () => {
   if (document.visibilityState === 'visible') void refresh()
 }
@@ -133,6 +126,22 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div class="relative ml-1 sm:ml-2">
+    <button
+      class="relative flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
+      title="消息通知"
+      :aria-label="unreadCount ? `消息通知，${unreadCount} 条未读` : '消息通知'"
+      :aria-expanded="panelOpen"
+      @click.stop="panelOpen = !panelOpen"
+    >
+      <AppIcon name="bell" class="h-4 w-4 md:h-[18px] md:w-[18px]" />
+      <span
+        v-if="unreadCount"
+        class="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white dark:ring-zinc-900"
+      >{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+    </button>
+  </div>
+
   <Teleport to="body">
     <div v-if="currentConfirmation" class="fixed inset-0 z-[220] flex items-center justify-center overflow-y-auto bg-zinc-950/80 p-3 backdrop-blur-sm sm:p-6">
       <article class="w-full max-w-xl rounded-3xl border border-amber-300/60 bg-white p-5 shadow-2xl dark:border-amber-500/40 dark:bg-zinc-900 sm:p-7">
@@ -161,19 +170,8 @@ onBeforeUnmount(() => {
       </article>
     </div>
 
-    <div class="fixed right-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[190] flex max-w-[calc(100vw-1.5rem)] flex-col items-end gap-2">
-      <button class="rounded-full border border-indigo-200 bg-white/95 px-3 py-2 text-xs font-semibold text-indigo-700 shadow-lg dark:border-indigo-500/30 dark:bg-zinc-900/95 dark:text-indigo-200" @click="panelOpen = !panelOpen">
-        通知{{ unreadCount ? ` ${unreadCount}` : '' }}
-      </button>
-      <article v-if="toastMessage && !panelOpen" class="w-[min(23rem,calc(100vw-1.5rem))] rounded-2xl border border-indigo-200 bg-white p-4 shadow-2xl dark:border-indigo-500/30 dark:bg-zinc-900">
-        <div class="text-sm font-semibold">{{ toastMessage.title }}</div>
-        <p class="mt-1 line-clamp-4 whitespace-pre-wrap text-xs leading-5 text-zinc-600 dark:text-zinc-300">{{ toastMessage.body }}</p>
-        <div class="mt-3 flex justify-end gap-2 text-xs">
-          <button class="rounded-lg border px-3 py-1.5" @click="dismissToast(toastMessage)">稍后</button>
-          <button class="rounded-lg bg-indigo-600 px-3 py-1.5 text-white" @click="markRead(toastMessage)">知道了</button>
-        </div>
-      </article>
-      <section v-if="panelOpen" class="flex max-h-[min(72dvh,36rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+    <div v-if="panelOpen" class="fixed right-3 top-[calc(env(safe-area-inset-top)+4rem)] z-[190] max-w-[calc(100vw-1.5rem)] sm:top-[calc(env(safe-area-inset-top)+4.5rem)]">
+      <section class="flex max-h-[min(72dvh,36rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
         <header class="flex shrink-0 items-center justify-between border-b px-4 py-3 dark:border-zinc-700">
           <div class="text-sm font-semibold">消息通知</div>
           <button v-if="messages.length" class="text-xs text-indigo-600 dark:text-indigo-300" @click="markAllRead">全部已读</button>
