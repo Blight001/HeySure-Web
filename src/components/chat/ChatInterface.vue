@@ -263,6 +263,7 @@ const loadingOlder = ref(false)
 // Bumped on every history (re)load so a slow in-flight request for a session
 // the user already navigated away from can't clobber the current view.
 let historyLoadEpoch = 0
+let tokenLoadEpoch = 0
 let lastProgrammaticScrollTs = 0
 const PROGRAMMATIC_SCROLL_GRACE_MS = 260
 const currentSessionId = ref<string>('')
@@ -1550,17 +1551,24 @@ const toggleSessionForwardToBot = async (payload: { sessionId: string; enabled: 
   }
 }
 
-const loadTotalTokens = async () => {
+const loadTotalTokens = async (sessionId = currentSessionId.value) => {
+  const sid = String(sessionId || '').trim()
+  const epoch = ++tokenLoadEpoch
+  if (!sid) {
+    if (!currentSessionId.value) emit('totalChatTokensUpdate', 0)
+    return 0
+  }
   if (!getAuthToken()) return 0
   let data
   try {
-    data = await chatApi.getChatTotalTokens(chatCtx.value)
+    data = await chatApi.getChatTotalTokens(chatCtx.value, sid)
   } catch {
     return 0
   }
+  if (epoch !== tokenLoadEpoch || currentSessionId.value !== sid) return 0
   emit('totalChatTokensUpdate', data.total_tokens || 0)
-  // The aggregate endpoint does not update the token values stored in the
-  // session-list UI, so refresh those rows after usage changes are persisted.
+  // Refresh the session rows after usage changes are persisted. The header is
+  // scoped to `sid`; this list refresh must never decide the active header total.
   await loadSessions()
   return data.total_tokens || 0
 }
@@ -1779,8 +1787,6 @@ const loadChatHistory = async (sid: string) => {
   // them here. Keeping them out lets the message list paint without blocking on
   // those (heavier) requests when re-opening a record.
   currentSessionId.value = sid
-  // Token total is a header stat, not part of the conversation render — defer it.
-  void loadTotalTokens()
   // Backfill older pages in the background if this page is too short to scroll,
   // so history stays reachable. Non-blocking so the conversation paints first.
   void autoFillHistoryUntilScrollable(epoch)
@@ -2433,6 +2439,7 @@ const initializeSessions = async () => {
     // 无运行中对话：进入空白对话态（不自动选中历史会话；首条消息时再创建）。
     currentSessionId.value = ''
     chatMessages.value = []
+    emit('totalChatTokensUpdate', 0)
   }
   // 空白新对话没有 session id，session watcher 不一定触发；这里也加载一次，
   // 让用户在发送首条消息前就能看到当前勾选工具对应的动态 MCP 说明。
@@ -2466,7 +2473,14 @@ watch(currentSessionId, async (sid, oldSid) => {
   if (sid === oldSid) return
   // 新建空白对话时 sid 为空，也必须立即刷新预览，不能沿用上一段对话的 Prompt。
   void loadEffectiveSystemPromptPreview()
-  if (!sid) return
+  if (!sid) {
+    tokenLoadEpoch += 1
+    emit('totalChatTokensUpdate', 0)
+    return
+  }
+  const cachedTokens = sessionList.value.find(item => item.id === sid)?.totalTokens || 0
+  emit('totalChatTokensUpdate', cachedTokens)
+  void loadTotalTokens(sid)
   stopRunPolling()
   stopSessionSyncPolling()
   stopTimeTicker()

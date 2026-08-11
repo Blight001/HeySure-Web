@@ -92,9 +92,9 @@ export const setSessionForwardToBot = (ctx: AiContext, sessionId: string, enable
     { query: queryForAi(ctx), fallbackError: '设置机器人回复失败' },
   )
 
-export const getChatTotalTokens = (ctx: AiContext) =>
+export const getChatTotalTokens = (ctx: AiContext, sessionId?: string) =>
   get<{ total_tokens: number }>('/api/chat/total-tokens', {
-    query: queryForAi(ctx),
+    query: queryForAi(ctx, { session_id: sessionId }),
     fallbackError: 'Token 统计加载失败',
   })
 

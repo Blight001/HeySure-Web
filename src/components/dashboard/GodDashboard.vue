@@ -154,7 +154,6 @@ const {
   globalGeneration,
   allFiles,
   dashboardSocketConnected,
-  syncChatTokensToAgents,
   loadProjectContext,
   loadAIAgents,
   createSeedData,
@@ -276,17 +275,8 @@ const findFreshAgent = (agent: Agent | null) => {
   return agents.value.find(item => item.id === agent.id) || agent
 }
 
-watch(
-  () => [chatTarget.value?.aiConfigId, chatTarget.value?.tokensUsed],
-  () => {
-    chatLiveTokenUsed.value = Math.max(0, Number(chatTarget.value?.tokensUsed) || 0)
-  },
-  { immediate: true },
-)
-
 const onMainChatTotalTokensUpdate = (value: number) => {
   chatLiveTokenUsed.value = Math.max(0, Number(value) || 0)
-  syncChatTokensToAgents(value)
 }
 
 const syncOpenAgentReferences = () => {
@@ -391,6 +381,7 @@ const openAgentChat = (agent: Agent, options: { floating?: boolean } = {}) => {
   }
   defaultGovernorChatHandled = true
   chatTarget.value = agent
+  chatLiveTokenUsed.value = 0
   selectedFiles.value = []
   chatInitialSessionId.value = resolveActiveRunSessionId(agent)
   chatCurrentSessionId.value = ''
@@ -412,6 +403,7 @@ const expandFloatingAgentChat = (windowId: string) => {
   chatFloating.value = false
   closeChatPip()
   chatTarget.value = target.agent
+  chatLiveTokenUsed.value = 0
   selectedFiles.value = []
   chatInitialSessionId.value = target.initialSessionId
   chatCurrentSessionId.value = ''
@@ -816,6 +808,7 @@ const aiWorkspaceDirname = (agent: Agent | null) => {
 const openAgentTaskDetail = (agent: Agent, jobId: string, sessionId?: string) => {
   if (!agent.aiConfigId || !jobId) return
   chatTarget.value = agent
+  chatLiveTokenUsed.value = 0
   selectedFiles.value = []
   chatInitialSessionId.value = String(sessionId || `session_task_${jobId}`).trim()
   chatCurrentSessionId.value = ''
@@ -1337,7 +1330,6 @@ onUnmounted(() => {
       @expand="expandFloatingAgentChat(window.windowId)"
       @open-settings="openAgentSettings(window.agent)"
       @refresh-files="loadProjectContext"
-      @total-chat-tokens-update="syncChatTokensToAgents"
     />
 
     <AiConfigModal

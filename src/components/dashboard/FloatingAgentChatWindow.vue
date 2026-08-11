@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Agent } from '@/types'
 import ChatInterface from '@/components/chat/ChatInterface.vue'
 import ChatTokenUsageBar from '@/components/chat/ChatTokenUsageBar.vue'
@@ -25,25 +25,19 @@ const emit = defineEmits<{
   (e: 'expand'): void
   (e: 'open-settings'): void
   (e: 'refresh-files'): void
-  (e: 'total-chat-tokens-update', value: number): void
 }>()
 
 const panelRef = ref<HTMLElement | null>(null)
 const selectedFiles = ref<string[]>([])
 const currentSessionId = ref('')
 const taskPlanRefreshSignal = ref(0)
-const liveTokenUsed = ref(Math.max(0, Number(props.agent.tokensUsed) || 0))
+const liveTokenUsed = ref(0)
 const dialogHost = computed(() => `chat-${props.windowId}`)
 const aiKind = computed<'assistant' | 'core'>(() =>
   props.agent.aiRole === 'assistant_admin' ? 'assistant' : 'core')
 
-watch(() => props.agent.tokensUsed, (value) => {
-  liveTokenUsed.value = Math.max(0, Number(value) || 0)
-})
-
 const onTotalTokensUpdate = (value: number) => {
   liveTokenUsed.value = Math.max(0, Number(value) || 0)
-  emit('total-chat-tokens-update', value)
 }
 
 const MARGIN = 16

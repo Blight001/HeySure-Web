@@ -83,7 +83,6 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
   const projects = ref<ProjectItem[]>([])
   const globalGeneration = ref(1)
   const allFiles = ref<string[]>([])
-  const totalChatTokens = ref(0)
   const dashboardSocketConnected = ref(false)
 
   let dashboardRefreshing = false
@@ -114,10 +113,6 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
       return normalized
     }
     return latestRuntimeToolByConfig.get(configId) || ''
-  }
-
-  const syncChatTokensToAgents = (chatTokens: number) => {
-    totalChatTokens.value = chatTokens
   }
 
   const getProjectName = (projectId: string, fallbackName?: string) => {
@@ -603,7 +598,6 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     globalGeneration,
     allFiles,
     dashboardSocketConnected,
-    syncChatTokensToAgents,
     loadProjectContext,
     loadProjects,
     loadAIAgents,

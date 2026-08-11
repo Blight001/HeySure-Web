@@ -122,7 +122,6 @@ const emit = defineEmits<{
   (e: 'settings', agent: AgentProps['agent']): void
 }>()
 
-const isUnlimitedLife = computed(() => props.agent.tokenLimit <= 0)
 const cardRootRef = ref<HTMLElement | null>(null)
 
 watch(
@@ -138,18 +137,6 @@ watch(
 const syncedGeneration = computed(() => Math.max(1, Number(props.agent.generation) || 1))
 
 const aiAvatarUrl = computed(() => resolveAiAvatarUrl(props.agent.avatar))
-
-const lifePercentage = computed(() => {
-  if (isUnlimitedLife.value) return 100
-  return Math.min((props.agent.tokensUsed / props.agent.tokenLimit) * 100, 100)
-})
-
-const lifeColorClass = computed(() => {
-  if (isUnlimitedLife.value) return 'bg-indigo-500'
-  if (lifePercentage.value > 90) return 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)]' // 濒死/繁衍前夕
-  if (lifePercentage.value > 75) return 'bg-orange-500'
-  return 'bg-emerald-500'
-})
 
 const statusDisplay = computed(() => {
   const runtimeSuffix = !props.agent.enabled
@@ -206,7 +193,6 @@ const titleHoverClass = computed(() => {
 })
 
 const canControl = computed(() => typeof props.agent.aiConfigId === 'number')
-const showLifecycle = computed(() => props.agent.aiRole !== 'assistant_admin')
 const isAssistantAdmin = computed(() => props.agent.aiRole === 'assistant_admin')
 const showRecentUserChatBadge = computed(() => !!props.agent.recentUserChatActive)
 const isRealtimeWorking = computed(() => {
@@ -684,21 +670,6 @@ const onCardPointerUp = (event: PointerEvent) => {
       </span>
     </div>
 
-    <!-- 生命条 / Token 消耗 -->
-    <div v-if="showLifecycle" class="mb-4">
-      <div class="flex justify-between text-xs text-zinc-600 mb-1.5 dark:text-zinc-300">
-        <span class="font-medium">{{ isUnlimitedLife ? '对话模式 (Token 不设上限)' : '生命周期 (Token)' }}</span>
-        <span class="font-mono">{{ isUnlimitedLife ? `${Math.floor(agent.tokensUsed)} / 无上限` : `${Math.floor(agent.tokensUsed)} / ${agent.tokenLimit}` }}</span>
-      </div>
-      <div class="w-full bg-zinc-100/60 rounded-full h-2 overflow-hidden border border-zinc-100 dark:bg-zinc-800/60 dark:border-zinc-700">
-        <div 
-          class="agent-card-life-fill h-full rounded-full transition-all duration-700 ease-out"
-          :class="lifeColorClass" 
-          :style="{ width: `${lifePercentage}%` }"
-        ></div>
-      </div>
-    </div>
-
     <!-- 当前任务/行为 -->
     <div class="bg-zinc-50/80 p-3 rounded-lg border border-zinc-100 text-xs text-zinc-700 min-h-[3.5rem] relative group dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-300">
       <div class="absolute top-0 left-0 w-1 h-full rounded-l-lg" 
@@ -920,10 +891,6 @@ const onCardPointerUp = (event: PointerEvent) => {
     animation: none !important;
   }
 
-  .agent-card-life-fill {
-    transition: none;
-    box-shadow: none;
-  }
 }
 
 .task-thinking-viewport {
