@@ -53,7 +53,6 @@ const governanceTools = computed(() => flattenTools(props.catalog?.governance))
     :bound-ai-config-id="boundAiConfigId"
     :bound-ai-name="boundAiName"
     :governance-mcp-tools="governanceMcpTools"
-    :refresh-key="`${boundAiConfigId ?? ''}-${builtinDeviceId}`"
     @governance-saved="tools => emit('governance-saved', tools)"
   />
   <CatalogMcpScopeEditor

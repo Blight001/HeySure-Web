@@ -4,7 +4,6 @@ import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import type { McpRoleMeta } from '@/types'
 import { deleteDeviceRecord, setBuiltinDeviceBinding, setDeviceMemberBinding, updateDeviceDisplay } from '@/api/devices'
 import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
-import ToolboxRoleMcpModal from '../modals/ToolboxRoleMcpModal.vue'
 import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 
@@ -64,27 +63,6 @@ const emit = defineEmits<{
   (e: 'save-role-mcp-permissions'): void
   (e: 'open-device-doc'): void
 }>()
-
-const toolboxToolNames = computed<string[]>(() => {
-  const toolbox = (props.devices || []).find(device => isToolboxDevice(device))
-  return Array.isArray(toolbox?.capabilities) ? toolbox.capabilities : []
-})
-
-const tierForAgent = (agent?: Agent): string => {
-  if (agent?.aiRole === 'assistant_admin') return 'assistant_admin'
-  return agent?.digitalMemberRole === 'manager'
-    ? 'digital_member_manager'
-    : 'digital_member_member'
-}
-
-const roleEditor = ref<{ role: string; aiName: string } | null>(null)
-const openRoleEditor = (aiConfigId: number) => {
-  const agent = memberByConfigId.value.get(aiConfigId)
-  roleEditor.value = {
-    role: tierForAgent(agent),
-    aiName: agent?.name || `AI-${aiConfigId}`,
-  }
-}
 
 const memberByConfigId = computed(() => {
   const map = new Map<number, Agent>()
@@ -579,14 +557,8 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
               <span v-if="memberByConfigId.get(mid)?.status === 'learning'" class="ml-1 text-emerald-600 dark:text-emerald-300">学习中</span>
             </span>
             <span class="flex shrink-0 items-center gap-1">
-              <button
-                v-if="isToolboxDevice(device)"
-                type="button"
-                class="rounded border border-indigo-200 px-1 py-0.5 text-[9px] text-indigo-600 hover:bg-indigo-50 dark:border-indigo-500/30 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
-                @click="openRoleEditor(mid)"
-              >权限</button>
               <LibraryMcpUnifiedPanel
-                v-else-if="isLibraryDevice(device) && device.libraryMcpCatalog"
+                v-if="isLibraryDevice(device) && device.libraryMcpCatalog"
                 :catalog="device.libraryMcpCatalog"
                 mode="device"
                 :builtin-device-id="device.id"
@@ -646,18 +618,6 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
       :device-name="rcTarget.name"
       :mode="rcTarget.mode"
       @close="rcTarget = null"
-    />
-
-    <ToolboxRoleMcpModal
-      :show="!!roleEditor"
-      :role="roleEditor?.role || ''"
-      :ai-name="roleEditor?.aiName || ''"
-      :mcp-role-meta="mcpRoleMeta"
-      :role-mcp-permissions="roleMcpPermissions"
-      :toolbox-tools="toolboxToolNames"
-      @toggle-role-tool="emit('toggle-role-tool', $event)"
-      @save="emit('save-role-mcp-permissions')"
-      @close="roleEditor = null"
     />
 
     <!-- Device display customization modal -->

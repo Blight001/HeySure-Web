@@ -15,7 +15,6 @@ const props = withDefaults(defineProps<{
   boundAiConfigId?: number | null
   boundAiName?: string
   governanceMcpTools?: string[]
-  refreshKey?: string | number
 }>(), {
   catalog: null,
   boundAiConfigId: null,
@@ -117,8 +116,12 @@ const load = async () => {
   }
 }
 
+// The library is a built-in always-online device. Device-list socket snapshots
+// must not make its permission editor poll repeatedly; reload only when this
+// editor is reused for another device/member. Saving commits the authoritative
+// PUT response locally, so no follow-up refresh is needed.
 watch(
-  () => [props.refreshKey, props.governanceMcpTools?.join('|'), props.catalog?.total],
+  () => [props.builtinDeviceId, props.boundAiConfigId],
   load,
   { immediate: true },
 )
