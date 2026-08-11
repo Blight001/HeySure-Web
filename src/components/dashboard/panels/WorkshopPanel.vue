@@ -43,6 +43,14 @@ interface Props {
 const props = defineProps<Props>()
 const panelRootRef = ref<HTMLElement | null>(null)
 
+/** 在线设备保持服务端原顺序；离线设备稳定沉到列表底部。 */
+const orderedDevices = computed(() =>
+  (props.devices || [])
+    .map((device, index) => ({ device, index }))
+    .sort((a, b) => Number(a.device.online === false) - Number(b.device.online === false) || a.index - b.index)
+    .map(item => item.device),
+)
+
 watch(() => props.focusSignal, async () => {
   if (!props.focusedDeviceId) return
   await nextTick()
@@ -471,12 +479,12 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
       <span aria-hidden="true" class="text-indigo-400">›</span>
     </button>
 
-    <div v-if="devices.length === 0" class="text-center text-zinc-400 text-xs py-10 dark:text-zinc-500">
+    <div v-if="orderedDevices.length === 0" class="text-center text-zinc-400 text-xs py-10 dark:text-zinc-500">
       暂无已连接设备。
     </div>
 
     <div
-      v-for="device in devices"
+      v-for="device in orderedDevices"
       :key="device.id"
       data-device-card
       :data-device-id="device.id"
