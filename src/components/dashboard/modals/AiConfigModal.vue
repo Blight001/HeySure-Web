@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type CSSProperties } from 'vue'
 // System MCPs (knowledge.* etc) are direct now; device tools + governance use scopes/toolbox. getMcpToolZhLabel not needed for server list here.
-import { fetchWorkshopBindings, setWorkshopBinding, type WorkshopAgentItem } from '@/api/workshop'
+import { fetchBuiltinDeviceBindings, setBuiltinDeviceBinding, type BuiltinDeviceItem } from '@/api/devices'
 import type { ModelPreset } from '@/types'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
 import DeviceMcpScopeEditor from './DeviceMcpScopeEditor.vue'
@@ -131,7 +131,10 @@ const boundEndpointAgents = computed<ConnectedDevice[]>(() => {
   const cfgId = Number(props.form?.id)
   if (!Number.isFinite(cfgId) || cfgId <= 0) return []
   return (props.connectedDevices || []).filter((agent) => {
-    if (Number(agent.aiConfigId) !== cfgId) return false
+    const boundIds = Array.isArray(agent.boundAiConfigIds)
+      ? agent.boundAiConfigIds.map(Number)
+      : [Number(agent.aiConfigId)]
+    if (!boundIds.includes(cfgId)) return false
     const platform = String(agent.platform || '').toLowerCase()
     return !!agent.isWindowsDesktop || !!agent.isBrowserExtension
       || platform.includes('desktop') || platform.includes('windows') || platform.includes('browser')
@@ -153,10 +156,10 @@ const onModelPresetChange = () => {
   props.form.model = preset?.model || ''
 }
 
-// ---------- 作坊绑定 ----------
-const workshopAgents = ref<WorkshopAgentItem[]>([])
-const workshopLoading = ref(false)
-const workshopError = ref('')
+// ---------- 设备绑定 ----------
+const builtinDevices = ref<BuiltinDeviceItem[]>([])
+const builtinDevicesLoading = ref(false)
+const builtinDevicesError = ref('')
 
 const editingConfigId = computed(() => {
   const cfgId = Number(props.form?.id)
@@ -250,21 +253,21 @@ const resetAppearanceDraft = () => {
   appearanceNotice.value = '已恢复默认预览，点击保存后生效。'
 }
 
-const loadWorkshopAgents = async () => {
+const loadBuiltinDevices = async () => {
   const cfgId = editingConfigId.value
   if (!cfgId) {
-    workshopAgents.value = []
+    builtinDevices.value = []
     return
   }
-  workshopLoading.value = true
-  workshopError.value = ''
+  builtinDevicesLoading.value = true
+  builtinDevicesError.value = ''
   try {
-    const data = await fetchWorkshopBindings(cfgId)
-    workshopAgents.value = Array.isArray(data.agents) ? data.agents : []
+    const data = await fetchBuiltinDeviceBindings(cfgId)
+    builtinDevices.value = Array.isArray(data.agents) ? data.agents : []
   } catch (err: any) {
-    workshopError.value = err?.message || '图书馆列表加载失败'
+    builtinDevicesError.value = err?.message || '内置设备列表加载失败'
   } finally {
-    workshopLoading.value = false
+    builtinDevicesLoading.value = false
   }
 }
 
@@ -272,7 +275,7 @@ watch(
   () => [props.show, editingConfigId.value, props.form?.execution_mode],
   ([show, cfgId]) => {
     if (show && cfgId) {
-      void loadWorkshopAgents()
+      void loadBuiltinDevices()
       void loadAppearance()
       void loadControllerStatus()
     } else if (!show) {
@@ -284,7 +287,7 @@ watch(
   { immediate: true },
 )
 
-const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => {
+const toggleBuiltinDeviceBinding = async (agent: BuiltinDeviceItem, event: Event) => {
   const target = event.target as HTMLInputElement | null
   const next = !!target?.checked
   const cfgId = editingConfigId.value
@@ -294,15 +297,15 @@ const toggleWorkshopBinding = async (agent: WorkshopAgentItem, event: Event) => 
     return
   }
   try {
-    await setWorkshopBinding(cfgId, agent.device_id, next)
-    await loadWorkshopAgents()
+    await setBuiltinDeviceBinding(cfgId, agent.device_id, next)
+    await loadBuiltinDevices()
   } catch (err: any) {
-    workshopError.value = err?.message || '更新图书馆绑定失败'
+    builtinDevicesError.value = err?.message || '更新内置设备绑定失败'
     if (target) target.checked = agent.bound
   }
 }
 
-const workshopOccupiedByOther = (agent: WorkshopAgentItem) =>
+const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
   !agent.bound && !!agent.bound_ai_config_id
 </script>
 
@@ -456,7 +459,7 @@ const workshopOccupiedByOther = (agent: WorkshopAgentItem) =>
             >
               <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">设备绑定</span>
               <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">
-                管理端侧设备与作坊
+                管理端侧设备与内置设备
               </span>
             </button>
             <button
@@ -528,6 +531,7 @@ const workshopOccupiedByOther = (agent: WorkshopAgentItem) =>
                     v-for="agent in boundEndpointAgents"
                     :key="`ai-config-agent-scope-${agent.id}`"
                     :device-id="agent.id"
+                    :ai-config-id="editingConfigId"
                     :refresh-key="`${agent.aiConfigId ?? ''}-${settingsSection}`"
                   />
                 </div>
@@ -537,22 +541,22 @@ const workshopOccupiedByOther = (agent: WorkshopAgentItem) =>
                   class="mb-3 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 dark:border-indigo-500/30 dark:bg-indigo-500/5"
                 >
                   <div class="flex items-center justify-between">
-                    <div class="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">作坊绑定</div>
+                    <div class="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">设备绑定</div>
                     <button
                       class="text-[10px] px-1.5 py-0.5 rounded border border-indigo-200 text-indigo-600 dark:border-indigo-500/40 dark:text-indigo-300"
-                      @click="loadWorkshopAgents"
+                      @click="loadBuiltinDevices"
                     >刷新</button>
                   </div>
-                  <div v-if="workshopLoading" class="mt-2 text-[11px] text-zinc-400">加载中…</div>
-                  <div v-else-if="workshopError" class="mt-2 text-[11px] text-rose-500">{{ workshopError }}</div>
-                  <div v-else-if="workshopAgents.length === 0" class="mt-2 text-[11px] text-zinc-400">
-                    内置作坊暂不可用，请刷新重试（正常情况下会自动上线）。
+                  <div v-if="builtinDevicesLoading" class="mt-2 text-[11px] text-zinc-400">加载中…</div>
+                  <div v-else-if="builtinDevicesError" class="mt-2 text-[11px] text-rose-500">{{ builtinDevicesError }}</div>
+                  <div v-else-if="builtinDevices.length === 0" class="mt-2 text-[11px] text-zinc-400">
+                    内置设备暂不可用，请刷新重试（正常情况下会自动上线）。
                   </div>
                   <label
-                    v-for="agent in workshopAgents"
-                    :key="`workshop-${agent.device_id}`"
+                    v-for="agent in builtinDevices"
+                    :key="`builtin-device-${agent.device_id}`"
                     class="mt-2 flex items-center justify-between gap-2 rounded border px-2 py-1.5 text-xs"
-                    :class="workshopOccupiedByOther(agent)
+                    :class="builtinDeviceOccupiedByOther(agent)
                       ? 'border-zinc-200 bg-zinc-100/70 opacity-60 dark:border-zinc-700 dark:bg-zinc-800/50'
                       : 'border-zinc-200 bg-white/70 dark:border-zinc-700 dark:bg-zinc-900/50'"
                   >
@@ -570,8 +574,8 @@ const workshopOccupiedByOther = (agent: WorkshopAgentItem) =>
                     <input
                       type="checkbox"
                       :checked="agent.bound"
-                      :disabled="workshopOccupiedByOther(agent)"
-                      @change="toggleWorkshopBinding(agent, $event)"
+                      :disabled="builtinDeviceOccupiedByOther(agent)"
+                      @change="toggleBuiltinDeviceBinding(agent, $event)"
                     />
                   </label>
                 </div>

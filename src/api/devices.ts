@@ -15,7 +15,7 @@ export interface ConnectedDeviceRow {
   deviceType?: string
   /** 设备注册时自选的图标 URL（/device_png/N.webp 或绝对 URL），空 = 网页默认样式 */
   icon?: string
-  /** 用户在作坊面板保存的显示备注，展示在设备名后面 */
+  /** 用户在设备面板保存的显示备注，展示在设备名后面 */
   remark?: string
   /** 用户覆盖图标；存在时 icon 会优先返回这个值 */
   iconOverride?: string
@@ -39,7 +39,7 @@ export const listConnectedDevices = () =>
 // Assign (or clear, when aiConfigId is null) the server-side AI for a connected
 // device. The server persists the binding and broadcasts an updated device:list.
 export const assignDeviceAi = (deviceId: string, aiConfigId: number | null) =>
-  post<{ ok: boolean; deviceId: string; aiConfigId: number | null }>(
+  post<{ ok: boolean; deviceId: string; aiConfigId: number | null; boundAiConfigIds: number[] }>(
     '/api/devices/bind',
     { deviceId, aiConfigId },
     { fallbackError: '分配 AI 失败' },
@@ -79,19 +79,20 @@ export interface DeviceMcpScope {
 // Endpoint (desktop / browser / workshop / toolbox) MCP permission scope for a connected agent.
 // Visible only while the device is online; persisted per (AI, agent type) so a
 // reconnecting agent of the same type keeps its scope.
-export const getDeviceMcpScope = (deviceId: string) =>
+export const getDeviceMcpScope = (deviceId: string, aiConfigId?: number) =>
   get<DeviceMcpScope>(`/api/devices/${encodeURIComponent(deviceId)}/mcp-scope`, {
+    query: aiConfigId ? { ai_config_id: aiConfigId } : undefined,
     fallbackError: 'Agent MCP 权限加载失败',
   })
 
-export const setDeviceMcpScope = (deviceId: string, tools: string[]) =>
+export const setDeviceMcpScope = (deviceId: string, aiConfigId: number, tools: string[]) =>
   put<DeviceMcpScope>(
     `/api/devices/${encodeURIComponent(deviceId)}/mcp-scope`,
-    { tools },
+    { aiConfigId, tools },
     { fallbackError: 'Agent MCP 权限保存失败' },
   )
 
-// 设备开发手册（控制台"设备开发文档"弹窗）：默认内容随服务端打包，
+// 设备开发手册（设备栏目"设备端开发文档"弹窗）：默认内容随服务端打包，
 // 房主编辑后持久化；保存空内容 = 恢复默认。
 export interface DeviceDevManual {
   content: string
@@ -101,10 +102,71 @@ export interface DeviceDevManual {
 
 export const getDeviceDevManual = () =>
   get<DeviceDevManual>('/api/devices/dev-manual', {
-    fallbackError: '设备开发文档加载失败',
+    fallbackError: '设备端开发文档加载失败',
   })
 
 export const saveDeviceDevManual = (content: string) =>
   put<DeviceDevManual>('/api/devices/dev-manual', { content }, {
-    fallbackError: '设备开发文档保存失败',
+    fallbackError: '设备端开发文档保存失败',
   })
+
+export interface BuiltinDeviceItem {
+  device_id: string
+  name: string
+  online: boolean
+  tools: string[]
+  bound: boolean
+  bound_ai_config_id: number | null
+  bound_ai_config_ids?: number[]
+  bound_ai_name: string
+  is_toolbox?: boolean
+  multi?: boolean
+}
+
+export const fetchBuiltinDeviceBindings = (aiConfigId: number) =>
+  get<{ ai_config_id: number; agents: BuiltinDeviceItem[] }>(
+    '/api/devices/builtin-bindings',
+    {
+      query: { ai_config_id: aiConfigId },
+      fallbackError: '内置设备列表加载失败',
+    },
+  )
+
+export const setDeviceMemberBinding = (deviceId: string, aiConfigId: number, bound: boolean) =>
+  put<{ ok: boolean; deviceId: string; aiConfigId: number | null; boundAiConfigIds: number[] }>(
+    `/api/devices/${encodeURIComponent(deviceId)}/member-bindings/${aiConfigId}`,
+    { bound },
+    { fallbackError: bound ? '分配 AI 失败' : '解除 AI 绑定失败' },
+  )
+
+export const setBuiltinDeviceBinding = (aiConfigId: number, deviceId: string, bound: boolean) =>
+  post<{
+    ai_config_id: number
+    device_id: string
+    bound: boolean
+    replaced_ai_config_id: number | null
+    replaced_ai_name: string
+  }>(
+    '/api/devices/builtin-bindings',
+    { ai_config_id: aiConfigId, device_id: deviceId, bound },
+    { fallbackError: '更新内置设备绑定失败' },
+  )
+
+export interface LibraryMcpScope {
+  aiConfigId: number
+  capabilities: string[]
+  allowed: string[]
+  mcpTools: string[]
+}
+
+export const getLibraryMcpScope = (aiConfigId: number) =>
+  get<LibraryMcpScope>('/api/devices/library-mcp-scope', {
+    query: { ai_config_id: aiConfigId },
+    fallbackError: '图书馆 MCP 权限加载失败',
+  })
+
+export const setLibraryMcpScope = (aiConfigId: number, tools: string[]) =>
+  put<LibraryMcpScope>('/api/devices/library-mcp-scope', {
+    ai_config_id: aiConfigId,
+    tools,
+  }, { fallbackError: '图书馆 MCP 权限保存失败' })

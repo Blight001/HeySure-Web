@@ -14,7 +14,12 @@ import { me } from '@/api/auth'
 import { listAiCards } from '@/api/ai'
 import { listConnectedDevices } from '@/api/devices'
 import { listEntries, type KnowledgeEntryItem } from '@/api/librarian'
-import { listWorldActorMeta, type WorldActorAppearance } from '@/api/world'
+import {
+  listWorldActorMeta,
+  listWorldDeviceOrder,
+  setWorldDeviceOrder,
+  type WorldActorAppearance,
+} from '@/api/world'
 
 /** 服务端直推的世界事件（P2）：演出零延迟触发，权威状态仍以 refresh 为准 */
 export interface WorldEvent {
@@ -65,6 +70,8 @@ export interface WorldWorkshop {
   remark: string
   type: 'desktop' | 'browser' | 'android' | 'workshop' | 'custom'
   lifecycle: string
+  boundAiConfigIds: number[]
+  /** 首位绑定成员；仅供兼容仍读取单值的旧组件。 */
   aiConfigId: number | null
   lastError: string | null
   platform: string
@@ -80,6 +87,7 @@ export interface WorldSnapshot {
   userId: number | null
   members: WorldMember[]
   workshops: WorldWorkshop[]
+  deviceOrder: string[]
   knowledgeActive: number
   knowledgeItems: KnowledgeEntryItem[]
   lastError: string
@@ -128,15 +136,20 @@ const workshopTypeOf = (raw: Record<string, any>): WorldWorkshop['type'] | null 
   return null
 }
 
-const workshopAiConfigId = (raw: Record<string, any>): number | null => {
+const workshopAiConfigIds = (raw: Record<string, any>): number[] => {
+  const ids = new Set<number>()
+  for (const value of Array.isArray(raw.boundAiConfigIds) ? raw.boundAiConfigIds : []) {
+    const parsed = num(value, NaN)
+    if (Number.isFinite(parsed) && parsed > 0) ids.add(parsed)
+  }
   const direct = num(raw.aiConfigId ?? raw.ai_config_id, NaN)
-  if (Number.isFinite(direct) && direct > 0) return direct
+  if (Number.isFinite(direct) && direct > 0) ids.add(direct)
   const m = String(raw.id || '').match(/^win-desktop-(\d+)$/)
   if (m) {
     const parsed = Number(m[1])
-    if (Number.isFinite(parsed) && parsed > 0) return parsed
+    if (Number.isFinite(parsed) && parsed > 0) ids.add(parsed)
   }
-  return null
+  return [...ids].sort((a, b) => a - b)
 }
 
 
@@ -156,6 +169,7 @@ export class WorldStore {
     userId: null,
     members: [],
     workshops: [],
+    deviceOrder: [],
     knowledgeActive: 0,
     knowledgeItems: [],
     lastError: '',
@@ -276,13 +290,15 @@ export class WorldStore {
     for (const raw of rows) {
       const type = workshopTypeOf(raw)
       if (!type) continue
+      const boundAiConfigIds = workshopAiConfigIds(raw)
       workshops.push({
         deviceId: String(raw.id || raw.socketId || ''),
         name: String(raw.name || raw.id || 'agent'),
         remark: String(raw.remark || ''),
         type,
         lifecycle: String(raw.lifecycle || 'connected'),
-        aiConfigId: workshopAiConfigId(raw),
+        boundAiConfigIds,
+        aiConfigId: boundAiConfigIds[0] ?? null,
         lastError: raw.lastError ? String(raw.lastError) : null,
         platform: String(raw.platform || ''),
         icon: String(raw.icon || ''),
@@ -291,15 +307,21 @@ export class WorldStore {
       })
     }
     // 不再预留占位作坊：设备连上才显示一栋建筑，空地皮保持空着。
-    workshops.sort((a, b) => a.deviceId.localeCompare(b.deviceId))
+    const savedOrder = new Map(this.snapshot.deviceOrder.map((deviceId, index) => [deviceId, index]))
+    workshops.sort((a, b) => {
+      const ai = savedOrder.get(a.deviceId) ?? Number.MAX_SAFE_INTEGER
+      const bi = savedOrder.get(b.deviceId) ?? Number.MAX_SAFE_INTEGER
+      return ai - bi || a.deviceId.localeCompare(b.deviceId)
+    })
     this.snapshot.workshops = workshops
     // 成员 ←→ 作坊绑定反查
     const byConfig = new Map<number, string[]>()
     for (const w of workshops) {
-      if (w.aiConfigId === null) continue
-      const list = byConfig.get(w.aiConfigId) || []
-      list.push(w.deviceId)
-      byConfig.set(w.aiConfigId, list)
+      for (const aiConfigId of w.boundAiConfigIds) {
+        const list = byConfig.get(aiConfigId) || []
+        list.push(w.deviceId)
+        byConfig.set(aiConfigId, list)
+      }
     }
     for (const m of this.snapshot.members) {
       m.boundAgentIds = byConfig.get(m.id) || []
@@ -337,6 +359,20 @@ export class WorldStore {
   /** 操作（启停/绑定/审批/派任务）完成后立即重拉，不等下个轮询周期 */
   refreshNow(): Promise<void> {
     return this.refresh()
+  }
+
+  /** 设备建筑排序与成员绑定完全独立；先本地生效，再持久化到用户世界元数据。 */
+  async saveDeviceOrder(deviceIds: string[]): Promise<void> {
+    this.snapshot.deviceOrder = [...deviceIds]
+    this.rebuildWorkshops()
+    this.emit()
+    try {
+      const saved = await setWorldDeviceOrder(deviceIds)
+      this.snapshot.deviceOrder = saved.device_ids
+    } catch (error) {
+      await this.refresh()
+      throw error
+    }
   }
 
   private applyMeta(items: Array<Record<string, any>>) {
@@ -409,6 +445,9 @@ export class WorldStore {
       return false
     }
     this.applyMeta(Array.isArray(data.actor_meta) ? data.actor_meta : [])
+    this.snapshot.deviceOrder = Array.isArray(data.device_order)
+      ? data.device_order.map(String)
+      : []
     this.applyCards(Array.isArray(data.cards) ? data.cards : [])
     if (Array.isArray(data.agents)) this.applyAgentRows(data.agents)
     this.rebuildWorkshops()
@@ -422,8 +461,12 @@ export class WorldStore {
     const [cards, connected] = await Promise.all([listAiCards(), listConnectedDevices()])
     if (Array.isArray(connected?.agents)) this.applyAgentRows(connected.agents)
     try {
-      const meta = await listWorldActorMeta()
+      const [meta, deviceOrder] = await Promise.all([
+        listWorldActorMeta(),
+        listWorldDeviceOrder().catch(() => ({ device_ids: [] })),
+      ])
       this.applyMeta(meta.items || [])
+      this.snapshot.deviceOrder = deviceOrder.device_ids || []
     } catch {
       // best-effort：旧后端没有该接口时退回默认皮肤
     }

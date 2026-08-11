@@ -22,7 +22,6 @@ import {
   WORLD_W,
   ZONES,
   mulberry32,
-  unionRect,
   workshopSlotPos,
   workshopZone,
   workshopBenchSeat,
@@ -106,6 +105,9 @@ export class WorldScene extends Phaser.Scene {
   private buildings = new Map<string, Phaser.GameObjects.Sprite>()
   private snap: WorldSnapshot | null = null
   private draggingActor: MemberActor | null = null
+  private draggingWorkshop: WorkshopView | null = null
+  private memberPatrol = new Map<number, { key: string; index: number; nextAt: number; zone: Rect }>()
+  private nextPatrolUpdate = 0
   /** 演出触发用：上一轮快照的代数 */
   private prevGeneration = new Map<number, number>()
   private bgmMuted = false
@@ -1085,7 +1087,7 @@ export class WorldScene extends Phaser.Scene {
       }
       if (this.pinching) endPinch()
       // 辅助管理员操控模式下相机跟随该角色，拖拽平移让位
-      if (!this.camDragging || !p.isDown || this.draggingActor || this.governorMode) return
+      if (!this.camDragging || !p.isDown || this.draggingActor || this.draggingWorkshop || this.governorMode) return
       const dx = (p.x - lastX) / cam.zoom
       const dy = (p.y - lastY) / cam.zoom
       cam.scrollX -= dx
@@ -1304,7 +1306,7 @@ export class WorldScene extends Phaser.Scene {
       'gameobjectup',
       (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
         // 抽屉已打开时仍允许点击其它成员/建筑切换面板（抽屉只占右侧，不挡左侧地图）
-        if (this.draggingActor) return
+        if (this.draggingActor || this.draggingWorkshop) return
         // 必须 down/up 命中同一对象才算点击；否则可能是 iframe 补发的孤立 up，忽略
         const pressed = this.pressedObj
         this.pressedObj = null
@@ -1351,6 +1353,15 @@ export class WorldScene extends Phaser.Scene {
         this.draggingActor = obj
         obj.beginDrag()
         this.overlay.hideTooltip()
+        return
+      }
+      const workshop = this.workshopForObject(obj)
+      if (workshop && workshop.data.type !== 'workshop') {
+        this.pressedObj = null
+        this.draggingWorkshop = workshop
+        workshop.sprite.setDepth(160000)
+        workshop.label.setDepth(160012)
+        this.overlay.hideTooltip()
       }
     })
     this.input.on(
@@ -1360,19 +1371,70 @@ export class WorldScene extends Phaser.Scene {
           obj.x = dragX
           obj.y = dragY
           this.updateDragHighlight(dragX, dragY)
+          return
+        }
+        const workshop = this.workshopForObject(obj)
+        if (workshop && workshop === this.draggingWorkshop) {
+          workshop.sprite.setPosition(dragX, dragY)
+          workshop.taskGlow.setPosition(dragX, dragY - 24)
+          positionWorkshopLabel(workshop)
         }
       },
     )
     this.input.on('dragend', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-      if (!(obj instanceof MemberActor) || obj !== this.draggingActor) return
-      this.draggingActor = null
-      this.clearDragHighlight()
-      const drop = this.resolveDropTarget(obj.x, obj.y)
-      obj.endDrag()
-      if (!drop || !this.snap) return
-      const member = this.snap.members.find(item => item.id === obj.memberId)
-      if (member) void applyMemberDropBinding(member, drop, this.snap, () => this.store.refreshNow())
+      if (obj instanceof MemberActor && obj === this.draggingActor) {
+        this.draggingActor = null
+        this.clearDragHighlight()
+        const drop = this.resolveDropTarget(obj.x, obj.y)
+        obj.endDrag()
+        if (!drop || !this.snap) return
+        const member = this.snap.members.find(item => item.id === obj.memberId)
+        if (member) void applyMemberDropBinding(member, drop, this.snap, () => this.store.refreshNow())
+        return
+      }
+      const workshop = this.workshopForObject(obj)
+      if (workshop && workshop === this.draggingWorkshop) {
+        this.draggingWorkshop = null
+        this.finishWorkshopDrag(workshop)
+      }
     })
+  }
+
+  private workshopForObject(obj: Phaser.GameObjects.GameObject): WorkshopView | null {
+    const deviceId = obj.getData?.('deviceId') as string | undefined
+    return deviceId ? this.workshops.get(deviceId) ?? null : null
+  }
+
+  /** 将设备拖到最近插槽完成换位；这里只改设备顺序，不触碰任何成员绑定。 */
+  private finishWorkshopDrag(dragged: WorkshopView) {
+    const views = this.orderedWorkshopViews()
+    const from = views.indexOf(dragged)
+    if (from < 0) return
+    let target = from
+    let bestDistance = Number.POSITIVE_INFINITY
+    for (let slot = 0; slot < views.length; slot++) {
+      const pos = workshopSlotPos(slot)
+      const distance = Phaser.Math.Distance.Between(dragged.sprite.x, dragged.sprite.y, pos.x, pos.y)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        target = slot
+      }
+    }
+    views.splice(from, 1)
+    views.splice(target, 0, dragged)
+    const deviceIds = views.map(view => view.data.deviceId)
+    if (this.snap) {
+      const rank = new Map(deviceIds.map((deviceId, index) => [deviceId, index]))
+      this.snap.deviceOrder = deviceIds
+      this.snap.workshops.sort((a, b) => {
+        const ai = rank.get(a.deviceId) ?? Number.MAX_SAFE_INTEGER
+        const bi = rank.get(b.deviceId) ?? Number.MAX_SAFE_INTEGER
+        return ai - bi || a.deviceId.localeCompare(b.deviceId)
+      })
+    }
+    this.relayoutWorkshopSlots()
+    if (this.snap) this.reconcileMembers(this.snap)
+    void this.store.saveDeviceOrder(deviceIds).catch(() => undefined)
   }
 
   /** 拖放落点 → 作坊 / 出生地 */
@@ -1448,7 +1510,7 @@ export class WorldScene extends Phaser.Scene {
       }
       const skin = skinFor(m.role, m.id, m.skin)
       const lockedSeat = this.getLockedBenchSeat(m)
-      const zone = this.anchorFor(m)
+      const zone = this.anchorFor(m, this.time.now)
       let actor = existing
       if (actor) {
         actor.setMember(m, skin)
@@ -1506,38 +1568,47 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** §4.3 锚区规则：自上而下取第一条命中。
-   *  绑定到设备的 AI 成员始终在对应设备边上；
+  /** §4.3 锚区规则：绑定优先于角色默认活动区。
+   *  绑定到多台设备的 AI 成员会按周期在在线设备之间巡游；
    *  离线设备时通过 getLockedBenchSeat + lockSitOnBench 锁死坐在前方长椅上。
    */
-  private anchorFor(m: WorldMember): Rect {
+  private anchorFor(m: WorldMember, time: number): Rect {
+    const boundZone = this.boundPatrolZone(m, time)
+    if (boundZone) return boundZone
     if (m.role === 'core_admin') return ZONES.plaza
     if (m.role === 'librarian') return ZONES.library
     if (m.role === 'assistant_admin') return ZONES.wanderAll
-    // 绑定设备（在线）→ 在其全部在线建筑门口区的合并矩形里徘徊
-    const zone = this.boundBuildingsZone(m)
-    if (zone) return zone
     if (!m.projectId || m.lifecycle === 'learning') return ZONES.spawn
     return ZONES.wanderAll
   }
 
-  /** 该成员绑定的**全部在线**建筑门口区的合并矩形（多绑时横跨所有建筑）。
-   *  无在线普通建筑但绑定了在线图书馆 → 图书馆区；否则 null（交回上层回退）。 */
-  private boundBuildingsZone(m: WorldMember): Rect | null {
-    const rects: Rect[] = []
-    let hasOnlineLibrary = false
-    for (const id of m.boundAgentIds) {
-      const view = this.workshops.get(id)
-      if (!view || !view.data.online) continue
-      if (view.data.type === 'workshop') {
-        hasOnlineLibrary = true
-        continue
-      }
-      if (view.slot >= 0) rects.push(workshopZone(view.slot))
+  private boundPatrolZone(m: WorldMember, time: number): Rect | null {
+    const online = m.boundAgentIds
+      .map(deviceId => this.workshops.get(deviceId))
+      .filter((view): view is WorkshopView => !!view && view.data.online)
+    if (!online.length) {
+      this.memberPatrol.delete(m.id)
+      return null
     }
-    if (rects.length > 0) return unionRect(rects)
-    if (hasOnlineLibrary) return ZONES.library
-    return null
+    const key = online.map(view => `${view.data.deviceId}:${view.slot}`).join('|')
+    let state = this.memberPatrol.get(m.id)
+    if (!state || state.key !== key) {
+      const index = m.id % online.length
+      const view = online[index]
+      state = {
+        key,
+        index,
+        nextAt: time + 10000 + (m.id % 5) * 1000,
+        zone: view.data.type === 'workshop' ? ZONES.library : workshopZone(view.slot),
+      }
+      this.memberPatrol.set(m.id, state)
+    } else if (online.length > 1 && time >= state.nextAt) {
+      state.index = (state.index + 1) % online.length
+      state.nextAt = time + 12000 + (m.id % 4) * 1000
+      const view = online[state.index]
+      state.zone = view.data.type === 'workshop' ? ZONES.library : workshopZone(view.slot)
+    }
+    return state.zone
   }
 
   /** 离线设备绑定：返回对应的长椅就坐位置（只有 slot >=0 的普通设备有）。
@@ -1546,13 +1617,14 @@ export class WorldScene extends Phaser.Scene {
     if (!m.boundAgentIds?.length) return null
     const hasOnlineBuilding = m.boundAgentIds.some(id => {
       const view = this.workshops.get(id)
-      return !!view && view.data.online && view.data.type !== 'workshop' && view.slot >= 0
+      return !!view && view.data.online
     })
     if (hasOnlineBuilding) return null
     for (const deviceId of m.boundAgentIds) {
       const view = this.workshops.get(deviceId)
-      if (view && view.offlineSince !== null && view.data.aiConfigId === m.id && view.slot >= 0) {
-        return workshopBenchSeat(view.slot)
+      if (view && view.offlineSince !== null && view.data.boundAiConfigIds.includes(m.id) && view.slot >= 0) {
+        const seat = workshopBenchSeat(view.slot)
+        return { x: seat.x + ((m.id % 3) - 1) * 14, y: seat.y }
       }
     }
     return null
@@ -1641,7 +1713,7 @@ export class WorldScene extends Phaser.Scene {
       seen.add(w.deviceId)
       let view = this.workshops.get(w.deviceId)
       if (!view) {
-        // 临时插槽占位创建；本轮末尾 relayoutWorkshopSlots() 会按 AI 分组重排到最终位置。
+        // 临时插槽占位创建；本轮末尾会按用户保存的设备顺序落位。
         const slot = w.type === 'workshop' ? -1 : this.firstFreeSlot()
         const pos = w.type === 'workshop' ? LIBRARY_DEVICE_POS : workshopSlotPos(slot)
         const textureKey = this.workshopTextureKey(w)
@@ -1689,6 +1761,7 @@ export class WorldScene extends Phaser.Scene {
         const captured = view
         sprite.setData('tooltip', () => this.workshopTooltip(captured))
         sprite.setData('deviceId', w.deviceId)
+        if (w.type !== 'workshop') this.input.setDraggable(sprite)
         this.workshops.set(w.deviceId, view)
         if (!w.online) sprite.setTint(w.lifecycle === 'waiting' ? 0xb9c4d8 : 0x8a8a8a)
       }
@@ -1704,8 +1777,10 @@ export class WorldScene extends Phaser.Scene {
       }
       this.applyWorkshopTexture(view)
       // 动效：绑定成员在干活 or agent 正在执行任务
-      const boundMember = w.aiConfigId !== null ? memberById.get(w.aiConfigId) : undefined
-      const active = workshopIsActive(w, boundMember)
+      const boundMembers = w.boundAiConfigIds
+        .map(aiConfigId => memberById.get(aiConfigId))
+        .filter((member): member is WorldMember => !!member)
+      const active = workshopIsActive(w, boundMembers)
       view.taskActive = !!active
       if (!active) view.taskGlow.setAlpha(0)
       const animKey = this.workshopAnimKey(view)
@@ -1736,7 +1811,7 @@ export class WorldScene extends Phaser.Scene {
         this.workshops.delete(deviceId)
       }
     }
-    // 建筑集合有增删后，按 AI 分组把同一 AI 的建筑重排成相邻的一排。
+    // 建筑集合有增删后，仅按用户保存的设备顺序布局，绑定关系不参与排序。
     this.relayoutWorkshopSlots()
   }
 
@@ -1751,24 +1826,23 @@ export class WorldScene extends Phaser.Scene {
     return i
   }
 
-  /** 确定式分组重排：把非图书馆建筑按绑定 AI 分组（未绑定排最后），
-   *  组内按 deviceId，顺序铺到连续插槽上——同一 AI 的建筑因此总是并排相邻。
-   *  slot 变化的建筑同步把 sprite / taskGlow 移动到新坐标。 */
+  private orderedWorkshopViews(): WorkshopView[] {
+    const rank = new Map(
+      (this.snap?.workshops ?? []).map((workshop, index) => [workshop.deviceId, index]),
+    )
+    return [...this.workshops.values()]
+      .filter(view => view.data.type !== 'workshop')
+      .sort((a, b) => {
+        const ai = rank.get(a.data.deviceId) ?? Number.MAX_SAFE_INTEGER
+        const bi = rank.get(b.data.deviceId) ?? Number.MAX_SAFE_INTEGER
+        return ai - bi || a.data.deviceId.localeCompare(b.data.deviceId)
+      })
+  }
+
+  /** 用户设备顺序确定插槽；AI 绑定、解绑或多绑都不会移动建筑。 */
   private relayoutWorkshopSlots() {
-    const views = [...this.workshops.values()].filter(v => v.data.type !== 'workshop')
-    views.sort((a, b) => {
-      // 未绑定（aiConfigId=null）分到最后，其余按 aiConfigId 升序聚成组
-      const ga = a.data.aiConfigId
-      const gb = b.data.aiConfigId
-      if (ga !== gb) {
-        if (ga === null) return 1
-        if (gb === null) return -1
-        return ga - gb
-      }
-      return a.data.deviceId.localeCompare(b.data.deviceId)
-    })
+    const views = this.orderedWorkshopViews()
     views.forEach((view, slot) => {
-      if (view.slot === slot) return
       view.slot = slot
       const pos = workshopSlotPos(slot)
       view.sprite.setPosition(pos.x, pos.y)
@@ -1787,7 +1861,10 @@ export class WorldScene extends Phaser.Scene {
 
   private workshopTooltip(view: WorkshopView): TooltipData {
     const w = view.data
-    const bound = this.snap?.members.find(m => m.id === w.aiConfigId)
+    const memberById = new Map((this.snap?.members ?? []).map(member => [member.id, member]))
+    const bound = w.boundAiConfigIds
+      .map(aiConfigId => memberById.get(aiConfigId))
+      .filter((member): member is WorldMember => !!member)
     return workshopTooltipData(view, bound)
   }
 
@@ -1801,6 +1878,13 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- 主循环
   update(time: number, delta: number) {
+    if (time >= this.nextPatrolUpdate) {
+      this.nextPatrolUpdate = time + 500
+      for (const member of this.snap?.members ?? []) {
+        const actor = this.actors.get(member.id)
+        if (actor && !actor.isBenchLocked) actor.setAnchor(this.anchorFor(member, time))
+      }
+    }
     // 相机惯性：松手后以 0.88/frame 指数衰减
     if (!this.camDragging && !this.governorMode) {
       if (Math.abs(this.camVx) > 0.15 || Math.abs(this.camVy) > 0.15) {

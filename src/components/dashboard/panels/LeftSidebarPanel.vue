@@ -3,7 +3,7 @@ import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vu
 import AppIcon from '@/components/common/AppIcon.vue'
 import BrainCorePanel from './BrainCorePanel.vue'
 
-// 知识库/作坊体量大（合计 ~140KB 源码）且藏在非默认 Tab 后，懒加载切走，
+// 知识库/设备体量大（合计 ~140KB 源码）且藏在非默认 Tab 后，懒加载切走，
 // 避免拖慢首屏（移动端"控制台"Tab 默认只需要数字生命面板）
 const KnowledgeBasePanel = defineAsyncComponent(() => import('./KnowledgeBasePanel.vue'))
 const WorkshopPanel = defineAsyncComponent(() => import('./WorkshopPanel.vue'))
@@ -69,9 +69,10 @@ const emit = defineEmits<{
   (e: 'manage-device-tools', payload?: { deviceType?: string }): void
   (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
   (e: 'save-role-mcp-permissions'): void
+  (e: 'open-device-doc'): void
 }>()
 
-const activeTab = ref<'brain' | 'knowledge' | 'workshop' | 'work'>('brain')
+const activeTab = ref<'brain' | 'knowledge' | 'device' | 'work'>('brain')
 const requestedWorkflowRunId = ref('')
 
 const openWorkflowConfirmation = (rawRunId: string) => {
@@ -101,7 +102,7 @@ watch(() => props.knowledgeFocusSignal, () => {
 })
 
 watch(() => props.deviceFocusSignal, () => {
-  if (props.focusedDeviceId) activeTab.value = 'workshop'
+  if (props.focusedDeviceId) activeTab.value = 'device'
 })
 </script>
 
@@ -129,13 +130,13 @@ watch(() => props.deviceFocusSignal, () => {
           <AppIcon name="book" class="w-4 h-4" /> 知识库
         </button>
         <button
-          @click="activeTab = 'workshop'"
+          @click="activeTab = 'device'"
           class="flex-1 min-w-0 lg:min-w-[60px] px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold rounded-md transition-all duration-200 flex items-center justify-center gap-1 sm:gap-1.5 active:scale-[0.985] touch-manipulation whitespace-nowrap lg:whitespace-normal"
-          :class="activeTab === 'workshop'
+          :class="activeTab === 'device'
             ? 'bg-white/75 text-indigo-600 shadow-sm dark:bg-zinc-700/70 dark:text-indigo-400'
             : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
         >
-          <AppIcon name="workshop" class="w-4 h-4" /> 作坊
+          <AppIcon name="device" class="w-4 h-4" /> 设备
         </button>
         <button
           @click="activeTab = 'work'"
@@ -194,6 +195,7 @@ watch(() => props.deviceFocusSignal, () => {
           :focus-signal="deviceFocusSignal"
           @toggle-role-tool="emit('toggle-role-tool', $event)"
           @save-role-mcp-permissions="emit('save-role-mcp-permissions')"
+          @open-device-doc="emit('open-device-doc')"
         />
       </Transition>
     </div>

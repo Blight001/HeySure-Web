@@ -165,7 +165,7 @@ const load = async () => {
     content.value = data?.content || ''
     isCustom.value = !!data?.isCustom
   } catch (err: any) {
-    error.value = err?.message || '设备开发文档加载失败'
+    error.value = err?.message || '设备端开发文档加载失败'
   } finally {
     loading.value = false
   }
@@ -194,7 +194,7 @@ const save = async () => {
     isCustom.value = !!data?.isCustom
     editing.value = false
   } catch (err: any) {
-    error.value = err?.message || '设备开发文档保存失败'
+    error.value = err?.message || '设备端开发文档保存失败'
   } finally {
     saving.value = false
   }
@@ -246,7 +246,7 @@ const copyDoc = async () => {
         <div class="flex shrink-0 items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
           <div class="flex min-w-0 items-center gap-2">
             <AppIcon name="book" class="h-5 w-5 shrink-0 text-indigo-500" />
-            <h3 class="truncate text-sm font-bold text-zinc-800 dark:text-zinc-100">设备开发文档</h3>
+            <h3 class="truncate text-sm font-bold text-zinc-800 dark:text-zinc-100">设备端开发文档</h3>
             <span v-if="isCustom" class="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">已自定义</span>
           </div>
           <div class="flex shrink-0 items-center gap-1.5">

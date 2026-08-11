@@ -1,4 +1,4 @@
-import { assignDeviceAi } from '@/api/devices'
+import { setDeviceMemberBinding } from '@/api/devices'
 import { setWorkshopBinding } from '@/api/workshop'
 import { gameConfirm } from '../ui/confirmDialog'
 import type { WorldMember, WorldSnapshot } from './store'
@@ -15,13 +15,9 @@ export const applyMemberDropBinding = async (
     const workshop = snap.workshops.find(item => item.deviceId === drop.deviceId)
     if (!workshop) return
     if (workshop.type === 'workshop') {
-      const current = snap.members.find(item => item.id === workshop.aiConfigId)
-      const hint = current && current.id !== member.id
-        ? `工坊当前绑定的是「${current.name}」，继续将替换为「${member.name}」。`
-        : '绑定后可使用工坊后续接入的 MCP 能力。'
       const ok = await gameConfirm({
         title: '确认绑定',
-        message: `把成员「${member.name}」绑定到 ${workshop.name}？\n${hint}`,
+        message: `把成员「${member.name}」绑定到 ${workshop.name}？\n同一设备可绑定多位成员，各自权限互不影响。`,
         confirmText: '绑定',
       })
       if (ok) {
@@ -34,7 +30,7 @@ export const applyMemberDropBinding = async (
         confirmText: '绑定',
       })
       if (ok) {
-        void assignDeviceAi(workshop.deviceId, member.id).then(refresh).catch(() => undefined)
+        void setDeviceMemberBinding(workshop.deviceId, member.id, true).then(refresh).catch(() => undefined)
       }
     }
     return
@@ -52,7 +48,7 @@ export const applyMemberDropBinding = async (
       const workshop = snap.workshops.find(item => item.deviceId === deviceId)
       return workshop?.type === 'workshop'
         ? setWorkshopBinding(member.id, deviceId, false)
-        : assignDeviceAi(deviceId, null)
+        : setDeviceMemberBinding(deviceId, member.id, false)
     }))
       .then(refresh)
       .catch(() => undefined)

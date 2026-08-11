@@ -955,13 +955,6 @@ onUnmounted(() => {
         >
           <AppIcon name="shield" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
         </button>
-        <button
-          class="ml-1 sm:ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-emerald-500/50 dark:hover:bg-zinc-800 dark:hover:text-emerald-300 md:h-9 md:w-9"
-          title="设备开发文档"
-          @click.stop="deviceDocOpen = true"
-        >
-          <AppIcon name="book" class="w-4 h-4 md:w-[18px] md:h-[18px]" />
-        </button>
         <GlobalNotificationLayer />
         <button
           class="ml-1 sm:ml-2 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
@@ -1012,7 +1005,7 @@ onUnmounted(() => {
       :class="leftCollapsed ? 'lg:gap-4' : 'lg:gap-6'"
     >
 
-      <!-- 右侧：数字生命、知识库与作坊（移动端仍为「控制台」Tab） -->
+      <!-- 右侧：数字生命、知识库与设备（移动端仍为「控制台」Tab） -->
       <section
         class="flex flex-col gap-4 sm:gap-6 transition-all duration-300 relative w-full min-h-0 flex-1 lg:order-2 lg:flex-none lg:h-full"
         :class="[
@@ -1053,6 +1046,7 @@ onUnmounted(() => {
             @refresh-user="emit('refreshUser', $event)"
             @view-all-mcp="openAllMcpToolsFromSystemSettings"
             @manage-device-tools="onManageDeviceTools"
+            @open-device-doc="deviceDocOpen = true"
           />
         </div>
       </section>

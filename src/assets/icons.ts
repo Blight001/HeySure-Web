@@ -17,7 +17,7 @@ export type AppIconName =
   | 'pen'
   | 'exit'
   | 'brain'
-  | 'workshop'
+  | 'device'
   | 'book'
   | 'globe'
   | 'seed'
@@ -83,8 +83,8 @@ export const APP_ICONS: Record<AppIconName, string> = {
     + '<circle cx="12" cy="12" r="2.5"/>'
     + '<path d="M9 5.4V2.9M15 5.4V2.9M9 21.1v-2.5M15 21.1v-2.5M5.4 9H2.9M5.4 15H2.9M21.1 9h-2.5M21.1 15h-2.5"/>',
 
-  // 锤子（作坊）：粗圆头 + 斜柄
-  workshop:
+  // 锤子（设备）：粗圆头 + 斜柄
+  device:
     '<path stroke-width="4.6" d="M11.6 5.8l6.6 6.6"/>'
     + '<path stroke-width="2.2" d="M13.3 10.7l-7.5 7.5"/>',
 

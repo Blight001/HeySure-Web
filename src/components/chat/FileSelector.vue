@@ -9,7 +9,7 @@ interface Props {
   selectedFiles: string[]
   currentPath: string
   selectableFileRoot?: string
-  /** 可附带到本轮消息的 MCP 工具组（工坊 / 工具箱 / 端侧设备） */
+  /** 可附带到本轮消息的 MCP 工具组（图书馆设备 / 工具箱 / 端侧设备） */
   toolGroups?: McpCatalogToolGroup[]
   /** 已勾选的工具组 groupKey 列表 */
   selectedToolGroups?: string[]

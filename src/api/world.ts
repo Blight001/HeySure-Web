@@ -29,3 +29,15 @@ export const setWorldActorMeta = (aiConfigId: number, meta: Partial<WorldActorAp
     meta,
     { fallbackError: '外观保存失败' },
   )
+
+export const listWorldDeviceOrder = () =>
+  get<{ device_ids: string[] }>('/api/world/devices/order', {
+    fallbackError: '设备排序加载失败',
+  })
+
+export const setWorldDeviceOrder = (deviceIds: string[]) =>
+  put<{ ok: boolean; device_ids: string[] }>(
+    '/api/world/devices/order',
+    { device_ids: deviceIds },
+    { fallbackError: '设备排序保存失败' },
+  )

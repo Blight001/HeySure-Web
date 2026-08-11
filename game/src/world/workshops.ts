@@ -20,10 +20,10 @@ export const workshopGlowTintForType = (type: WorldWorkshop['type']): number => 
   return 0xffd36b
 }
 
-export const workshopIsActive = (workshop: WorldWorkshop, boundMember: WorldMember | undefined): boolean => {
+export const workshopIsActive = (workshop: WorldWorkshop, boundMembers: WorldMember[]): boolean => {
   return workshop.online && (
     workshop.lifecycle === 'dispatching'
-    || boundMember?.taskStatus === 'running'
-    || !!(boundMember?.hasActiveTask && boundMember.runtimeStatus === 'running')
+    || boundMembers.some(member => member.taskStatus === 'running')
+    || boundMembers.some(member => member.hasActiveTask && member.runtimeStatus === 'running')
   )
 }

@@ -39,17 +39,20 @@ export const memberTooltipData = (member: WorldMember): TooltipData => {
 
 export const workshopTooltipData = (
   view: WorkshopTooltipView,
-  boundMember: WorldMember | undefined,
+  boundMembers: WorldMember[],
 ): TooltipData => {
   const workshop = view.data
+  const memberText = boundMembers.length
+    ? boundMembers.map(member => `${member.name}（ID ${member.id}）`).join('、')
+    : '未绑定（拖成员到此绑定）'
   if (workshop.type === 'workshop') {
     return {
       title: workshopDisplayName(workshop),
       badge: workshop.lifecycle === 'waiting' ? '等待连接' : view.offlineSince !== null ? '离线' : '在线',
       rows: [
         { label: '形态', value: '服务端内置 · 自动上线' },
-        { label: '成员', value: boundMember ? `${boundMember.name}（ID ${boundMember.id}）` : '未绑定（拖成员到此绑定）' },
-        { label: '说明', value: '只能绑定一个数字成员，新绑定会替换旧绑定' },
+        { label: '成员', value: memberText },
+        { label: '说明', value: '支持多成员绑定，成员会在各自绑定设备间巡游' },
         { label: '工具', value: `${workshop.capabilities} 个知识/进化工具` },
         { label: '错误', value: workshop.lastError || '' },
       ],
@@ -60,7 +63,7 @@ export const workshopTooltipData = (
     badge: workshop.lifecycle === 'waiting' ? '等待连接' : view.offlineSince !== null ? '离线' : workshop.lifecycle === 'dispatching' ? '执行中' : '在线',
     rows: [
       { label: '设备', value: `${workshopDisplayName(workshop)}（${workshop.platform || 'unknown'}）` },
-      { label: '成员', value: workshop.lifecycle === 'waiting' ? '连接后可分配' : boundMember ? `${boundMember.name}（ID ${boundMember.id}）` : '未分配' },
+      { label: '成员', value: workshop.lifecycle === 'waiting' ? '连接后可分配' : memberText },
       { label: '工具', value: `${workshop.capabilities} 个端侧工具` },
       { label: '错误', value: workshop.lastError || '' },
     ],

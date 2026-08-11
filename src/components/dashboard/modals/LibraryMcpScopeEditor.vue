@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { LibraryMcpFullView } from '@/api/librarian'
-import { getLibraryMcpScope, setLibraryMcpScope } from '@/api/workshop'
+import { getLibraryMcpScope, setLibraryMcpScope } from '@/api/devices'
 import { getMcpToolParamRows, getMcpToolZhLabel } from '@/utils/mcpTools'
 import { useMcpScopeDraft } from '@/composables/useMcpScopeDraft'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
@@ -11,7 +11,7 @@ import type { CatalogMcpTool } from '@/components/dashboard/modals/CatalogMcpSco
 
 const props = withDefaults(defineProps<{
   catalog?: LibraryMcpFullView | null
-  workshopDeviceId: string
+  builtinDeviceId: string
   boundAiConfigId?: number | null
   boundAiName?: string
   governanceMcpTools?: string[]
@@ -182,7 +182,7 @@ const save = async () => {
 }
 
 const label = (name: string) => getMcpToolZhLabel(name)
-const subtitle = computed(() => props.boundAiName || props.workshopDeviceId)
+const subtitle = computed(() => props.boundAiName || props.builtinDeviceId)
 const canEditGovernance = computed(() => !!props.boundAiConfigId)
 
 const openDetail = () => {
@@ -264,7 +264,7 @@ const startTest = (name: string) => {
               <McpAiTestModal
                 v-model:show="aiTestModalOpen"
                 :tool-name="aiTestModalToolName"
-                :device-id="workshopDeviceId"
+                :device-id="builtinDeviceId"
                 :device-type="'workshop'"
                 :description="aiTestModalDescription"
                 :input-schema="aiTestModalInputSchema"

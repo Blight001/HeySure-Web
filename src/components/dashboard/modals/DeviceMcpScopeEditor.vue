@@ -9,6 +9,7 @@ import McpScopeToolTable from './McpScopeToolTable.vue'
 
 const props = defineProps<{
   deviceId: string
+  aiConfigId: number
   // Re-fetch whenever this changes (e.g. device:list refresh tick).
   refreshKey?: string | number
 }>()
@@ -48,7 +49,7 @@ const load = async () => {
   error.value = ''
   notice.value = ''
   try {
-    const data = await getDeviceMcpScope(props.deviceId)
+    const data = await getDeviceMcpScope(props.deviceId, props.aiConfigId)
     if (requestId !== loadRequestId) return
     scope.value = data
     const caps = data.capabilities || []
@@ -62,7 +63,7 @@ const load = async () => {
   }
 }
 
-watch(() => [props.deviceId, props.refreshKey], load, { immediate: true })
+watch(() => [props.deviceId, props.aiConfigId, props.refreshKey], load, { immediate: true })
 
 // Scope is keyed per individual agent, so it can be configured even before the
 // device is assigned an AI. Saving only needs a connected agent that reports
@@ -142,7 +143,7 @@ const save = async () => {
   error.value = ''
   notice.value = ''
   try {
-    const data = await setDeviceMcpScope(props.deviceId, Array.from(selected.value))
+    const data = await setDeviceMcpScope(props.deviceId, props.aiConfigId, Array.from(selected.value))
     scope.value = data
     commit(data.allowed || [])
     notice.value = '已保存'

@@ -23,6 +23,8 @@ const busyId = ref('')
 const snoozedRunId = ref('')
 const approvalArmedId = ref('')
 const clock = ref(Date.now())
+const triggerRoot = ref<HTMLElement | null>(null)
+const messagePanel = ref<HTMLElement | null>(null)
 let pollTimer: number | undefined
 let clockTimer: number | undefined
 let armTimer: number | undefined
@@ -107,7 +109,25 @@ const markAllRead = async () => {
 }
 
 const onVisibility = () => {
-  if (document.visibilityState === 'visible') void refresh()
+  if (document.visibilityState === 'visible') {
+    void refresh()
+  } else {
+    panelOpen.value = false
+  }
+}
+
+const closeMessagePanel = () => { panelOpen.value = false }
+
+const onDocumentPointerDown = (event: PointerEvent) => {
+  if (!panelOpen.value) return
+  const target = event.target
+  if (!(target instanceof Node)) return
+  if (triggerRoot.value?.contains(target) || messagePanel.value?.contains(target)) return
+  closeMessagePanel()
+}
+
+const onDocumentKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') closeMessagePanel()
 }
 
 onMounted(() => {
@@ -115,6 +135,9 @@ onMounted(() => {
   pollTimer = window.setInterval(refresh, 4000)
   clockTimer = window.setInterval(() => { clock.value = Date.now() }, 1000)
   document.addEventListener('visibilitychange', onVisibility)
+  document.addEventListener('pointerdown', onDocumentPointerDown, true)
+  document.addEventListener('keydown', onDocumentKeydown)
+  window.addEventListener('blur', closeMessagePanel)
 })
 
 onBeforeUnmount(() => {
@@ -122,11 +145,14 @@ onBeforeUnmount(() => {
   if (clockTimer) window.clearInterval(clockTimer)
   if (armTimer) window.clearTimeout(armTimer)
   document.removeEventListener('visibilitychange', onVisibility)
+  document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+  document.removeEventListener('keydown', onDocumentKeydown)
+  window.removeEventListener('blur', closeMessagePanel)
 })
 </script>
 
 <template>
-  <div class="relative ml-1 sm:ml-2">
+  <div ref="triggerRoot" class="relative ml-1 sm:ml-2">
     <button
       class="relative flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-800 shadow-sm transition-colors active:bg-zinc-100 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800 dark:hover:text-indigo-300 md:h-9 md:w-9"
       title="消息通知"
@@ -171,7 +197,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="panelOpen" class="fixed right-3 top-[calc(env(safe-area-inset-top)+4rem)] z-[190] max-w-[calc(100vw-1.5rem)] sm:top-[calc(env(safe-area-inset-top)+4.5rem)]">
-      <section class="flex max-h-[min(72dvh,36rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+      <section ref="messagePanel" class="flex max-h-[min(72dvh,36rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
         <header class="flex shrink-0 items-center justify-between border-b px-4 py-3 dark:border-zinc-700">
           <div class="text-sm font-semibold">消息通知</div>
           <button v-if="messages.length" class="text-xs text-indigo-600 dark:text-indigo-300" @click="markAllRead">全部已读</button>

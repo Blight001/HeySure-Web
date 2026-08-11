@@ -6,15 +6,15 @@ import LibraryMcpScopeEditor from '@/components/dashboard/modals/LibraryMcpScope
 
 const props = withDefaults(defineProps<{
   catalog?: LibraryMcpFullView | null
-  mode?: 'knowledge' | 'workshop'
-  workshopDeviceId?: string
+  mode?: 'knowledge' | 'device'
+  builtinDeviceId?: string
   boundAiConfigId?: number | null
   boundAiName?: string
   governanceMcpTools?: string[]
 }>(), {
   catalog: null,
   mode: 'knowledge',
-  workshopDeviceId: '',
+  builtinDeviceId: '',
   boundAiConfigId: null,
   boundAiName: '',
   governanceMcpTools: () => [],
@@ -46,14 +46,14 @@ const governanceTools = computed(() => flattenTools(props.catalog?.governance))
 
 <template>
   <LibraryMcpScopeEditor
-    v-if="mode === 'workshop' && workshopDeviceId && catalog"
+    v-if="mode === 'device' && builtinDeviceId && catalog"
     v-bind="$attrs"
     :catalog="catalog"
-    :workshop-device-id="workshopDeviceId"
+    :builtin-device-id="builtinDeviceId"
     :bound-ai-config-id="boundAiConfigId"
     :bound-ai-name="boundAiName"
     :governance-mcp-tools="governanceMcpTools"
-    :refresh-key="`${boundAiConfigId ?? ''}-${workshopDeviceId}`"
+    :refresh-key="`${boundAiConfigId ?? ''}-${builtinDeviceId}`"
     @governance-saved="tools => emit('governance-saved', tools)"
   />
   <CatalogMcpScopeEditor
