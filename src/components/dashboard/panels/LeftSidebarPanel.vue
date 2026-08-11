@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref, watch } from 'vue'
+import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import BrainCorePanel from './BrainCorePanel.vue'
 
@@ -72,6 +72,14 @@ const emit = defineEmits<{
 }>()
 
 const activeTab = ref<'brain' | 'knowledge' | 'workshop' | 'work'>('brain')
+const requestedWorkflowRunId = ref('')
+
+onMounted(() => {
+  const runId = new URLSearchParams(window.location.search).get('workflow_confirmation')?.trim() || ''
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(runId)) return
+  requestedWorkflowRunId.value = runId
+  activeTab.value = 'work'
+})
 
 watch(() => props.focusSignal, () => {
   if (props.focusedAiConfigId) activeTab.value = 'brain'
@@ -162,6 +170,7 @@ watch(() => props.deviceFocusSignal, () => {
           v-else-if="activeTab === 'work'"
           class="flex-1"
           :devices="connectedDevices"
+          :initial-run-id="requestedWorkflowRunId"
         />
         <WorkshopPanel
           v-else

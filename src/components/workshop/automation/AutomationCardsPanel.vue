@@ -19,6 +19,7 @@ import {
 import {
   cancelWorkflowRun,
   confirmWorkflowRun,
+  getWorkflowRun,
   listWorkflowConfirmations,
   listWorkflowRuns,
   listWorkflowRunSteps,
@@ -43,7 +44,7 @@ interface DeviceLike {
   capabilities?: string[]
 }
 
-const props = defineProps<{ devices: DeviceLike[] }>()
+const props = defineProps<{ devices: DeviceLike[]; initialRunId?: string }>()
 const { confirm } = useMessage()
 
 type StepEditor = {
@@ -808,6 +809,18 @@ const openPendingConfirmation = async (item: { run: WorkflowRun }) => {
   await loadRunDetail(item.run)
 }
 
+const focusRequestedRun = async (runId: string) => {
+  const safeRunId = runId.trim()
+  if (!safeRunId) return
+  try {
+    const run = runs.value.find(item => item.id === safeRunId) || await getWorkflowRun(safeRunId)
+    tab.value = 'runs'
+    await loadRunDetail(run)
+  } catch (cause: any) {
+    error.value = cause?.message || '待确认任务不存在或已无权访问'
+  }
+}
+
 const confirmationRemaining = (expiresAt: number) => {
   const seconds = Math.max(0, Math.ceil(expiresAt - confirmationClock.value / 1000))
   const minutes = Math.floor(seconds / 60)
@@ -942,6 +955,7 @@ const statusClass = (status: string) => {
 
 watch(publishDeviceIds, loadDeviceTools, { deep: true })
 watch(tab, value => { if (value === 'runs') loadRuns() })
+watch(() => props.initialRunId, value => { if (value) focusRequestedRun(value) })
 watch(editorOpen, value => { if (!value) editorFullscreen.value = false })
 watch(
   [() => ({ ...editor }), editorSteps, canvasPositions],
@@ -953,6 +967,7 @@ let timer: number | undefined
 onMounted(async () => {
   window.addEventListener('keydown', handleEditorShortcut)
   await Promise.all([loadCards(), loadRuns()])
+  if (props.initialRunId) await focusRequestedRun(props.initialRunId)
   timer = window.setInterval(() => {
     confirmationClock.value = Date.now()
     if (runs.value.some(run => activeStatuses.has(run.status))) loadRuns()
@@ -1066,7 +1081,7 @@ onBeforeUnmount(() => {
               </template>
               <template v-else>
                 <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">人工授权：{{ confirmation.risk_summary }}</div>
-                <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">剩余 {{ confirmationRemaining(confirmation.expires_at) }}；{{ confirmation.ai_config_id ? '负责 AI 已收到转达任务，网页也可直接处理' : '30 分钟内有效' }}</div>
+                <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">剩余 {{ confirmationRemaining(confirmation.expires_at) }}；手机与网页均可处理，原任务保持等待</div>
                 <div class="mt-1 flex gap-1"><button class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decide(true)">{{ confirmationBusyId === confirmation.id ? '提交中…' : '批准' }}</button><button class="rounded bg-rose-600 px-2 py-0.5 text-[10px] text-white disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decide(false)">拒绝</button></div>
               </template>
             </div>
