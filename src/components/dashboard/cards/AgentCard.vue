@@ -195,30 +195,13 @@ const titleHoverClass = computed(() => {
 const canControl = computed(() => typeof props.agent.aiConfigId === 'number')
 const isAssistantAdmin = computed(() => props.agent.aiRole === 'assistant_admin')
 const showRecentUserChatBadge = computed(() => !!props.agent.recentUserChatActive)
-const isRealtimeWorking = computed(() => {
-  if (props.agent.status !== 'working') return false
-  if (props.agent.userChatActive || props.agent.recentUserChatActive) return true
-  const taskStatus = String(props.agent.currentTaskStatus || '').toLowerCase()
-  return taskStatus === 'running' || props.agent.runtimeStatus === 'running'
-})
-const taskSnapshotDisplay = computed(() => {
-  const current = props.agent.taskCurrent || null
-  if (current) return { label: '当前任务', task: current, isCurrent: true }
-  const recent = props.agent.taskRecentCompleted || props.agent.taskCurrentOrRecent || null
-  return recent ? { label: '最近任务', task: recent, isCurrent: false } : null
-})
+const taskSnapshotDisplay = computed(() => props.agent.taskCurrent || null)
 const scheduledTaskSnapshots = computed(() => {
   const currentJobId = props.agent.taskCurrent?.jobId || ''
   const scheduled = Array.isArray(props.agent.taskScheduledTasks)
     ? props.agent.taskScheduledTasks
     : []
-  const normalized = scheduled.filter(task => task && task.jobId !== currentJobId)
-  if (normalized.length > 0) return normalized
-  const task = props.agent.taskCurrentOrRecent
-  if (!task || task.jobId === currentJobId) return []
-  if (String(task.triggerType || '').toLowerCase() !== 'schedule' && !task.scheduleEnabled) return []
-  const effectiveStatus = String(task.effectiveStatus || task.status || '').toLowerCase()
-  return ['queued', 'paused', 'scheduled', 'next'].includes(effectiveStatus) ? [task] : []
+  return scheduled.filter(task => task && task.jobId !== currentJobId)
 })
 const showTaskSnapshotBlock = computed(() => {
   if (props.agent.aiRole !== 'digital_member') return false
@@ -477,26 +460,6 @@ onUnmounted(() => {
   clearThinkingIdleTimer()
 })
 
-const taskStatusLabel = (raw?: string) => {
-  const status = String(raw || '').toLowerCase()
-  if (status === 'running') return '执行中'
-  if (status === 'queued' || status === 'paused') return '等待执行'
-  if (status === 'scheduled' || status === 'next') return '定时等待'
-  if (status === 'completed' || status === 'done' || status === 'finished') return '已完成'
-  if (status === 'error' || status === 'stopped' || status === 'cancelled') return '已终止'
-  return '待命'
-}
-
-const taskStatusClass = (raw?: string) => {
-  const status = String(raw || '').toLowerCase()
-  if (status === 'running') return 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300'
-  if (status === 'queued' || status === 'paused') return 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300'
-  if (status === 'scheduled' || status === 'next') return 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-500/50 dark:bg-sky-500/10 dark:text-sky-300'
-  if (status === 'completed' || status === 'done' || status === 'finished') return 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/50 dark:bg-blue-500/10 dark:text-blue-300'
-  if (status === 'error' || status === 'stopped' || status === 'cancelled') return 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/50 dark:bg-rose-500/10 dark:text-rose-300'
-  return 'border-zinc-300 bg-zinc-100/60 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300'
-}
-
 const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' | 'browser' } | null>(null)
 
 const DOUBLE_TAP_DELAY = 320
@@ -509,16 +472,13 @@ const isInteractiveCardTarget = (target: EventTarget | null) => {
 
 const formatTaskSchedule = (task?: AgentTaskSnapshot | null) => {
   if (!task) return ''
-  const parts: string[] = []
   if (task.scheduleAt) {
     const date = new Date(task.scheduleAt * 1000)
     if (!Number.isNaN(date.getTime())) {
-      parts.push(`时间: ${date.toLocaleString()}`)
+      return `下次执行：${date.toLocaleDateString()}`
     }
   }
-  if (task.scheduleLoopEnabled) parts.push('循环')
-  if (task.scheduleDurationMinutes) parts.push(`${task.scheduleDurationMinutes}分钟`)
-  return parts.join(' · ')
+  return ''
 }
 
 const onCardDblClick = (event: MouseEvent) => {
@@ -671,48 +631,38 @@ const onCardPointerUp = (event: PointerEvent) => {
     </div>
 
     <!-- 当前任务/行为 -->
-    <div class="bg-zinc-50/80 p-3 rounded-lg border border-zinc-100 text-xs text-zinc-700 min-h-[3.5rem] relative group dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-300">
-      <div class="absolute top-0 left-0 w-1 h-full rounded-l-lg" 
-        :class="isRealtimeWorking ? 'bg-indigo-400' : 'bg-zinc-300'">
-      </div>
-      <span class="font-semibold block mb-1 text-zinc-900 pl-2 dark:text-zinc-100">实时状态:</span>
-      <p class="pl-2 leading-relaxed text-zinc-600 dark:text-zinc-400">
+    <div class="min-h-[3.5rem] bg-transparent text-xs text-zinc-700 dark:text-zinc-300">
+      <span class="mb-1 block font-semibold text-zinc-900 dark:text-zinc-100">实时状态:</span>
+      <p class="leading-relaxed text-zinc-600 dark:text-zinc-400">
         {{ syncedMcpText }}
       </p>
       <div
         ref="thinkingViewportRef"
-        class="pl-2 leading-relaxed text-zinc-500 dark:text-zinc-400 mt-1 task-thinking-viewport"
+        class="mt-1 leading-relaxed text-zinc-500 dark:text-zinc-400 task-thinking-viewport"
         :title="thinkingPreview"
       >
         <p ref="thinkingTextRef" class="task-thinking-content">
           思考: {{ thinkingPreview }}
         </p>
       </div>
-      <div v-if="showTaskSnapshotBlock" class="mt-2 pl-2 space-y-1.5">
+      <div v-if="showTaskSnapshotBlock" class="mt-2 space-y-1.5">
         <div
           v-if="taskSnapshotDisplay"
           class="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white/80 dark:bg-zinc-900/50 p-2"
         >
-          <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mb-1">{{ taskSnapshotDisplay.label }}</div>
+          <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mb-1">当前任务</div>
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <div class="text-xs font-medium text-zinc-800 dark:text-zinc-100 truncate">{{ taskSnapshotDisplay.task.title }}</div>
+              <div class="text-xs font-medium text-zinc-800 dark:text-zinc-100 truncate">{{ taskSnapshotDisplay.title }}</div>
             </div>
             <button
               class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50 transition-colors dark:border-indigo-500/40 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
-              @click.stop="taskSnapshotDisplay.task.jobId
-                ? emit('show-task-detail', { agent, jobId: taskSnapshotDisplay.task.jobId })
+              @click.stop="taskSnapshotDisplay.jobId
+                ? emit('show-task-detail', { agent, jobId: taskSnapshotDisplay.jobId })
                 : emit('show-tasks', agent)"
             >
               对话详情
             </button>
-          </div>
-          <div
-            v-if="taskSnapshotDisplay.isCurrent"
-            class="mt-1.5 inline-flex text-[10px] px-1.5 py-0.5 rounded border"
-            :class="taskStatusClass(taskSnapshotDisplay.task.effectiveStatus || taskSnapshotDisplay.task.status)"
-          >
-            {{ taskStatusLabel(taskSnapshotDisplay.task.effectiveStatus || taskSnapshotDisplay.task.status) }}
           </div>
         </div>
 
@@ -722,19 +672,11 @@ const onCardPointerUp = (event: PointerEvent) => {
           class="rounded-md border border-zinc-200 dark:border-zinc-700 bg-white/80 dark:bg-zinc-900/50 p-2"
         >
           <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mb-1">定时任务</div>
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <div class="text-xs font-medium text-zinc-800 dark:text-zinc-100 truncate">{{ task.title }}</div>
-              <div class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
-                {{ formatTaskSchedule(task) || '定时任务' }}
-              </div>
+          <div class="min-w-0">
+            <div class="truncate text-xs font-medium text-zinc-800 dark:text-zinc-100">{{ task.title }}</div>
+            <div v-if="formatTaskSchedule(task)" class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              {{ formatTaskSchedule(task) }}
             </div>
-            <span
-              class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border"
-              :class="taskStatusClass(task.effectiveStatus || task.status)"
-            >
-              {{ taskStatusLabel(task.effectiveStatus || task.status) }}
-            </span>
           </div>
         </div>
       </div>
