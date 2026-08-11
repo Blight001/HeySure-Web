@@ -110,8 +110,6 @@ watch(() => props.focusSignal, () => {
 
     <div class="flex-1 min-h-0 overflow-hidden">
       <section v-if="isAllView" class="h-full min-h-0 min-w-0 flex flex-col">
-        <div class="mb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">全部 AI</div>
-
         <div v-if="allAgents.length === 0" class="p-4 text-xs text-zinc-400 text-center rounded border border-dashed border-zinc-200 dark:border-zinc-700 dark:text-zinc-500">
           暂无 AI 配置
         </div>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Agent } from '@/types'
 import ChatInterface from '@/components/chat/ChatInterface.vue'
+import ChatTokenUsageBar from '@/components/chat/ChatTokenUsageBar.vue'
 import TaskProgressPanel from '@/components/chat/TaskProgressPanel.vue'
 import MessageDialog from '@/components/common/MessageDialog.vue'
 
@@ -31,9 +32,19 @@ const panelRef = ref<HTMLElement | null>(null)
 const selectedFiles = ref<string[]>([])
 const currentSessionId = ref('')
 const taskPlanRefreshSignal = ref(0)
+const liveTokenUsed = ref(Math.max(0, Number(props.agent.tokensUsed) || 0))
 const dialogHost = computed(() => `chat-${props.windowId}`)
 const aiKind = computed<'assistant' | 'core'>(() =>
   props.agent.aiRole === 'assistant_admin' ? 'assistant' : 'core')
+
+watch(() => props.agent.tokensUsed, (value) => {
+  liveTokenUsed.value = Math.max(0, Number(value) || 0)
+})
+
+const onTotalTokensUpdate = (value: number) => {
+  liveTokenUsed.value = Math.max(0, Number(value) || 0)
+  emit('total-chat-tokens-update', value)
+}
 
 const MARGIN = 16
 const clampIntoViewport = () => {
@@ -128,7 +139,7 @@ onBeforeUnmount(() => {
     >
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <div
-          class="flex h-14 shrink-0 cursor-move select-none items-center gap-2 border-b border-zinc-200/60 bg-white/40 px-3 py-1 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40"
+          class="flex h-14 shrink-0 cursor-move select-none items-center gap-2 bg-white/40 px-3 py-1 backdrop-blur dark:bg-zinc-900/40"
           @pointerdown="startDrag"
         >
           <div class="min-w-0 flex-1">
@@ -146,6 +157,7 @@ onBeforeUnmount(() => {
           <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800" title="还原为主对话框" @click="emit('expand')">□</button>
           <button class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 hover:bg-rose-50 hover:text-rose-600 dark:text-zinc-400 dark:hover:bg-rose-950/30" title="关闭该对话" @click="emit('close')">✕</button>
         </div>
+        <ChatTokenUsageBar :used="liveTokenUsed" :limit="agent.tokenLimit" />
         <div class="min-h-0 flex-1 p-2">
           <ChatInterface
             :key="`floating-chat-${windowId}-${initialSessionId || 'blank'}`"
@@ -165,7 +177,7 @@ onBeforeUnmount(() => {
             @update:currentSessionId="currentSessionId = $event"
             @taskPlanRefresh="taskPlanRefreshSignal = $event"
             @open-settings="emit('open-settings')"
-            @totalChatTokensUpdate="emit('total-chat-tokens-update', $event)"
+            @totalChatTokensUpdate="onTotalTokensUpdate"
             @refreshFiles="emit('refresh-files')"
           />
         </div>

@@ -226,7 +226,7 @@ watch(() => props.modelValue, async () => {
         title="从本机上传图片或文件（也支持拖放、粘贴）"
         @click="fileInputRef?.click()"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.125 4.125 0 0 1-5.834-5.834l9.04-9.04a2.625 2.625 0 0 1 3.713 3.713l-9.04 9.04a1.125 1.125 0 0 1-1.591-1.591l8.293-8.293" />
         </svg>
       </button>

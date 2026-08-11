@@ -24,6 +24,7 @@ import type { Agent, McpRoleMeta, McpToolDefinition, User } from '@/types'
 import logoUrl from '@/assets/logo/HeySure.png'
 import AppIcon from '@/components/common/AppIcon.vue'
 import AmbientBackground from '@/components/common/AmbientBackground.vue'
+import ChatTokenUsageBar from '@/components/chat/ChatTokenUsageBar.vue'
 import { resolveAvatarUrl } from '@/utils/avatar'
 
 const SystemSettingsPanel = defineAsyncComponent(() => import('./panels/SystemSettingsPanel.vue'))
@@ -87,6 +88,7 @@ const agentChatZIndex = computed(() =>
 const chatInitialSessionId = ref('')
 const chatCurrentSessionId = ref('')
 const chatTaskPlanRefreshSignal = ref(0)
+const chatLiveTokenUsed = ref(0)
 type FloatingAgentChat = {
   windowId: string
   agent: Agent
@@ -272,6 +274,19 @@ const findFreshAgent = (agent: Agent | null) => {
     if (byConfig) return byConfig
   }
   return agents.value.find(item => item.id === agent.id) || agent
+}
+
+watch(
+  () => [chatTarget.value?.aiConfigId, chatTarget.value?.tokensUsed],
+  () => {
+    chatLiveTokenUsed.value = Math.max(0, Number(chatTarget.value?.tokensUsed) || 0)
+  },
+  { immediate: true },
+)
+
+const onMainChatTotalTokensUpdate = (value: number) => {
+  chatLiveTokenUsed.value = Math.max(0, Number(value) || 0)
+  syncChatTokensToAgents(value)
 }
 
 const syncOpenAgentReferences = () => {
@@ -1068,19 +1083,19 @@ onUnmounted(() => {
     <!-- 移动端底部 Tab 栏 -->
     <nav class="lg:hidden shrink-0 z-20 flex items-stretch border-t border-zinc-200/50 acrylic-modal !border-x-0 !border-b-0 rounded-none dark:border-zinc-800/50 pb-[env(safe-area-inset-bottom)]">
       <button
-        class="flex-1 flex flex-col items-center justify-center gap-0.5 py-3 active:bg-zinc-100 dark:active:bg-zinc-800 text-[11px] font-medium transition-colors touch-manipulation"
+        class="flex-1 flex flex-col items-center justify-center gap-0 py-1.5 active:bg-zinc-100 dark:active:bg-zinc-800 text-[10px] font-medium transition-colors touch-manipulation"
         :class="mobileTab === 'console' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-400'"
         @click="mobileTab = 'console'"
       >
-        <AppIcon name="brain" class="w-5 h-5" />
+        <AppIcon name="brain" class="w-4 h-4" />
         控制台
       </button>
       <button
-        class="flex-1 flex flex-col items-center justify-center gap-0.5 py-3 active:bg-zinc-100 dark:active:bg-zinc-800 text-[11px] font-medium transition-colors touch-manipulation"
+        class="flex-1 flex flex-col items-center justify-center gap-0 py-1.5 active:bg-zinc-100 dark:active:bg-zinc-800 text-[10px] font-medium transition-colors touch-manipulation"
         :class="mobileTab === 'arena' ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-400'"
         @click="activateArenaTab"
       >
-        <AppIcon name="globe" class="w-5 h-5" />
+        <AppIcon name="globe" class="w-4 h-4" />
         社会显示
       </button>
     </nav>
@@ -1163,7 +1178,7 @@ onUnmounted(() => {
               <span class="absolute left-0 top-0 z-[101] h-3 w-3 cursor-nw-resize touch-none" aria-hidden="true" @pointerdown="onChatResizePointerDown('nw', $event)" />
             </template>
             <div
-              class="flex h-14 shrink-0 items-center gap-2 border-b border-zinc-200/60 bg-white/40 px-2 py-1 backdrop-blur dark:border-zinc-700/60 dark:bg-zinc-900/40 sm:gap-3 sm:px-3"
+              class="flex h-14 shrink-0 items-center gap-2 bg-white/40 px-2 py-1 backdrop-blur dark:bg-zinc-900/40 sm:gap-3 sm:px-3"
               :class="chatFloating ? 'cursor-move select-none' : ''"
               @pointerdown="onChatHeaderPointerDown"
             >
@@ -1271,6 +1286,7 @@ onUnmounted(() => {
                 </button>
               </div>
             </div>
+            <ChatTokenUsageBar :used="chatLiveTokenUsed" :limit="chatTarget.tokenLimit" />
             <div class="flex-1 min-h-0 p-2">
               <ChatInterface
                 :key="`unified-chat-${chatTarget.aiConfigId}-${chatInitialSessionId || 'blank'}`"
@@ -1290,7 +1306,7 @@ onUnmounted(() => {
                 @update:currentSessionId="chatCurrentSessionId = $event"
                 @taskPlanRefresh="chatTaskPlanRefreshSignal = $event"
                 @open-settings="chatTarget && openAgentSettings(chatTarget)"
-                @totalChatTokensUpdate="syncChatTokensToAgents"
+                @totalChatTokensUpdate="onMainChatTotalTokensUpdate"
                 @refreshFiles="loadProjectContext"
               />
             </div>
