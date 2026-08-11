@@ -146,6 +146,7 @@ const selectedSteps = ref<WorkflowStepRun[]>([])
 const confirmations = ref<WorkflowConfirmation[]>([])
 const pendingConfirmations = ref<Array<{ run: WorkflowRun; confirmation: WorkflowConfirmation }>>([])
 const confirmationClock = ref(Date.now())
+const confirmationBusyId = ref('')
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
 
@@ -772,11 +773,34 @@ const cloneCurrentCard = async () => {
   }
 }
 
+const submitConfirmation = async (run: WorkflowRun, confirmationId: string, approved: boolean) => {
+  if (confirmationBusyId.value) return
+  resetMessages()
+  confirmationBusyId.value = confirmationId
+  try {
+    const updated = await confirmWorkflowRun(run.id, approved)
+    if (selectedRun.value?.id === run.id) selectedRun.value = updated
+    notice.value = approved ? '已批准，自动化将继续执行' : '已拒绝，本次自动化已停止'
+    await loadRuns()
+  } catch (cause: any) {
+    error.value = cause?.message || '提交确认失败'
+  } finally {
+    confirmationBusyId.value = ''
+  }
+}
+
 const decide = async (approved: boolean) => {
   if (!selectedRun.value) return
-  const updated = await confirmWorkflowRun(selectedRun.value.id, approved)
-  selectedRun.value = updated
-  await loadRuns()
+  const pending = confirmations.value.find(item => item.status === 'pending' && item.type !== 'ai_review')
+  if (!pending) return
+  await submitConfirmation(selectedRun.value, pending.id, approved)
+}
+
+const decidePending = async (
+  item: { run: WorkflowRun; confirmation: WorkflowConfirmation },
+  approved: boolean,
+) => {
+  await submitConfirmation(item.run, item.confirmation.id, approved)
 }
 
 const openPendingConfirmation = async (item: { run: WorkflowRun }) => {
@@ -951,18 +975,22 @@ onBeforeUnmount(() => {
     </header>
 
     <div v-if="pendingConfirmations.length" class="mt-3 space-y-2">
-      <button
+      <article
         v-for="item in pendingConfirmations"
         :key="item.confirmation.id"
-        class="flex w-full items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-100/90 px-3 py-2 text-left dark:border-amber-500/40 dark:bg-amber-500/15"
-        @click="openPendingConfirmation(item)"
+        class="flex w-full flex-col gap-2 rounded-lg border border-amber-300 bg-amber-100/90 px-3 py-2 text-left sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/40 dark:bg-amber-500/15"
       >
-        <span class="min-w-0">
+        <button type="button" class="min-w-0 flex-1 text-left" @click="openPendingConfirmation(item)">
           <span class="block truncate text-[11px] font-semibold text-amber-800 dark:text-amber-200">待人工确认：{{ cards.find(card => card.id === item.run.card_id)?.name || item.run.card_id }}</span>
-          <span class="mt-0.5 block text-[9px] text-amber-700/80 dark:text-amber-200/70">批准一次后自动执行本次固定版本；30 分钟内有效</span>
-        </span>
-        <span class="shrink-0 rounded bg-amber-600 px-2 py-1 text-[10px] font-medium text-white">{{ confirmationRemaining(item.confirmation.expires_at) }} · 查看</span>
-      </button>
+          <span class="mt-0.5 block text-[9px] text-amber-700/80 dark:text-amber-200/70">{{ item.confirmation.risk_summary }}</span>
+        </button>
+        <div class="flex shrink-0 items-center gap-1.5">
+          <span class="mr-1 text-[10px] font-medium text-amber-700 dark:text-amber-200">剩余 {{ confirmationRemaining(item.confirmation.expires_at) }}</span>
+          <button type="button" class="rounded border border-amber-400 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200 disabled:cursor-wait disabled:opacity-50 dark:border-amber-500/50 dark:text-amber-200 dark:hover:bg-amber-500/20" :disabled="Boolean(confirmationBusyId)" @click="openPendingConfirmation(item)">详情</button>
+          <button type="button" class="rounded bg-rose-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decidePending(item, false)">拒绝</button>
+          <button type="button" class="rounded bg-emerald-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decidePending(item, true)">{{ confirmationBusyId === item.confirmation.id ? '提交中…' : '批准' }}</button>
+        </div>
+      </article>
     </div>
 
     <div class="mt-3">
@@ -1039,7 +1067,7 @@ onBeforeUnmount(() => {
               <template v-else>
                 <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">人工授权：{{ confirmation.risk_summary }}</div>
                 <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">剩余 {{ confirmationRemaining(confirmation.expires_at) }}；{{ confirmation.ai_config_id ? '负责 AI 已收到转达任务，网页也可直接处理' : '30 分钟内有效' }}</div>
-                <div class="mt-1 flex gap-1"><button class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white" @click="decide(true)">批准</button><button class="rounded bg-rose-600 px-2 py-0.5 text-[10px] text-white" @click="decide(false)">拒绝</button></div>
+                <div class="mt-1 flex gap-1"><button class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decide(true)">{{ confirmationBusyId === confirmation.id ? '提交中…' : '批准' }}</button><button class="rounded bg-rose-600 px-2 py-0.5 text-[10px] text-white disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decide(false)">拒绝</button></div>
               </template>
             </div>
             <div class="mt-3 text-[10px] font-semibold text-zinc-500">步骤</div>
