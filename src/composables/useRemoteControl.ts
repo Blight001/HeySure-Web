@@ -33,6 +33,7 @@ const connectorSocketUrl = () => {
 
 export type RcMode = 'android' | 'desktop' | 'browser'
 export type RcMouseButton = 'left' | 'right' | 'middle'
+export type RcQualityPreset = 'smooth' | 'balanced' | 'clear'
 
 /**
  * One input event sent over the control DataChannel. Both device families read
@@ -102,6 +103,7 @@ export const useRemoteControl = () => {
   let iceServers: IceServer[] = DEFAULT_ICE_SERVERS
   let controlChannel: RTCDataChannel | null = null
   let sessionId = ''
+  let requestedQualityPreset: RcQualityPreset = 'balanced'
   // ICE that arrives before setRemoteDescription must be buffered.
   const pendingIce: RTCIceCandidateInit[] = []
 
@@ -127,7 +129,10 @@ export const useRemoteControl = () => {
       if (event.channel.label !== 'control') return
       controlChannel = event.channel
       controlReady.value = controlChannel.readyState === 'open'
-      controlChannel.onopen = () => { controlReady.value = true }
+      controlChannel.onopen = () => {
+        controlReady.value = true
+        controlChannel?.send(JSON.stringify({ kind: 'quality', preset: requestedQualityPreset }))
+      }
       controlChannel.onclose = () => { controlReady.value = false }
       // Device → controller messages (browser-extension tab/address state).
       controlChannel.onmessage = (msg) => {
@@ -177,14 +182,19 @@ export const useRemoteControl = () => {
   }
 
   /** Open a control session for ``deviceId``. */
-  const start = (deviceId: string) => {
+  const start = (deviceId: string, options?: { qualityPreset?: RcQualityPreset }) => {
     if (status.value === 'connecting' || status.value === 'streaming') return
+    requestedQualityPreset = options?.qualityPreset || 'balanced'
     status.value = 'connecting'
     errorMessage.value = ''
     socket = io(connectorSocketUrl(), { transports: ['websocket', 'polling'] })
 
     socket.on('connect', () => {
-      socket?.emit('rc:start', { deviceId, token: getAuthToken() })
+      socket?.emit('rc:start', {
+        deviceId,
+        token: getAuthToken(),
+        qualityPreset: requestedQualityPreset,
+      })
     })
     socket.on('connect_error', () => fail('信令通道连接失败'))
     socket.on('rc:started', (data: { sessionId: string }) => {
@@ -220,6 +230,14 @@ export const useRemoteControl = () => {
   const sendBrowserCommand = (cmd: RcBrowserCommand) => {
     if (controlChannel?.readyState === 'open') {
       controlChannel.send(JSON.stringify({ kind: 'browser', ...cmd }))
+    }
+  }
+
+  /** Change Windows desktop capture/encoder trade-offs without reconnecting. */
+  const setQualityPreset = (preset: RcQualityPreset) => {
+    requestedQualityPreset = preset
+    if (controlChannel?.readyState === 'open') {
+      controlChannel.send(JSON.stringify({ kind: 'quality', preset }))
     }
   }
 
@@ -268,5 +286,6 @@ export const useRemoteControl = () => {
     stop,
     sendInput,
     sendBrowserCommand,
+    setQualityPreset,
   }
 }

@@ -23,6 +23,8 @@ export interface WorkflowCard {
   status: WorkflowCardStatus
   risk_level: string
   tags: string[]
+  access_scope: 'all' | 'owner' | 'selected'
+  allowed_ai_config_ids: number[]
   definition: WorkflowDefinition
   latest_version_id: string | null
   created_at: number
@@ -46,6 +48,8 @@ export interface WorkflowCardInput {
   name: string
   description?: string
   tags?: string[]
+  access_scope?: 'all' | 'owner' | 'selected'
+  allowed_ai_config_ids?: number[]
   risk_level?: string
   definition?: Record<string, any>
   device_id?: string

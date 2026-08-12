@@ -182,6 +182,7 @@ watch(() => props.deviceFocusSignal, () => {
           v-else-if="activeTab === 'work'"
           class="flex-1"
           :devices="connectedDevices"
+          :agents="activeAgents"
           :initial-run-id="requestedWorkflowRunId"
         />
         <WorkshopPanel

@@ -44,7 +44,15 @@ interface DeviceLike {
   capabilities?: string[]
 }
 
-const props = defineProps<{ devices: DeviceLike[]; initialRunId?: string }>()
+interface AiMemberLike {
+  name: string
+  aiConfigId?: number
+  aiRole?: string
+  digitalMemberRole?: string
+  enabled?: boolean
+}
+
+const props = defineProps<{ devices: DeviceLike[]; agents: AiMemberLike[]; initialRunId?: string }>()
 const { confirm } = useMessage()
 
 type StepEditor = {
@@ -116,6 +124,8 @@ const editor = reactive({
   name: '',
   description: '',
   tags: '',
+  accessScope: 'all' as 'all' | 'owner' | 'selected',
+  allowedAiConfigIds: [] as number[],
   riskLevel: 'read_only',
   inputSchemaText: '{\n  "type": "object",\n  "properties": {},\n  "required": []\n}',
   outputText: '{}',
@@ -163,6 +173,35 @@ const selectedContractDeviceLabel = computed(() => {
   })
   return labels.length <= 2 ? labels.join('、') : `${labels.slice(0, 2).join('、')} 等 ${labels.length} 台`
 })
+const ownerTags = ref<string[]>([])
+const aiMemberOptions = computed(() => (props.agents || [])
+  .filter(agent => Number.isFinite(Number(agent.aiConfigId)) && Number(agent.aiConfigId) > 0)
+  .map(agent => ({
+    id: Number(agent.aiConfigId),
+    name: agent.name,
+    role: agent.aiRole === 'assistant_admin'
+      ? '辅助管理员'
+      : agent.digitalMemberRole === 'manager' ? '管理员' : '普通成员',
+    enabled: agent.enabled !== false,
+  }))
+  .sort((first, second) => first.name.localeCompare(second.name, 'zh-CN')))
+const accessMemberOptions = computed(() => {
+  const options = [...aiMemberOptions.value]
+  const known = new Set(options.map(member => member.id))
+  editor.allowedAiConfigIds.forEach(id => {
+    if (!known.has(id)) options.push({ id, name: `成员 ${id}`, role: '已删除', enabled: false })
+  })
+  return options
+})
+const ownerIds = computed(() => ownerTags.value
+  .map(tag => Number(tag.slice('ai_owner:'.length)))
+  .filter(id => Number.isFinite(id) && id > 0))
+const accessScopeSummary = (card: WorkflowCard) => {
+  if (card.access_scope === 'all') return '全员可调用'
+  if (card.access_scope === 'selected') return `${(card.allowed_ai_config_ids || []).length} 位成员可调用`
+  return '仅创建者可调用'
+}
+const visibleCardTags = (card: WorkflowCard) => card.tags.filter(tag => !tag.toLowerCase().startsWith('ai_owner:'))
 
 const toolDefsForStep = (row: StepEditor) => deviceScopes.value[row.deviceId]?.toolDefs || {}
 const toolNamesForStep = (row: StepEditor) => Object.keys(toolDefsForStep(row)).sort()
@@ -301,6 +340,9 @@ const openNew = () => {
   editor.name = '新自动化卡片'
   editor.description = ''
   editor.tags = ''
+  editor.accessScope = 'all'
+  editor.allowedAiConfigIds = []
+  ownerTags.value = []
   editor.riskLevel = 'read_only'
   editor.inputSchemaText = '{\n  "type": "object",\n  "properties": {},\n  "required": []\n}'
   editor.outputText = '{}'
@@ -329,7 +371,10 @@ const openEdit = async (card: WorkflowCard) => {
   editingId.value = full.id
   editor.name = full.name
   editor.description = full.description
-  editor.tags = full.tags.join(', ')
+  ownerTags.value = full.tags.filter(tag => tag.toLowerCase().startsWith('ai_owner:'))
+  editor.tags = full.tags.filter(tag => !tag.toLowerCase().startsWith('ai_owner:')).join(', ')
+  editor.accessScope = full.access_scope || (ownerTags.value.length ? 'owner' : 'all')
+  editor.allowedAiConfigIds = [...(full.allowed_ai_config_ids || [])]
   editor.riskLevel = full.risk_level
   editor.inputSchemaText = JSON.stringify(full.definition.inputSchema || { type: 'object' }, null, 2)
   editor.outputText = JSON.stringify(full.definition.output || {}, null, 2)
@@ -640,7 +685,12 @@ const saveCard = async () => {
     const wasExisting = Boolean(editingId.value)
     const body = {
       name: editor.name.trim(), description: editor.description.trim(),
-      tags: editor.tags.split(',').map(item => item.trim()).filter(Boolean),
+      tags: [
+        ...editor.tags.split(',').map(item => item.trim()).filter(Boolean),
+        ...ownerTags.value,
+      ],
+      access_scope: editor.accessScope,
+      allowed_ai_config_ids: editor.accessScope === 'selected' ? [...editor.allowedAiConfigIds] : [],
       risk_level: editor.riskLevel, definition: buildDefinition(),
       device_ids: [...publishDeviceIds.value],
     }
@@ -893,6 +943,8 @@ const importFile = async (event: Event) => {
       name: String(payload.name || file.name.replace(/\.json$/i, '')),
       description: String(payload.description || ''),
       tags: Array.isArray(payload.tags) ? payload.tags : [],
+      access_scope: ['all', 'owner', 'selected'].includes(payload.access_scope) ? payload.access_scope : 'all',
+      allowed_ai_config_ids: Array.isArray(payload.allowed_ai_config_ids) ? payload.allowed_ai_config_ids : [],
       risk_level: String(payload.risk_level || 'read_only'),
       definition: payload.definition || {},
     })
@@ -1051,8 +1103,9 @@ onBeforeUnmount(() => {
             <span class="shrink-0 rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(card.status)">{{ statusLabel(card.status) }}</span>
           </div>
           <div class="mt-2 flex flex-wrap gap-1">
-            <span v-for="tag in card.tags" :key="tag" class="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-800">{{ tag }}</span>
+            <span v-for="tag in visibleCardTags(card)" :key="tag" class="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-800">{{ tag }}</span>
             <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-800">{{ card.risk_level }}</span>
+            <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">{{ accessScopeSummary(card) }}</span>
           </div>
           <div class="mt-1 text-[9px] text-zinc-400">成功率 {{ cardRunSummary(card.id).rate }} · 最近运行 {{ cardRunSummary(card.id).latest }}</div>
           <div class="mt-2 flex flex-wrap gap-1 text-[10px]">
@@ -1135,6 +1188,24 @@ onBeforeUnmount(() => {
             <label class="text-[10px] text-zinc-500">最大推进次数<input v-model.number="editor.maxTransitions" type="number" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
             <label class="md:col-span-2 text-[10px] text-zinc-500">输入 JSON Schema<textarea v-model="editor.inputSchemaText" rows="6" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
             <label class="md:col-span-2 text-[10px] text-zinc-500">输出映射<textarea v-model="editor.outputText" rows="6" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
+          </div>
+          <div class="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 dark:border-indigo-500/20 dark:bg-indigo-500/5">
+            <div class="text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">允许调用的 AI 成员</div>
+            <div class="mt-2 flex flex-wrap gap-3 text-[10px] text-zinc-600 dark:text-zinc-300">
+              <label class="flex items-center gap-1"><input v-model="editor.accessScope" type="radio" value="all" /> 所有成员</label>
+              <label class="flex items-center gap-1" :class="{ 'opacity-40': ownerIds.length === 0 }"><input v-model="editor.accessScope" type="radio" value="owner" :disabled="ownerIds.length === 0" /> 仅创建者</label>
+              <label class="flex items-center gap-1"><input v-model="editor.accessScope" type="radio" value="selected" /> 指定成员</label>
+            </div>
+            <div v-if="editor.accessScope === 'selected'" class="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              <label v-for="member in accessMemberOptions" :key="member.id" class="flex items-center gap-2 rounded border bg-white/70 px-2 py-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-900/60">
+                <input v-model="editor.allowedAiConfigIds" type="checkbox" :value="member.id" />
+                <span class="min-w-0 flex-1 truncate">{{ member.name }}</span>
+                <span class="shrink-0 text-[9px] text-zinc-400">{{ member.role }}{{ member.enabled ? '' : ' · 已停用' }}</span>
+              </label>
+              <div v-if="accessMemberOptions.length === 0" class="text-[10px] text-zinc-400">暂无可选 AI 成员。</div>
+            </div>
+            <div v-else-if="editor.accessScope === 'owner'" class="mt-2 text-[10px] text-zinc-400">创建者：{{ ownerIds.map(id => aiMemberOptions.find(member => member.id === id)?.name || `成员 ${id}`).join('、') }}</div>
+            <div class="mt-2 text-[9px] text-zinc-400">管理员或辅助管理员创建时默认全员可调用；普通成员创建时默认仅自己可调用。</div>
           </div>
         </details>
 

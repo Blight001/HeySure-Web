@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRemoteControl, type RcInput, type RcMode, type RcMouseButton } from '@/composables/useRemoteControl'
+import { useRemoteControl, type RcInput, type RcMode, type RcMouseButton, type RcQualityPreset } from '@/composables/useRemoteControl'
 
 const props = withDefaults(defineProps<{
   deviceId: string
@@ -38,7 +38,18 @@ const {
   stop,
   sendInput,
   sendBrowserCommand,
+  setQualityPreset,
 } = useRemoteControl()
+
+const QUALITY_STORAGE_KEY = 'heysure.remoteControl.desktopQuality'
+const savedQuality = window.localStorage.getItem(QUALITY_STORAGE_KEY)
+const qualityPreset = ref<RcQualityPreset>(
+  savedQuality === 'smooth' || savedQuality === 'clear' ? savedQuality : 'balanced',
+)
+watch(qualityPreset, (preset) => {
+  window.localStorage.setItem(QUALITY_STORAGE_KEY, preset)
+  setQualityPreset(preset)
+})
 
 // ── Edge-style browser chrome (browser-extension mode only) ──────────────────
 const isBrowser = computed(() => props.mode === 'browser')
@@ -610,7 +621,7 @@ onMounted(() => {
   // (and thus the re-fit watcher) only react when the dimensions truly change.
   dimensionPoll = window.setInterval(onVideoResize, 500)
   if (videoRef.value && remoteStream.value) videoRef.value.srcObject = remoteStream.value
-  if (props.deviceId) start(props.deviceId)
+  if (props.deviceId) start(props.deviceId, { qualityPreset: qualityPreset.value })
 })
 
 onBeforeUnmount(() => {
@@ -650,6 +661,18 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="flex items-center gap-1 shrink-0">
+            <label v-if="props.mode === 'desktop'" class="mr-1 flex items-center gap-1.5 text-xs text-zinc-400">
+              <span class="hidden sm:inline">画面</span>
+              <select
+                v-model="qualityPreset"
+                class="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500"
+                title="流畅度与画质；切换后立即生效"
+              >
+                <option value="smooth">流畅优先</option>
+                <option value="balanced">平衡</option>
+                <option value="clear">清晰优先</option>
+              </select>
+            </label>
             <button
               class="grid h-8 w-8 place-items-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
               :title="isMaximized ? '退出全屏' : '全屏控制'"
