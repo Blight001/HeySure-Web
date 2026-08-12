@@ -225,6 +225,8 @@ let runPollEpoch = 0
 let sessionSyncPollEpoch = 0
 let lastRealtimeTokenSyncAt = 0
 let lastExternalRunCheckAt = 0
+let runHistorySyncRequested = false
+let runHistorySyncPromise: Promise<void> | null = null
 const chatScrollRef = ref<HTMLElement | null>(null)
 const chatRootRef = ref<HTMLElement | null>(null)
 let visualViewportFrame: number | null = null
@@ -1021,6 +1023,43 @@ const clearLiveAssistantView = () => {
   stopLiveTypingLoop()
 }
 
+// The worker persists an assistant turn and then clears the live snapshot before
+// entering waiting_mcp. Keep the already-visible text anchored in the message
+// list during that short persistence/history-fetch gap; otherwise the live
+// bubble disappears and reappears above the MCP card, which looks like flicker.
+const pinCompletedLiveSegment = (text: string, reasoning: string) => {
+  const content = String(text || '')
+  if (!content.trim() || hasAssistantMessageWithContent(content)) return
+  const parsed = parseChatResponseInline(content)
+  chatMessages.value.push({
+    role: 'assistant',
+    content,
+    created_at: Date.now(),
+    display_text: parsed.displayText,
+    think: String(reasoning || '').trim() || parsed.think,
+    blocks: parsed.blocks,
+    inlineContent: parsed.inlineContent,
+  })
+}
+
+// Several live boundary signals can arrive in the same frame (text reset,
+// phase change, tool change). Coalesce them into one history request. If another
+// boundary arrives while that request is in flight, perform exactly one follow-up
+// pass so no persisted MCP result is missed.
+const requestRunHistorySync = () => {
+  runHistorySyncRequested = true
+  if (runHistorySyncPromise) return
+  runHistorySyncPromise = (async () => {
+    await Promise.resolve()
+    while (runHistorySyncRequested) {
+      runHistorySyncRequested = false
+      await fetchRunHistoryIncrementalOnce()
+    }
+  })().finally(() => {
+    runHistorySyncPromise = null
+  })
+}
+
 const updateStickFromScroll = () => {
   const el = chatScrollRef.value
   if (!el) return
@@ -1129,12 +1168,16 @@ const handleStreamLive = (payload: RunLivePayload) => {
   const hadContentBefore = !!(prevLiveTextForBoundary || prevLiveReasoningForBoundary)
   const prevPhase = prevRunPhaseForBoundary
 
-  liveThinkingText.value = String(payload.reasoning || '')
-  updateLiveAssistantView(String(payload.text || ''))
-  liveCursor.value = String(payload.text || '').length
-
   const currText = String(payload.text || '')
   const currReason = String(payload.reasoning || '')
+
+  if (hadContentBefore && !currText && !currReason) {
+    pinCompletedLiveSegment(prevLiveTextForBoundary, prevLiveReasoningForBoundary)
+  }
+
+  liveThinkingText.value = currReason
+  updateLiveAssistantView(currText)
+  liveCursor.value = currText.length
 
   // NEW: turn-boundary signals so 待发送内容 (assistant msg with think/content)
   // is pulled into history list right after deep think ends or after tool call ends,
@@ -1142,18 +1185,18 @@ const handleStreamLive = (payload: RunLivePayload) => {
   if (hadContentBefore && !currText && !currReason) {
     // Previous generation turn just ended (backend does _set_run_live_text("") +
     // reasoning reset after each save of assistant). Fetch the persisted turn.
-    void fetchRunHistoryIncrementalOnce()
+    requestRunHistorySync()
   }
   if (prevPhase === 'waiting_mcp' && incomingPhase === 'generating') {
     // Tool call(s) just finished; next generation is starting. Fetch ensures
     // tool bubbles + prepares for the post-tool content.
-    void fetchRunHistoryIncrementalOnce()
+    requestRunHistorySync()
   }
 
   // Tool boundary (and now also general turn boundaries via reset/phase) trigger
   // incremental fetch so 待发送内容 (assistant replies + 深度思考) appears right
   // after tool ends or deep-thinking phase ends, not only after full run.
-  if (toolChanged) void fetchRunHistoryIncrementalOnce()
+  if (toolChanged) requestRunHistorySync()
 
   prevLiveTextForBoundary = currText
   prevLiveReasoningForBoundary = currReason
@@ -1973,11 +2016,16 @@ const pollRunLive = async (epoch: number) => {
     const prevPhase = prevRunPhaseForBoundary
 
     const delta = String(run.live_delta || '')
-    liveThinkingText.value = String(run.live_reasoning || '')
+    const currText = String(run.live_text || '')
+    const currReason = String(run.live_reasoning || '')
+    if (hadContentBefore && !currText && !currReason) {
+      pinCompletedLiveSegment(prevLiveTextForBoundary, prevLiveReasoningForBoundary)
+    }
+    liveThinkingText.value = currReason
     if (delta) {
       updateLiveAssistantView(liveTargetText.value + delta)
     } else {
-      updateLiveAssistantView(String(run.live_text || ''))
+      updateLiveAssistantView(currText)
     }
     if (Number.isFinite(Number(run.live_len))) {
       liveCursor.value = Number(run.live_len)
@@ -1985,16 +2033,14 @@ const pollRunLive = async (epoch: number) => {
       liveCursor.value = liveTargetText.value.length
     }
 
-    const currText = String(run.live_text || '')
-    const currReason = String(run.live_reasoning || '')
     const currPhaseForPoll = incomingPhase
 
     // Mirror boundary detection for HTTP poll fallback path.
     if (hadContentBefore && !currText && !currReason) {
-      void fetchRunHistoryIncrementalOnce()
+      requestRunHistorySync()
     }
     if (prevPhase === 'waiting_mcp' && currPhaseForPoll === 'generating') {
-      void fetchRunHistoryIncrementalOnce()
+      requestRunHistorySync()
     }
 
     prevLiveTextForBoundary = currText
