@@ -119,6 +119,8 @@ const cardStatus = ref('')
 const editorOpen = ref(false)
 const editorZIndex = usePopupZIndex(editorOpen)
 const editorFullscreen = ref(false)
+const cardSettingsOpen = ref(false)
+const deviceSettingsOpen = ref(false)
 const editingId = ref('')
 const editor = reactive({
   name: '',
@@ -148,6 +150,25 @@ const comparisonZIndex = usePopupZIndex(comparisonOpen)
 const comparisonDraft = ref<WorkflowDefinition | null>(null)
 let stepClipboard: StepClipboard | null = null
 let deviceToolsRequestId = 0
+let cardSettingsSnapshot = ''
+let deviceSettingsSnapshot: string[] = []
+
+const openCardSettings = () => {
+  cardSettingsSnapshot = JSON.stringify({ ...editor, allowedAiConfigIds: [...editor.allowedAiConfigIds] })
+  cardSettingsOpen.value = true
+}
+const closeCardSettings = (save: boolean) => {
+  if (!save && cardSettingsSnapshot) Object.assign(editor, JSON.parse(cardSettingsSnapshot))
+  cardSettingsOpen.value = false
+}
+const openDeviceSettings = () => {
+  deviceSettingsSnapshot = [...publishDeviceIds.value]
+  deviceSettingsOpen.value = true
+}
+const closeDeviceSettings = (save: boolean) => {
+  if (!save) publishDeviceIds.value = [...deviceSettingsSnapshot]
+  deviceSettingsOpen.value = false
+}
 
 const runModalCard = ref<WorkflowCard | null>(null)
 const runDeviceId = ref('')
@@ -165,14 +186,6 @@ const contractDevices = computed(() => [...(props.devices || [])].sort((first, s
   if (onlineOrder) return onlineOrder
   return String(first.name || first.id).localeCompare(String(second.name || second.id), 'zh-CN')
 }))
-const selectedContractDeviceLabel = computed(() => {
-  if (!publishDeviceIds.value.length) return '请选择契约设备'
-  const labels = publishDeviceIds.value.map(id => {
-    const device = props.devices.find(item => item.id === id)
-    return device?.name || id
-  })
-  return labels.length <= 2 ? labels.join('、') : `${labels.slice(0, 2).join('、')} 等 ${labels.length} 台`
-})
 const ownerTags = ref<string[]>([])
 const aiMemberOptions = computed(() => (props.agents || [])
   .filter(agent => Number.isFinite(Number(agent.aiConfigId)) && Number(agent.aiConfigId) > 0)
@@ -680,6 +693,13 @@ const saveCard = async () => {
     error.value = '请至少选择一台用于冻结工具契约的设备'
     return
   }
+  const unboundStep = editorSteps.value.find(step => step.type === 'mcp'
+    && (!step.deviceId || !publishDeviceIds.value.includes(step.deviceId) || !step.tool))
+  if (unboundStep) {
+    selectedStepId.value = unboundStep.id
+    error.value = `设备 MCP 节点“${unboundStep.title || unboundStep.id}”必须选择契约设备及该设备的工具`
+    return
+  }
   busy.value = true
   try {
     const wasExisting = Boolean(editingId.value)
@@ -1176,8 +1196,9 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
         <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
-        <details class="automation-editor-section mt-3 rounded-lg border p-3">
-          <summary class="cursor-pointer text-xs font-semibold text-zinc-700 dark:text-zinc-200">卡片设置</summary>
+        <div v-if="cardSettingsOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/55 p-4" @click.self="closeCardSettings(false)">
+        <section class="automation-editor-section max-h-[85vh] w-full max-w-5xl overflow-auto rounded-xl border p-4 shadow-2xl">
+          <header class="flex items-center justify-between gap-3"><div class="text-sm font-semibold">卡片设置</div><button class="rounded border px-2 py-1 text-xs" @click="closeCardSettings(false)">✕</button></header>
           <div class="mt-3 grid gap-2 md:grid-cols-2 lg:grid-cols-4">
             <label class="text-[10px] text-zinc-500">名称<input v-model="editor.name" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
             <label class="text-[10px] text-zinc-500">标签（逗号分隔）<input v-model="editor.tags" class="mt-1 w-full rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950" /></label>
@@ -1207,13 +1228,13 @@ onBeforeUnmount(() => {
             <div v-else-if="editor.accessScope === 'owner'" class="mt-2 text-[10px] text-zinc-400">创建者：{{ ownerIds.map(id => aiMemberOptions.find(member => member.id === id)?.name || `成员 ${id}`).join('、') }}</div>
             <div class="mt-2 text-[9px] text-zinc-400">管理员或辅助管理员创建时默认全员可调用；普通成员创建时默认仅自己可调用。</div>
           </div>
-        </details>
+          <footer class="mt-4 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="closeCardSettings(false)">取消</button><button class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="closeCardSettings(true)">保存设置</button></footer>
+        </section>
+        </div>
 
-        <details class="contract-device-select relative mt-3 rounded-lg border">
-          <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs marker:hidden">
-            <span>契约设备（多选）</span>
-            <span class="min-w-0 truncate text-right font-medium text-indigo-600 dark:text-indigo-300">{{ selectedContractDeviceLabel }}</span>
-          </summary>
+        <div v-if="deviceSettingsOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/55 p-4" @click.self="closeDeviceSettings(false)">
+        <section class="contract-device-select w-full max-w-3xl rounded-xl border shadow-2xl">
+          <header class="flex items-center justify-between gap-3 px-3 py-2.5 text-xs"><span class="font-semibold">契约设备（多选）</span><button class="rounded border px-2 py-1" @click="closeDeviceSettings(false)">✕</button></header>
           <div class="contract-device-options border-t p-2.5">
             <div class="grid max-h-48 gap-1 overflow-y-auto overscroll-contain pr-1 custom-scrollbar sm:grid-cols-2 lg:grid-cols-3">
               <label
@@ -1240,9 +1261,11 @@ onBeforeUnmount(() => {
               每个 MCP 节点可分别绑定一台已选设备及其工具。
             </div>
           </div>
-        </details>
+          <footer class="flex justify-end gap-2 border-t p-3"><button class="rounded border px-3 py-1.5 text-xs" @click="closeDeviceSettings(false)">取消</button><button class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="closeDeviceSettings(true)">保存设置</button></footer>
+        </section>
+        </div>
 
-        <div class="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div class="mt-3">
           <WorkflowCanvasEditor
             :steps="editorSteps"
             :start-step-id="editor.startStepId"
@@ -1254,9 +1277,14 @@ onBeforeUnmount(() => {
             @disconnect="disconnectStep"
             @set-start="editor.startStepId = $event"
             @update:positions="canvasPositions = $event"
-          />
+          >
+          <template #bottom-left>
+            <button class="canvas-overlay-button" type="button" @click="openCardSettings">卡片设置</button>
+            <button class="canvas-overlay-button" type="button" @click="openDeviceSettings">契约设备 · {{ publishDeviceIds.length }}</button>
+          </template>
+          <template #inspector>
 
-          <aside class="automation-editor-inspector max-h-[680px] overflow-auto rounded-xl border p-3">
+          <aside class="automation-editor-inspector">
             <template v-if="selectedStep">
               <div class="flex items-center justify-between gap-2">
                 <div class="automation-editor-subtitle text-xs font-semibold">节点属性</div>
@@ -1282,8 +1310,9 @@ onBeforeUnmount(() => {
                 <div v-else class="rounded-lg bg-emerald-50 p-3 text-[10px] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">结束节点会生成卡片输出并终止运行。</div>
               </div>
             </template>
-            <div v-else class="grid min-h-48 place-items-center text-center text-xs text-zinc-400">点击画布节点<br />在这里编辑属性</div>
           </aside>
+          </template>
+          </WorkflowCanvasEditor>
         </div>
 
         <div v-if="versions.length" class="mt-3"><div class="text-[10px] font-semibold text-zinc-500">历史版本与当前未保存修改</div><div class="mt-1 flex flex-wrap gap-1"><button v-for="version in versions" :key="version.id" class="rounded border px-2 py-0.5 text-[9px]" @click="previewVersion(version)">画布对比 v{{ version.version_number }}</button></div></div>
@@ -1312,6 +1341,18 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.canvas-overlay-button {
+  min-height: 34px;
+  border: 1px solid #475569;
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: #e2e8f0;
+  background: rgb(30 41 59 / 0.96);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.25);
+}
+.canvas-overlay-button:hover { border-color: #818cf8; color: #c7d2fe; }
 .automation-editor-modal {
   --editor-surface: #f8fafc;
   --editor-panel: #eef2f7;

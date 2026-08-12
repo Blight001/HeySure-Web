@@ -282,6 +282,15 @@ const startPan = (event: PointerEvent) => {
 const clampZoom = (next: number) => Math.min(1.8, Math.max(0.5, next))
 const setZoom = (next: number) => { scale.value = Math.round(clampZoom(next) * 10) / 10 }
 const resetView = () => { scale.value = 1; offset.value = { x: 24, y: 24 } }
+const inspectorStyle = computed(() => {
+  const selected = props.selectedStepId ? positionFor(props.selectedStepId) : null
+  if (!selected) return { display: 'none' }
+  const nodeCenter = offset.value.x + (selected.x + NODE_WIDTH / 2) * scale.value
+  const canvasWidth = canvasRef.value?.clientWidth || 1000
+  return nodeCenter < canvasWidth / 2
+    ? { right: '12px', top: '12px' }
+    : { left: '12px', top: '12px' }
+})
 
 const touchClientPoint = (touch: Touch): WorkflowNodePosition => ({ x: touch.clientX, y: touch.clientY })
 const touchDistance = (first: Touch, second: Touch) => Math.hypot(
@@ -569,6 +578,12 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
         </article>
       </div>
       <div v-if="steps.length === 0" class="absolute inset-0 grid place-items-center text-xs text-slate-400">从上方添加第一个流程节点</div>
+      <div v-if="!readonly" class="canvas-bottom-left" @pointerdown.stop @touchstart.stop @touchmove.stop @touchend.stop>
+        <slot name="bottom-left" />
+      </div>
+      <div v-if="!readonly && selectedStepId" class="canvas-inspector" :style="inspectorStyle" @pointerdown.stop @touchstart.stop @touchmove.stop @touchend.stop>
+        <slot name="inspector" />
+      </div>
       <div class="canvas-view-controls" @pointerdown.stop @touchstart.stop @touchmove.stop @touchend.stop>
         <button v-if="!readonly" class="canvas-button" type="button" @click="autoLayout">自动排版</button>
         <button class="canvas-button" type="button" aria-label="缩小画布" @click="setZoom(scale - 0.1)">−</button>
@@ -587,6 +602,8 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
 .canvas-button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(99 102 241 / 0.18); }
 .workflow-canvas { position: relative; height: clamp(500px, 58vh, 680px); overflow: hidden; border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; background-image: radial-gradient(circle, rgb(148 163 184 / 0.25) 1px, transparent 1px); background-size: 20px 20px; cursor: grab; touch-action: none; }
 .canvas-view-controls { position: absolute; right: 12px; bottom: 12px; z-index: 20; display: flex; align-items: center; gap: 4px; padding: 5px; border: 1px solid rgb(100 116 139 / 0.7); border-radius: 10px; background: rgb(15 23 42 / 0.86); box-shadow: 0 8px 24px rgb(0 0 0 / 0.28); backdrop-filter: blur(8px); }
+.canvas-bottom-left { position: absolute; left: 12px; bottom: 12px; z-index: 25; display: flex; gap: 6px; }
+.canvas-inspector { position: absolute; z-index: 30; width: min(360px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; border: 1px solid rgb(100 116 139 / 0.8); border-radius: 12px; color: #e2e8f0; background: rgb(15 23 42 / 0.96); box-shadow: 0 16px 40px rgb(0 0 0 / 0.42); padding: 12px; touch-action: pan-y; }
 .canvas-view-controls .canvas-button { min-height: 34px; color: #e2e8f0; border-color: #475569; background: rgb(30 41 59 / 0.94); }
 .workflow-viewport { position: absolute; inset: 0 auto auto 0; width: 2200px; height: 1400px; transform-origin: 0 0; }
 .workflow-svg { position: absolute; inset: 0; overflow: visible; }
