@@ -265,7 +265,10 @@ const loadingOlder = ref(false)
 let historyLoadEpoch = 0
 let tokenLoadEpoch = 0
 let lastProgrammaticScrollTs = 0
+let lastObservedScrollTop = 0
+let userScrollIntentUntil = 0
 const PROGRAMMATIC_SCROLL_GRACE_MS = 260
+const USER_SCROLL_INTENT_MS = 900
 const currentSessionId = ref<string>('')
 // Bumped to make the task-progress panel (now header) refetch (session switch / run finish).
 const taskPlanRefreshSignal = ref(0)
@@ -846,6 +849,7 @@ const scrollToBottom = async (smooth = false) => {
   } else {
     el.scrollTop = el.scrollHeight
   }
+  lastObservedScrollTop = el.scrollTop
 }
 
 // On dialog open the messages keep laying out for a while: the record list paints
@@ -871,15 +875,9 @@ const pinToBottomSettled = () => {
     const el = chatScrollRef.value
     if (!el || !stickToBottom.value) return
     const height = el.scrollHeight
-    const atBottom = height - el.scrollTop - el.clientHeight <= 4
-    // Height unchanged but we drifted off the bottom => the user scrolled up.
-    // Respect it: release stick-to-bottom and stop the loop.
-    if (height === prevHeight && !atBottom) {
-      stickToBottom.value = false
-      return
-    }
     lastProgrammaticScrollTs = Date.now()
     el.scrollTop = el.scrollHeight
+    lastObservedScrollTop = el.scrollTop
     if (height === prevHeight) {
       stableTicks += 1
     } else {
@@ -899,6 +897,7 @@ const handleScrollContentResize = () => {
   if (!el || !stickToBottom.value) return
   lastProgrammaticScrollTs = Date.now()
   el.scrollTop = el.scrollHeight
+  lastObservedScrollTop = el.scrollTop
 }
 
 const getDistanceFromBottom = (el: HTMLElement) =>
@@ -912,8 +911,6 @@ const LIVE_MAX_SPEED = 560
 const LIVE_DAMPING = 12
 const LIVE_SPEED_GAIN = 58
 const LIVE_SCROLL_INTERVAL_MS = 84
-const LIVE_STICKY_GAP_PX = 120
-
 const applyLiveAssistantText = (text: string) => {
   liveAssistantText.value = text
 }
@@ -923,10 +920,9 @@ const maybeAutoScrollDuringLive = (ts: number) => {
   if (!el || !stickToBottom.value) return
   if (ts - liveLastScrollTs < LIVE_SCROLL_INTERVAL_MS) return
   liveLastScrollTs = ts
-  const distanceFromBottom = getDistanceFromBottom(el)
-  if (distanceFromBottom <= LIVE_STICKY_GAP_PX) {
-    el.scrollTop = el.scrollHeight
-  }
+  lastProgrammaticScrollTs = Date.now()
+  el.scrollTop = el.scrollHeight
+  lastObservedScrollTop = el.scrollTop
 }
 
 const stopLiveTypingLoop = () => {
@@ -1029,12 +1025,25 @@ const updateStickFromScroll = () => {
   const el = chatScrollRef.value
   if (!el) return
   const now = Date.now()
-  if (now - lastProgrammaticScrollTs < PROGRAMMATIC_SCROLL_GRACE_MS) return
+  const currentTop = el.scrollTop
+  const movedTowardHistory = currentTop < lastObservedScrollTop - 1
+  lastObservedScrollTop = currentTop
 
   if (isNearBottom(el)) {
     stickToBottom.value = true
-  } else {
+    return
+  }
+  // Content growth and async markdown layout can move the visual bottom without
+  // any user action. Only an explicit upward interaction may release the pin.
+  if (movedTowardHistory && now <= userScrollIntentUntil) {
     stickToBottom.value = false
+    return
+  }
+  if (now - lastProgrammaticScrollTs < PROGRAMMATIC_SCROLL_GRACE_MS) return
+  if (stickToBottom.value) {
+    lastProgrammaticScrollTs = now
+    el.scrollTop = el.scrollHeight
+    lastObservedScrollTop = el.scrollTop
   }
 }
 
@@ -1056,14 +1065,27 @@ const handleScroll = () => {
   }
 }
 
-const handleWheel = () => {
+const markUserScrollIntent = () => {
+  userScrollIntentUntil = Date.now() + USER_SCROLL_INTENT_MS
+}
+
+const handleWheel = (event: WheelEvent) => {
+  if (event.deltaY < 0) markUserScrollIntent()
+}
+
+const handlePointerDown = (event: PointerEvent) => {
+  if (!event.isPrimary) return
   const el = chatScrollRef.value
   if (!el) return
-  if (Date.now() - lastProgrammaticScrollTs < PROGRAMMATIC_SCROLL_GRACE_MS) return
-  // Wheel interaction (esp. to view history) should unlock auto-bottom if away from bottom
-  if (getDistanceFromBottom(el) > 20) {
-    stickToBottom.value = false
-  }
+  const nearScrollbar = event.clientX >= el.getBoundingClientRect().right - 24
+  if (event.pointerType !== 'mouse' || nearScrollbar) markUserScrollIntent()
+}
+
+const handleScrollKey = (event: KeyboardEvent) => {
+  if (!['ArrowUp', 'PageUp', 'Home'].includes(event.key)) return
+  const target = event.target as HTMLElement | null
+  if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+  markUserScrollIntent()
 }
 
 // --- Socket-primary live streaming ------------------------------------------
@@ -2529,14 +2551,17 @@ watch(chatScrollRef, (newEl, oldEl) => {
   if (oldEl) {
     oldEl.removeEventListener('scroll', handleScroll)
     oldEl.removeEventListener('wheel', handleWheel)
+    oldEl.removeEventListener('pointerdown', handlePointerDown)
   }
   if (chatResizeObserver) {
     chatResizeObserver.disconnect()
     chatResizeObserver = null
   }
   if (newEl) {
+    lastObservedScrollTop = newEl.scrollTop
     newEl.addEventListener('scroll', handleScroll, { passive: true })
     newEl.addEventListener('wheel', handleWheel, { passive: true })
+    newEl.addEventListener('pointerdown', handlePointerDown, { passive: true })
     if (typeof ResizeObserver !== 'undefined') {
       chatResizeObserver = new ResizeObserver(handleScrollContentResize)
       // Observe the inner content wrapper so growth in rendered messages is caught,
@@ -2549,6 +2574,7 @@ watch(chatScrollRef, (newEl, oldEl) => {
 
 onMounted(async () => {
   window.addEventListener('resize', syncFrontPromptViewportMode)
+  window.addEventListener('keydown', handleScrollKey)
   window.visualViewport?.addEventListener('resize', updateFrontPromptPopupPosition)
   window.visualViewport?.addEventListener('resize', syncVisualViewport)
   window.visualViewport?.addEventListener('scroll', syncVisualViewport)
@@ -2559,11 +2585,6 @@ onMounted(async () => {
   emit('update:currentSessionId', currentSessionId.value || '')
   emit('taskPlanRefresh', taskPlanRefreshSignal.value)
   await nextTick()
-  const el = chatScrollRef.value
-  if (el) {
-    el.addEventListener('scroll', handleScroll, { passive: true })
-    el.addEventListener('wheel', handleWheel, { passive: true })
-  }
   // NOTE: the bottom-pin ResizeObserver is owned solely by the chatScrollRef watch.
   // Creating a second one here raced with the watch (observe target swapped mid-mount)
   // and left the view stuck on middle content, so it stays out of onMounted.
@@ -2573,6 +2594,7 @@ onBeforeUnmount(() => {
   clearUploadedAttachments()
   clearFrontPromptPopupClose()
   window.removeEventListener('resize', syncFrontPromptViewportMode)
+  window.removeEventListener('keydown', handleScrollKey)
   window.visualViewport?.removeEventListener('resize', updateFrontPromptPopupPosition)
   window.visualViewport?.removeEventListener('resize', syncVisualViewport)
   window.visualViewport?.removeEventListener('scroll', syncVisualViewport)
@@ -2597,6 +2619,7 @@ onBeforeUnmount(() => {
   if (el) {
     el.removeEventListener('scroll', handleScroll)
     el.removeEventListener('wheel', handleWheel)
+    el.removeEventListener('pointerdown', handlePointerDown)
   }
 })
 </script>
@@ -2707,7 +2730,7 @@ onBeforeUnmount(() => {
 
     <!-- 聊天内容区：消息 + 输入（任务流程已移到顶部标题边上，水平显示） -->
     <div class="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
-      <div ref="chatScrollRef" class="flex-1 overflow-y-auto">
+      <div ref="chatScrollRef" class="chat-scroll-viewport flex-1 overflow-y-auto">
         <div v-if="externalControlMode" class="mx-auto flex w-full max-w-4xl flex-col gap-3 p-4 sm:p-6">
           <div class="rounded-xl border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/30 dark:bg-cyan-950/20">
             <div class="text-sm font-semibold text-cyan-800 dark:text-cyan-200">外部 MCP 控制日志</div>

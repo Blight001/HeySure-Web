@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { formatTokenCount } from '@/utils/formatTokenCount'
 
 const props = defineProps<{
@@ -21,25 +21,38 @@ const progressTone = computed(() => {
 const usageLabel = computed(() => unlimited.value
   ? `Token ${formatTokenCount(usedTokens.value)} / 无上限`
   : `Token ${formatTokenCount(usedTokens.value)} / ${formatTokenCount(tokenLimit.value)}`)
+const detailsOpen = ref(false)
 </script>
 
 <template>
   <div
-    class="relative h-[14px] shrink-0 overflow-hidden bg-zinc-200/65 dark:bg-zinc-800/80"
-    role="progressbar"
+    class="group relative h-[7px] shrink-0 cursor-pointer"
+    tabindex="0"
     :aria-label="usageLabel"
-    :aria-valuenow="unlimited ? undefined : Math.round(usagePercent)"
-    :aria-valuemax="unlimited ? undefined : 100"
-    :title="usageLabel"
+    @click="detailsOpen = !detailsOpen"
+    @blur="detailsOpen = false"
+    @keydown.enter.prevent="detailsOpen = !detailsOpen"
+    @keydown.space.prevent="detailsOpen = !detailsOpen"
   >
     <div
-      v-if="!unlimited"
-      class="absolute inset-y-0 left-0 transition-[width] duration-500 ease-out"
-      :class="progressTone"
-      :style="{ width: `${usagePercent}%` }"
-    />
-    <div class="absolute inset-0 flex items-center justify-end px-1.5 text-[9px] font-medium tabular-nums leading-none text-zinc-700 dark:text-zinc-200">
-      <span class="rounded-sm bg-white/75 px-1 py-px dark:bg-zinc-950/70">{{ usageLabel }}</span>
+      class="absolute inset-0 overflow-hidden bg-zinc-200/65 dark:bg-zinc-800/80"
+      role="progressbar"
+      :aria-valuenow="unlimited ? undefined : Math.round(usagePercent)"
+      :aria-valuemax="unlimited ? undefined : 100"
+    >
+      <div
+        v-if="!unlimited"
+        class="absolute inset-y-0 left-0 transition-[width] duration-500 ease-out"
+        :class="progressTone"
+        :style="{ width: `${usagePercent}%` }"
+      />
+    </div>
+    <div
+      class="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-900 px-2 py-1 text-[10px] font-medium tabular-nums text-white opacity-0 shadow-lg transition-opacity dark:bg-zinc-100 dark:text-zinc-900"
+      :class="detailsOpen ? 'opacity-100' : 'group-hover:opacity-100 group-focus-visible:opacity-100'"
+      role="tooltip"
+    >
+      {{ usageLabel }}
     </div>
   </div>
 </template>
