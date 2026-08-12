@@ -12,7 +12,7 @@ import { getExternalControlStatus, listAiConfigs, type ExternalControlEvent } fr
 import { callMcpTool, listMcpTools } from '@/api/mcp'
 import { getAuthToken } from '@/api/http'
 import { formatTokenCount } from '@/utils/formatTokenCount'
-import { useChatRunStream, type DeviceTaskEventPayload, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
+import { useChatRunStream, type ChatHistoryChangedPayload, type DeviceTaskEventPayload, type RunLivePayload, type RunDonePayload } from '@/composables/useChatRunStream'
 import { formatDurationMs } from '@/utils/datetime'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
@@ -1245,12 +1245,23 @@ const handleDeviceTerminal = (payload: DeviceTaskEventPayload) => {
   void fetchRunHistoryIncrementalOnce()
 }
 
+const handleHistoryChanged = (payload: ChatHistoryChangedPayload) => {
+  const sessionId = String(payload.session_id || '')
+  if (!sessionId || sessionId !== currentSessionId.value) return
+  if (String(payload.ai_kind || 'assistant') !== aiKindValue.value) return
+  const eventConfigId = Number(payload.ai_config_id || 0)
+  const currentConfigId = Number(chatCtx.value.aiConfigId || 0)
+  if (eventConfigId !== currentConfigId) return
+  void loadChatHistory(sessionId)
+}
+
 const runStream = useChatRunStream({
   onLive: handleStreamLive,
   onDone: handleStreamDone,
   onDeviceProgress: handleDeviceProgress,
   onDeviceResult: handleDeviceTerminal,
   onDeviceError: handleDeviceTerminal,
+  onHistoryChanged: handleHistoryChanged,
 })
 
 watch([currentRunPhase, currentMcpTool], ([phase, tool], [previousPhase, previousTool]) => {

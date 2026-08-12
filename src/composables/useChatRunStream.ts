@@ -58,12 +58,22 @@ export interface DeviceTaskEventPayload {
   updatedAt?: number
 }
 
+export interface ChatHistoryChangedPayload {
+  action?: string
+  user_id?: number
+  session_id?: string
+  ai_config_id?: number | null
+  ai_kind?: string
+  from_message_id?: number
+}
+
 export interface ChatRunStreamHandlers {
   onLive?: (payload: RunLivePayload) => void
   onDone?: (payload: RunDonePayload) => void
   onDeviceProgress?: (payload: DeviceTaskEventPayload) => void
   onDeviceResult?: (payload: DeviceTaskEventPayload) => void
   onDeviceError?: (payload: DeviceTaskEventPayload) => void
+  onHistoryChanged?: (payload: ChatHistoryChangedPayload) => void
 }
 
 export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
@@ -91,6 +101,10 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     if (!payload || typeof payload !== 'object') return
     handlers.onDeviceError?.(payload)
   }
+  const handleHistoryChanged = (payload: ChatHistoryChangedPayload) => {
+    if (!payload || typeof payload !== 'object') return
+    handlers.onHistoryChanged?.(payload)
+  }
 
   const disconnect = () => {
     if (!socket) return
@@ -102,6 +116,7 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     socket.off('device:task_progress', handleDeviceProgress)
     socket.off('device:task_result', handleDeviceResult)
     socket.off('device:task_error', handleDeviceError)
+    socket.off('chat:history_changed', handleHistoryChanged)
     socket.disconnect()
     socket = null
     joinedUserId = 0
@@ -130,6 +145,7 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     socket.on('device:task_progress', handleDeviceProgress)
     socket.on('device:task_result', handleDeviceResult)
     socket.on('device:task_error', handleDeviceError)
+    socket.on('chat:history_changed', handleHistoryChanged)
   }
 
   onUnmounted(disconnect)
