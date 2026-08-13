@@ -216,7 +216,7 @@ const addBotConnection = async (channel: 'wechat' | 'qq' | 'feishu') => {
     })
     await loadBotConnections()
     selectedConnectionRef.value = item.connection_ref
-    if (channel === 'wechat') await startWechatLogin(item.connection_ref)
+    if (channel === 'wechat' || channel === 'qq') await startChannelLogin(channel, item.connection_ref)
   } catch (err: any) {
     botConnectionsError.value = err?.message || '新增机器人账号失败'
   } finally {
@@ -278,92 +278,117 @@ const removeBotConnection = async (item: BotConnectionItem) => {
   }
 }
 
-const wechatLogin = ref<BotLoginStatus>({ state: 'disconnected', message: '尚未连接微信', connected: false })
-const wechatQrDataUrl = ref('')
-const wechatLoginBusy = ref(false)
-const wechatLoginError = ref('')
+type QrBotChannel = 'wechat' | 'qq'
+const channelLogin = ref<BotLoginStatus>({ state: 'disconnected', message: '尚未连接机器人', connected: false })
+const channelQrDataUrl = ref('')
+const channelLoginBusy = ref(false)
+const channelLoginError = ref('')
+// Legacy unsaved-AI template still exposes the WeChat-only setup card.
+const wechatLogin = channelLogin
+const wechatQrDataUrl = channelQrDataUrl
+const wechatLoginBusy = channelLoginBusy
+const wechatLoginError = channelLoginError
 const wechatVerifyCode = ref('')
-let wechatPollTimer: ReturnType<typeof setInterval> | null = null
+let channelPollTimer: ReturnType<typeof setInterval> | null = null
 
-const applyWechatLoginStatus = async (status: BotLoginStatus) => {
-  wechatLogin.value = status
-  wechatQrDataUrl.value = status.qrcode_url
+const selectedQrConnection = () => botConnections.value.find(item =>
+  item.connection_ref === selectedConnectionRef.value && (item.channel === 'wechat' || item.channel === 'qq'))
+
+const applyChannelLoginStatus = async (status: BotLoginStatus) => {
+  const becameConnected = !!status.connected && !channelLogin.value.connected
+  channelLogin.value = status
+  channelQrDataUrl.value = status.qrcode_url
     ? await QRCode.toDataURL(status.qrcode_url, { width: 240, margin: 1, errorCorrectionLevel: 'M' })
     : ''
+  if (becameConnected) await loadBotConnections()
 }
 
-const loadWechatLoginStatus = async (connectionRef = selectedConnectionRef.value) => {
+const loadChannelLoginStatus = async (channel: QrBotChannel, connectionRef = selectedConnectionRef.value) => {
   if (!editingConfigId.value || !connectionRef) return
   try {
-    await applyWechatLoginStatus(await getBotLoginStatus('wechat', editingConfigId.value, connectionRef))
+    await applyChannelLoginStatus(await getBotLoginStatus(channel, editingConfigId.value, connectionRef))
   } catch (err: any) {
-    wechatLoginError.value = err?.message || '微信连接状态读取失败'
+    channelLoginError.value = err?.message || `${channel === 'wechat' ? '微信' : 'QQ'}连接状态读取失败`
   }
 }
 
-const startWechatLogin = async (connectionRef = selectedConnectionRef.value) => {
+const startChannelLogin = async (channel: QrBotChannel, connectionRef = selectedConnectionRef.value) => {
   if (!editingConfigId.value) return
-  wechatLoginBusy.value = true
-  wechatLoginError.value = ''
+  channelLoginBusy.value = true
+  channelLoginError.value = ''
   try {
-    props.form.bot_configs.wechat.enabled = true
+    props.form.bot_configs[channel].enabled = true
     selectedConnectionRef.value = connectionRef
-    await applyWechatLoginStatus(await startBotLogin('wechat', editingConfigId.value, connectionRef))
+    await applyChannelLoginStatus(await startBotLogin(channel, editingConfigId.value, connectionRef))
   } catch (err: any) {
-    wechatLoginError.value = err?.message || '生成微信二维码失败'
+    channelLoginError.value = err?.message || `生成${channel === 'wechat' ? '微信' : 'QQ'}二维码失败`
   } finally {
-    wechatLoginBusy.value = false
+    channelLoginBusy.value = false
   }
 }
 
 const submitWechatCode = async () => {
   if (!editingConfigId.value) return
-  wechatLoginBusy.value = true
-  wechatLoginError.value = ''
+  channelLoginBusy.value = true
+  channelLoginError.value = ''
   try {
-    await applyWechatLoginStatus(await submitBotVerifyCode('wechat', editingConfigId.value, wechatVerifyCode.value, selectedConnectionRef.value))
+    await applyChannelLoginStatus(await submitBotVerifyCode('wechat', editingConfigId.value, wechatVerifyCode.value, selectedConnectionRef.value))
     wechatVerifyCode.value = ''
   } catch (err: any) {
-    wechatLoginError.value = err?.message || '验证码提交失败'
+    channelLoginError.value = err?.message || '验证码提交失败'
   } finally {
-    wechatLoginBusy.value = false
+    channelLoginBusy.value = false
   }
 }
 
-const disconnectWechat = async () => {
+const disconnectChannel = async (channel: QrBotChannel) => {
   if (!editingConfigId.value) return
-  wechatLoginBusy.value = true
-  wechatLoginError.value = ''
+  channelLoginBusy.value = true
+  channelLoginError.value = ''
   try {
-    await applyWechatLoginStatus(await disconnectBotLogin('wechat', editingConfigId.value, selectedConnectionRef.value))
+    await applyChannelLoginStatus(await disconnectBotLogin(channel, editingConfigId.value, selectedConnectionRef.value))
   } catch (err: any) {
-    wechatLoginError.value = err?.message || '断开微信失败'
+    channelLoginError.value = err?.message || `断开${channel === 'wechat' ? '微信' : 'QQ'}失败`
   } finally {
-    wechatLoginBusy.value = false
+    channelLoginBusy.value = false
   }
 }
 
-const stopWechatPolling = () => {
-  if (wechatPollTimer) clearInterval(wechatPollTimer)
-  wechatPollTimer = null
+const disconnectQrConnection = (item: BotConnectionItem) => {
+  if (item.channel !== 'wechat' && item.channel !== 'qq') return
+  selectedConnectionRef.value = item.connection_ref
+  void disconnectChannel(item.channel)
+}
+
+const startWechatLogin = () => startChannelLogin('wechat')
+const disconnectWechat = () => disconnectChannel('wechat')
+
+const pollSelectedChannelLogin = () => {
+  const item = selectedQrConnection()
+  if (item) void loadChannelLoginStatus(item.channel as QrBotChannel, item.connection_ref)
+}
+
+const stopChannelPolling = () => {
+  if (channelPollTimer) clearInterval(channelPollTimer)
+  channelPollTimer = null
 }
 
 watch(
   () => [props.show, props.settingsSection, editingConfigId.value],
   ([show, section, cfgId]) => {
-    stopWechatPolling()
+    stopChannelPolling()
     selectedConnectionRef.value = ''
     botConnections.value = []
-    wechatQrDataUrl.value = ''
-    wechatLoginError.value = ''
-    wechatLogin.value = { state: 'disconnected', message: '尚未连接微信', connected: false }
+    channelQrDataUrl.value = ''
+    channelLoginError.value = ''
+    channelLogin.value = { state: 'disconnected', message: '尚未连接机器人', connected: false }
     if (show && section === 'bot' && cfgId) {
       void loadBotConnections().then(() => {
-        const first = connectionsFor('wechat')[0]
+        const first = [...connectionsFor('wechat'), ...connectionsFor('qq')][0]
         if (!first) return
         selectedConnectionRef.value = first.connection_ref
-        void loadWechatLoginStatus(first.connection_ref)
-        wechatPollTimer = setInterval(() => void loadWechatLoginStatus(), 2500)
+        void loadChannelLoginStatus(first.channel as QrBotChannel, first.connection_ref)
+        channelPollTimer = setInterval(pollSelectedChannelLogin, 2500)
       })
     }
   },
@@ -371,7 +396,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  stopWechatPolling()
+  stopChannelPolling()
   for (const timer of botConnectionSaveTimers.values()) clearTimeout(timer)
   botConnectionSaveTimers.clear()
 })
@@ -838,28 +863,39 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
                       <input v-model="item.config.verification_token" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="Verification Token" />
                       <input v-model="item.config.default_receive_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="默认接收 ID（可选）" />
                     </div>
-                    <div v-else-if="item.channel === 'qq'" class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                      <input v-model="item.config.app_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="App ID" />
-                      <input v-model="item.config.app_secret" type="password" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" :placeholder="item.credentials_configured ? 'App Secret（留空保持不变）' : 'App Secret'" />
-                      <input v-model="item.config.default_target_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="默认接收 ID（可选）" />
-                      <label class="flex items-center gap-2 text-xs"><input v-model="item.config.sandbox" type="checkbox" />沙箱环境</label>
+                    <div v-else-if="item.channel === 'qq'" class="space-y-2">
+                      <button type="button" class="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" :disabled="channelLoginBusy" @click="startChannelLogin('qq', item.connection_ref)">
+                        {{ item.credentials_configured ? '重新扫码绑定' : '生成 QQ 扫码二维码' }}
+                      </button>
+                      <div v-if="selectedConnectionRef === item.connection_ref && channelQrDataUrl" class="flex justify-center rounded bg-white p-3">
+                        <img :src="channelQrDataUrl" alt="QQ机器人授权二维码" class="h-52 w-52" />
+                      </div>
+                      <div v-if="selectedConnectionRef === item.connection_ref && channelLogin.message" class="text-xs text-zinc-500">{{ channelLogin.message }}</div>
+                      <div v-if="selectedConnectionRef === item.connection_ref && channelLoginError" class="text-xs text-red-500">{{ channelLoginError }}</div>
+                      <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        <input v-model="item.config.app_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="App ID（也可手动填写）" />
+                        <input v-model="item.config.app_secret" type="password" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" :placeholder="item.credentials_configured ? 'App Secret（留空保持不变）' : 'App Secret（也可手动填写）'" />
+                        <input v-model="item.config.default_target_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="默认接收 ID（可选）" />
+                        <label class="flex items-center gap-2 text-xs"><input v-model="item.config.sandbox" type="checkbox" />沙箱环境</label>
+                      </div>
                     </div>
                     <div v-else class="space-y-2">
-                      <button type="button" class="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white" @click="startWechatLogin(item.connection_ref)">
+                      <button type="button" class="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" :disabled="channelLoginBusy" @click="startChannelLogin('wechat', item.connection_ref)">
                         {{ item.state === 'connected' ? '重新扫码连接' : '生成扫码二维码' }}
                       </button>
-                      <div v-if="selectedConnectionRef === item.connection_ref && wechatQrDataUrl" class="flex justify-center rounded bg-white p-3">
-                        <img :src="wechatQrDataUrl" alt="微信机器人授权二维码" class="h-52 w-52" />
+                      <div v-if="selectedConnectionRef === item.connection_ref && channelQrDataUrl" class="flex justify-center rounded bg-white p-3">
+                        <img :src="channelQrDataUrl" alt="微信机器人授权二维码" class="h-52 w-52" />
                       </div>
-                      <div v-if="selectedConnectionRef === item.connection_ref && wechatLogin.message" class="text-xs text-zinc-500">{{ wechatLogin.message }}</div>
-                      <div v-if="selectedConnectionRef === item.connection_ref && wechatLogin.needs_verify_code" class="flex gap-2">
+                      <div v-if="selectedConnectionRef === item.connection_ref && channelLogin.message" class="text-xs text-zinc-500">{{ channelLogin.message }}</div>
+                      <div v-if="selectedConnectionRef === item.connection_ref && channelLoginError" class="text-xs text-red-500">{{ channelLoginError }}</div>
+                      <div v-if="selectedConnectionRef === item.connection_ref && channelLogin.needs_verify_code" class="flex gap-2">
                         <input v-model="wechatVerifyCode" class="flex-1 rounded border px-2 py-1.5 text-xs" placeholder="微信验证码" />
                         <button type="button" class="rounded bg-indigo-600 px-3 text-xs text-white" @click="submitWechatCode">提交</button>
                       </div>
                     </div>
 
                     <div class="flex justify-end gap-2">
-                      <button v-if="item.channel === 'wechat' && item.state === 'connected'" type="button" class="rounded border px-3 py-1.5 text-xs" @click="selectedConnectionRef = item.connection_ref; disconnectWechat()">断开</button>
+                      <button v-if="(item.channel === 'wechat' && item.state === 'connected') || (item.channel === 'qq' && item.credentials_configured)" type="button" class="rounded border px-3 py-1.5 text-xs" @click="disconnectQrConnection(item)">断开</button>
                       <button type="button" class="rounded border border-red-200 px-3 py-1.5 text-xs text-red-600" @click="removeBotConnection(item)">删除</button>
                     </div>
                     <div class="break-all text-[10px] text-zinc-400">{{ item.connection_ref }}</div>
