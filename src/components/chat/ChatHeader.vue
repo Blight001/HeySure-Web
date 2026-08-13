@@ -7,7 +7,6 @@ interface Session {
   id: string
   name: string
   totalTokens?: number
-  forwardToBot?: boolean
   createdAt?: number | string | null
 }
 
@@ -27,8 +26,7 @@ const emit = defineEmits<{
   (e: 'create'): void
   (e: 'delete', sessionId: string): void
   (e: 'batchDelete', sessionIds: string[]): void
-  (e: 'rename', sessionId: string): void
-  (e: 'toggleForward', payload: { sessionId: string; enabled: boolean }): void
+  (e: 'rename', payload: { sessionId: string; name: string }): void
 }>()
 
 const open = ref(false)
@@ -38,6 +36,8 @@ const taskGroupOpen = ref(true)
 const selectedSessionIds = ref<Set<string>>(new Set())
 const contextMenu = ref({ visible: false, x: 0, y: 0 })
 const editingSessionId = ref<string | null>(null)
+const editingSessionName = ref('')
+const showAllSessions = ref(false)
 
 // A session is a task conversation when its id uses the task-runtime prefix
 // (the authoritative signal); fall back to the legacy "任务:" name prefix.
@@ -54,9 +54,25 @@ const parseSession = (session: Session): SessionMeta => {
   return { ...session, isTask, taskTitle }
 }
 
-const sessionMetaList = computed<SessionMeta[]>(() => props.sessionList.map(parseSession))
+const sessionTimestamp = (session: SessionMeta) => {
+  const raw = session.createdAt
+  let value = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(value)) value = Date.parse(String(raw || ''))
+  if (!Number.isFinite(value)) {
+    const match = session.id.match(/(?:session[_-])(?:task[_-])?(\d{10,})/i)
+    value = match ? Number(match[1]) : 0
+  }
+  return value > 0 && value < 1_000_000_000_000 ? value * 1000 : value
+}
+const sessionMetaList = computed<SessionMeta[]>(() =>
+  props.sessionList.map(parseSession).sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a)))
 const normalSessions = computed<SessionMeta[]>(() => sessionMetaList.value.filter(item => !item.isTask))
 const taskSessions = computed<SessionMeta[]>(() => sessionMetaList.value.filter(item => item.isTask))
+const visibleSessionIds = computed(() => new Set(
+  (showAllSessions.value ? sessionMetaList.value : sessionMetaList.value.slice(0, 5)).map(item => item.id)))
+const visibleNormalSessions = computed(() => normalSessions.value.filter(item => visibleSessionIds.value.has(item.id)))
+const visibleTaskSessions = computed(() => taskSessions.value.filter(item => visibleSessionIds.value.has(item.id)))
+const hasMoreSessions = computed(() => sessionMetaList.value.length > 5)
 const sumTokens = (rows: SessionMeta[]) => rows.reduce((sum, item) => sum + Number(item.totalTokens || 0), 0)
 const normalSessionsTokenTotal = computed(() => sumTokens(normalSessions.value))
 const taskSessionsTokenTotal = computed(() => sumTokens(taskSessions.value))
@@ -102,10 +118,19 @@ const editingSession = computed(() =>
 
 const openSessionEditor = (sessionId: string) => {
   editingSessionId.value = sessionId
+  editingSessionName.value = props.sessionList.find(session => session.id === sessionId)?.name || ''
 }
 
 const closeSessionEditor = () => {
   editingSessionId.value = null
+  editingSessionName.value = ''
+}
+
+const saveEditingSessionName = () => {
+  const session = editingSession.value
+  const name = editingSessionName.value.trim()
+  if (!session || !name || name === String(session.name || '').trim()) return
+  emit('rename', { sessionId: session.id, name })
 }
 
 const deleteEditingSession = () => {
@@ -162,7 +187,10 @@ const applyDefaultExpansion = () => {
 
 const toggleOpen = () => {
   open.value = !open.value
-  if (open.value) applyDefaultExpansion()
+  if (open.value) {
+    showAllSessions.value = false
+    applyDefaultExpansion()
+  }
   else clearSessionSelection()
 }
 
@@ -207,7 +235,7 @@ useDismissibleLayer({
               + 新建对话
             </button>
             <div
-              v-for="session in normalSessions"
+              v-for="session in visibleNormalSessions"
               :key="session.id"
               class="flex items-center gap-1 px-2 py-1.5 rounded border min-w-0"
               :class="[
@@ -234,7 +262,11 @@ useDismissibleLayer({
               </button>
             </div>
           </div>
-        <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-800/40">
+        </div>
+        <div
+          v-if="showAllSessions || visibleTaskSessions.length || taskSessions.length === 0"
+          class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/80 dark:bg-zinc-800/40"
+        >
           <button
             class="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left text-xs text-zinc-700 dark:text-zinc-200"
             @click="taskGroupOpen = !taskGroupOpen"
@@ -244,7 +276,7 @@ useDismissibleLayer({
           </button>
           <div v-if="taskGroupOpen" class="px-1 pb-1 space-y-1">
             <div
-              v-for="session in taskSessions"
+              v-for="session in visibleTaskSessions"
               :key="session.id"
               class="flex items-center gap-1 px-2 py-1.5 rounded border min-w-0"
               :class="[
@@ -279,7 +311,14 @@ useDismissibleLayer({
             </div>
           </div>
         </div>
-        </div>
+        <button
+          v-if="hasMoreSessions"
+          type="button"
+          class="w-full rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-600 transition-colors hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/30 dark:hover:text-indigo-300"
+          @click="showAllSessions = !showAllSessions"
+        >
+          {{ showAllSessions ? '收起，仅显示最近 5 个' : `展开更多（共 ${sessionMetaList.length} 个）` }}
+        </button>
       </div>
     </div>
     <div
@@ -297,9 +336,6 @@ useDismissibleLayer({
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <h3 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">编辑对话</h3>
-            <p class="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
-              {{ editingSession.name || '未命名会话' }}
-            </p>
           </div>
           <button
             class="shrink-0 rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
@@ -310,39 +346,30 @@ useDismissibleLayer({
           </button>
         </div>
 
-        <div class="mt-4 space-y-2">
-          <button
-            class="w-full rounded-lg border border-emerald-300/60 px-3 py-2 text-left text-xs text-emerald-700/80 hover:bg-emerald-50/50 dark:border-emerald-600/50 dark:text-emerald-300/80 dark:hover:bg-emerald-900/10"
-            @click="emit('rename', editingSession.id); closeSessionEditor()"
-          >
-            修改名称
-          </button>
-
-          <button
-            class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs transition"
-            :class="editingSession.forwardToBot
-              ? 'border-sky-300 bg-sky-50/70 text-sky-700 dark:border-sky-500/40 dark:bg-sky-900/20 dark:text-sky-300'
-              : 'border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800'"
-            @click="emit('toggleForward', { sessionId: editingSession.id, enabled: !editingSession.forwardToBot })"
-          >
-            <span>{{ editingSession.forwardToBot ? '机器人会回复此对话' : '机器人不回复此对话' }}</span>
-            <span class="text-[11px]">{{ editingSession.forwardToBot ? '已开启' : '已关闭' }}</span>
-          </button>
-
-          <button
-            class="w-full rounded-lg border border-red-200 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-900/20"
-            @click="deleteEditingSession"
-          >
-            删除此对话
-          </button>
+        <div class="mt-4">
+          <label class="mb-1.5 block text-xs text-zinc-500 dark:text-zinc-400">对话名称</label>
+          <input
+            v-model="editingSessionName"
+            type="text"
+            class="w-full rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 text-sm text-zinc-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
+            placeholder="输入对话名称"
+            @change="saveEditingSessionName"
+            @keydown.enter.prevent="saveEditingSessionName(); ($event.target as HTMLInputElement).blur()"
+          />
         </div>
 
-        <div class="mt-4 flex justify-end">
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            class="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-900/20"
+            @click="deleteEditingSession"
+          >
+            删除对话
+          </button>
           <button
             class="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             @click="closeSessionEditor"
           >
-            完成
+            取消
           </button>
         </div>
       </div>

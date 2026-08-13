@@ -57,7 +57,6 @@ interface SessionItem {
   id: string
   name: string
   totalTokens?: number
-  forwardToBot?: boolean
   createdAt?: number | string | null
 }
 
@@ -94,7 +93,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const { alert, confirm, prompt } = useMessage(() => props.embeddedDialogs ? (props.dialogHost || 'chat') : 'global')
+const { alert, confirm } = useMessage(() => props.embeddedDialogs ? (props.dialogHost || 'chat') : 'global')
 const emit = defineEmits<{
   (e: 'update:selectedFiles', value: string[]): void
   (e: 'update:currentSessionId', value: string): void
@@ -115,6 +114,7 @@ const uploadingCount = computed(() => uploadedAttachments.value.filter(item => i
 const chatMessages = ref<ChatMessage[]>([])
 const isTyping = ref(false)
 const currentRunId = ref('')
+const currentRunIsExternal = ref(false)
 const currentRunStatus = ref<'idle' | 'queued' | 'running' | 'completed' | 'error' | 'stopped'>('idle')
 const currentRunPhase = ref<'idle' | 'generating' | 'waiting_mcp'>('idle')
 const currentMcpTool = ref('')
@@ -1182,6 +1182,7 @@ const handleStreamLive = (payload: RunLivePayload) => {
       || eventConfigId !== currentConfigId
     ) return
     currentRunId.value = runId
+    currentRunIsExternal.value = true
     currentRunStatus.value = 'running'
     startRunPolling()
   }
@@ -1579,7 +1580,6 @@ const loadSessions = async () => {
     id: String(row?.id || ''),
     name: String(row?.name || BLANK_SESSION_NAME),
     totalTokens: Number(row?.total_tokens || 0),
-    forwardToBot: !!row?.forward_to_bot,
     createdAt: row?.created_at ?? row?.createdAt ?? row?.updated_at ?? row?.updatedAt ?? null,
   }))
 }
@@ -1639,14 +1639,10 @@ const deleteSession = async (sid: string) => {
   }
 }
 
-const renameSession = async (sid: string) => {
-  const current = sessionList.value.find(item => item.id === sid)
-  const name = (await prompt({
-    message: '输入新的对话名称:',
-    placeholder: current?.name || BLANK_SESSION_NAME,
-    defaultValue: current?.name || '',
-  }) || '').trim()
-  if (!name) return
+const renameSession = async (payload: { sessionId: string; name: string }) => {
+  const sid = String(payload?.sessionId || '').trim()
+  const name = String(payload?.name || '').trim()
+  if (!sid || !name) return
   if (!getAuthToken()) return
   try {
     await chatApi.renameChatSession(chatCtx.value, sid, name)
@@ -1655,27 +1651,6 @@ const renameSession = async (sid: string) => {
     return
   }
   await loadSessions()
-}
-
-const toggleSessionForwardToBot = async (payload: { sessionId: string; enabled: boolean }) => {
-  const sid = String(payload?.sessionId || '')
-  if (!sid || !getAuthToken()) return
-  const row = sessionList.value.find(item => item.id === sid)
-  const previous = !!row?.forwardToBot
-  // Optimistic update so the toggle feels instant.
-  if (row) row.forwardToBot = payload.enabled
-  try {
-    const res = await chatApi.setSessionForwardToBot(chatCtx.value, sid, payload.enabled)
-    if (payload.enabled && res?.warning) {
-      // Saved, but the bot can't actually deliver — tell the user why.
-      alert({ message: `已开启，但${res.warning}`, type: 'warning' })
-    } else {
-      alert({ message: payload.enabled ? '已开启：此对话的 AI 回复会转发到机器人' : '已关闭机器人转发', type: 'success' })
-    }
-  } catch {
-    if (row) row.forwardToBot = previous
-    alert({ message: '设置机器人回复失败', type: 'error' })
-  }
 }
 
 const loadTotalTokens = async (sessionId = currentSessionId.value) => {
@@ -2073,6 +2048,9 @@ const pollRunLive = async (epoch: number) => {
   try {
     run = await chatApi.getRunStatus(currentRunId.value, liveCursor.value)
   } catch (err: any) {
+    // Socket delivery remains authoritative while connected. A transient
+    // snapshot request must not turn an otherwise healthy external run red.
+    if (runStream.connected.value) return
     currentRunStatus.value = 'error'
     isTyping.value = false
     finalizeRunTimers()
@@ -2152,7 +2130,8 @@ const pollRunLive = async (epoch: number) => {
     // ignore transient errors and keep polling
   } finally {
     if (epoch === runPollEpoch && isRunActive.value) {
-      runLivePollTimer = window.setTimeout(() => { void pollRunLive(epoch) }, 90)
+      const interval = runStream.connected.value ? 350 : 90
+      runLivePollTimer = window.setTimeout(() => { void pollRunLive(epoch) }, interval)
     }
   }
 }
@@ -2167,7 +2146,7 @@ const startRunPolling = () => {
   // Keep the lightweight history-tail poll in every mode because a bot-created
   // run may begin before this page subscribes and its first boundary event can
   // legitimately be missed.
-  if (!runStream.connected.value) void pollRunLive(epoch)
+  if (!runStream.connected.value || currentRunIsExternal.value) void pollRunLive(epoch)
   void pollRunHistory(epoch)
 }
 
@@ -2181,6 +2160,7 @@ const checkActiveRun = async () => {
     return
   }
   if (!data?.run?.run_id) return
+  if (currentRunId.value !== data.run.run_id) currentRunIsExternal.value = true
   currentRunId.value = data.run.run_id
   currentRunStatus.value = data.run.status || 'running'
   const incomingPhase = (data.run.live_phase || 'generating') as 'idle' | 'generating' | 'waiting_mcp'
@@ -2545,6 +2525,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
       attachments: readyUploads.map(item => ({ file_ref: item.file_ref })),
     })
     currentRunId.value = started.run_id
+    currentRunIsExternal.value = false
     if (readyUploads.length > 0) clearUploadedAttachments()
     if (selectedReadableFiles.length > 0) {
       emit('update:selectedFiles', [])
@@ -2584,6 +2565,7 @@ const initializeSessions = async () => {
   resetRunTimers()
   lastRunDurations.value = null
   currentRunId.value = ''
+  currentRunIsExternal.value = false
   currentRunStatus.value = 'idle'
   currentRunPhase.value = 'idle'
   currentMcpTool.value = ''
@@ -2651,6 +2633,7 @@ watch(currentSessionId, async (sid, oldSid) => {
   resetRunTimers()
   lastRunDurations.value = null
   currentRunId.value = ''
+  currentRunIsExternal.value = false
   currentRunStatus.value = 'idle'
   currentRunPhase.value = 'idle'
   currentMcpTool.value = ''
@@ -2777,7 +2760,6 @@ onBeforeUnmount(() => {
           @delete="deleteSession"
           @batch-delete="deleteSessions"
           @rename="renameSession"
-          @toggle-forward="toggleSessionForwardToBot"
         />
       </div>
       <div class="flex items-center gap-1 sm:gap-2 shrink-0">
