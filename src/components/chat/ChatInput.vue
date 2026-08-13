@@ -81,7 +81,7 @@ const modelSwitcherRef = ref<HTMLElement | null>(null)
 const modelMenuOpen = ref(false)
 const isDraggingFiles = ref(false)
 const TEXTAREA_MIN_HEIGHT = 36
-const TEXTAREA_MAX_HEIGHT = 146
+const TEXTAREA_MAX_HEIGHT = 256
 
 // 触屏设备（手机/平板）上回车应换行，由发送按钮触发发送，避免软键盘回车误发
 const isCoarsePointer = typeof window !== 'undefined' && !!window.matchMedia
@@ -270,7 +270,7 @@ watch(() => props.modelValue, async () => {
         ref="textareaRef"
         v-model="inputValue"
         rows="1"
-        class="chat-input-textarea box-border h-9 max-h-[146px] min-h-[36px] flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-[7px] text-sm leading-[22px] text-zinc-800 placeholder:text-zinc-400 transition-[height] duration-300 ease-linear focus:outline-none focus:ring-0 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+        class="chat-input-textarea box-border h-9 max-h-64 min-h-[36px] flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-[7px] text-sm leading-[22px] text-zinc-800 placeholder:text-zinc-400 transition-[height] duration-300 ease-linear focus:outline-none focus:ring-0 dark:text-zinc-100 dark:placeholder:text-zinc-500"
         placeholder="给主脑发送指令..."
         @keydown="handleKeydown"
         @input="handleInput"
@@ -332,3 +332,15 @@ watch(() => props.modelValue, async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.chat-input-textarea {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-input-textarea::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+</style>

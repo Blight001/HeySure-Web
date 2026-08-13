@@ -140,6 +140,7 @@ const selectedStepId = ref('')
 const canvasPositions = ref<Record<string, WorkflowNodePosition>>({})
 const editorCompatibility = ref<Record<string, any>>({})
 const publishDeviceIds = ref<string[]>([])
+const defaultDeviceId = ref('')
 const deviceScopes = ref<Record<string, DeviceMcpScope>>({})
 const deviceToolsLoading = ref(false)
 const deviceToolsError = ref('')
@@ -151,7 +152,7 @@ const comparisonDraft = ref<WorkflowDefinition | null>(null)
 let stepClipboard: StepClipboard | null = null
 let deviceToolsRequestId = 0
 let cardSettingsSnapshot = ''
-let deviceSettingsSnapshot: string[] = []
+let deviceSettingsSnapshot: { ids: string[]; defaultId: string } = { ids: [], defaultId: '' }
 
 const openCardSettings = () => {
   cardSettingsSnapshot = JSON.stringify({ ...editor, allowedAiConfigIds: [...editor.allowedAiConfigIds] })
@@ -162,11 +163,16 @@ const closeCardSettings = (save: boolean) => {
   cardSettingsOpen.value = false
 }
 const openDeviceSettings = () => {
-  deviceSettingsSnapshot = [...publishDeviceIds.value]
+  deviceSettingsSnapshot = { ids: [...publishDeviceIds.value], defaultId: defaultDeviceId.value }
   deviceSettingsOpen.value = true
 }
 const closeDeviceSettings = (save: boolean) => {
-  if (!save) publishDeviceIds.value = [...deviceSettingsSnapshot]
+  if (!save) {
+    publishDeviceIds.value = [...deviceSettingsSnapshot.ids]
+    defaultDeviceId.value = deviceSettingsSnapshot.defaultId
+  } else if (!publishDeviceIds.value.includes(defaultDeviceId.value)) {
+    defaultDeviceId.value = publishDeviceIds.value[0] || ''
+  }
   deviceSettingsOpen.value = false
 }
 
@@ -372,6 +378,7 @@ const openNew = () => {
   versions.value = []
   versionPreview.value = null
   publishDeviceIds.value = []
+  defaultDeviceId.value = ''
   deviceScopes.value = {}
   editorOpen.value = true
   resetEditorHistory()
@@ -401,6 +408,7 @@ const openEdit = async (card: WorkflowCard) => {
   canvasPositions.value = savedPositions && typeof savedPositions === 'object' ? { ...savedPositions } : {}
   versions.value = (await listWorkflowCardVersions(card.id)).items
   publishDeviceIds.value = [...(versions.value[0]?.contract_device_ids || [])]
+  defaultDeviceId.value = versions.value[0]?.default_device_id || publishDeviceIds.value[0] || ''
   versionPreview.value = null
   editorOpen.value = true
   resetEditorHistory()
@@ -712,6 +720,7 @@ const saveCard = async () => {
       access_scope: editor.accessScope,
       allowed_ai_config_ids: editor.accessScope === 'selected' ? [...editor.allowedAiConfigIds] : [],
       risk_level: editor.riskLevel, definition: buildDefinition(),
+      default_device_id: defaultDeviceId.value || publishDeviceIds.value[0] || undefined,
       device_ids: [...publishDeviceIds.value],
     }
     const saved = wasExisting
@@ -791,8 +800,10 @@ const setStepArgumentValue = (row: StepEditor, name: string, schema: any, event:
 
 const openRun = (card: WorkflowCard) => {
   runModalCard.value = card
-  const boundIds = boundMcpDeviceIds(card.definition)
-  runDeviceId.value = boundIds[0] || onlineDevices.value[0]?.id || ''
+  const boundIds = card.definition.contractDeviceIds?.length
+    ? card.definition.contractDeviceIds
+    : boundMcpDeviceIds(card.definition)
+  runDeviceId.value = card.default_device_id || card.definition.defaultDeviceId || boundIds[0] || ''
   const properties = card.definition.inputSchema?.properties || {}
   const sample: Record<string, any> = {}
   for (const [key, cfg] of Object.entries<any>(properties)) {
@@ -1249,11 +1260,12 @@ onBeforeUnmount(() => {
                   :value="device.id"
                   :disabled="device.online === false && !publishDeviceIds.includes(device.id)"
                 />
-                <span class="min-w-0 truncate">{{ device.name || device.id }}</span>
+                <span class="min-w-0"><span class="block truncate">{{ device.name || '未命名设备' }}</span><span class="block truncate font-mono text-[9px] text-zinc-400">{{ device.id }}</span></span>
                 <span class="ml-auto shrink-0 text-zinc-400">{{ device.online === false ? '离线' : (device.deviceType || device.platform) }}</span>
               </label>
               <div v-if="!contractDevices.length" class="text-[10px] text-zinc-400">暂无可选设备</div>
             </div>
+            <label class="mt-2 block text-[10px] text-zinc-500">默认设备<select v-model="defaultDeviceId" class="mt-1 w-full rounded border px-2 py-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="">请选择默认设备</option><option v-for="deviceId in publishDeviceIds" :key="deviceId" :value="deviceId">{{ contractDevices.find(item => item.id === deviceId)?.name || '未命名设备' }} · {{ deviceId }}</option></select></label>
             <div class="mt-2 text-[10px] leading-5 text-zinc-500">
               <span v-if="deviceToolsLoading">正在读取所选设备的 MCP 工具…</span>
               <span v-else-if="deviceToolsError" class="text-rose-500">{{ deviceToolsError }}</span>
@@ -1295,7 +1307,7 @@ onBeforeUnmount(() => {
                 <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','ai','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
 
                 <template v-if="selectedStep.type === 'mcp'">
-                  <label class="text-[9px] text-zinc-500">节点绑定设备<select v-model="selectedStep.deviceId" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="changeStepDevice(selectedStep)"><option value="">选择契约设备</option><option v-for="device in onlineDevices.filter(item => publishDeviceIds.includes(item.id))" :key="device.id" :value="device.id">{{ device.name || device.id }} · {{ device.deviceType || device.platform }}</option></select></label>
+                  <label class="text-[9px] text-zinc-500">节点绑定设备<select v-model="selectedStep.deviceId" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="changeStepDevice(selectedStep)"><option value="">选择契约设备</option><option v-for="device in onlineDevices.filter(item => publishDeviceIds.includes(item.id))" :key="device.id" :value="device.id">{{ device.name || '未命名设备' }} · {{ device.id }} · {{ device.deviceType || device.platform }}</option></select></label>
                   <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">{{ deviceToolsLoading ? '正在加载设备工具…' : deviceToolsError ? '设备工具加载失败' : !selectedStep.deviceId ? '请先选择节点绑定设备' : toolNamesForStep(selectedStep).length ? '选择该设备的工具' : '该设备没有可用工具' }}</option><option v-if="selectedStep.tool && !toolNamesForStep(selectedStep).includes(selectedStep.tool)" :value="selectedStep.tool" disabled>{{ selectedStep.tool }}（绑定设备当前未上报）</option><option v-for="tool in toolNamesForStep(selectedStep)" :key="tool">{{ tool }}</option></select></label>
                   <label class="text-[9px] text-zinc-500">结果保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                   <label class="text-[9px] text-zinc-500">参数模板<textarea v-model="selectedStep.argumentsText" rows="6" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
@@ -1336,7 +1348,7 @@ onBeforeUnmount(() => {
       </div>
     </Teleport>
 
-    <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><div class="mt-3 rounded border border-indigo-200 bg-indigo-50 p-2 text-[10px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">各 MCP 节点会自动派发到编辑时绑定的契约设备，无需在运行时再次选择目标设备。</div><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy || !runDeviceId" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
+    <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><div class="mt-3 rounded border border-indigo-200 bg-indigo-50 p-2 text-[10px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">可指定本次运行设备；不指定时服务端使用卡片默认设备。多端卡片中，显式绑定到其他设备的节点保持原绑定。</div><label class="mt-3 block text-[10px] text-zinc-500">本次运行设备<select v-model="runDeviceId" class="mt-1 w-full rounded border p-2 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="deviceId in (runModalCard.definition.contractDeviceIds || boundMcpDeviceIds(runModalCard.definition))" :key="deviceId" :value="deviceId">{{ props.devices.find(item => item.id === deviceId)?.name || '未命名设备' }} · {{ deviceId }}</option></select></label><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy || !runDeviceId" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
   </section>
 </template>
 

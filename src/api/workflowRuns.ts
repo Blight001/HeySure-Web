@@ -76,7 +76,7 @@ export const listPendingWorkflowConfirmations = (limit = 100) =>
 
 export const startWorkflowRun = (
   cardId: string,
-  body: { device_id: string; input: Record<string, any>; version_id?: string; idempotency_key: string },
+  body: { device_id?: string; input: Record<string, any>; version_id?: string; idempotency_key: string },
 ) => post<WorkflowRun>(`/api/workflow-cards/${encodeURIComponent(cardId)}/runs`, body, {
   fallbackError: '自动化运行启动失败',
 })

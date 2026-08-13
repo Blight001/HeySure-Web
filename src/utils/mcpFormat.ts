@@ -217,9 +217,10 @@ export const parseMcpToolBubbleDetails = (raw?: string, fallbackTool = ''): McpT
     if (!error && stripped.error) error = stripped.error
   }
 
-  const resultEnvelope = jsonObject(result)
-  const resultDeviceId = textValue(resultEnvelope?.deviceId) || textValue(resultEnvelope?.device_id)
-  const deviceId = headerDeviceId || resultDeviceId
+  // Only the backend's completed-dispatch header identifies the executor.
+  // Business results (for example WorkflowRun.device_id) may describe a
+  // target/default device and must not relabel a server toolbox call.
+  const deviceId = headerDeviceId
   const command = parseCommandDetails(params, result)
   // Tool payloads sometimes arrive with escaped line breaks. Display them as
   // actual lines inside the preformatted detail panel instead of showing `\n`.

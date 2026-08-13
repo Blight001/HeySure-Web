@@ -14,6 +14,8 @@ export interface WorkflowDefinition {
   output: Record<string, any>
   requiredCapabilities?: string[]
   compatibility?: Record<string, any>
+  defaultDeviceId?: string
+  contractDeviceIds?: string[]
 }
 
 export interface WorkflowCard {
@@ -27,6 +29,7 @@ export interface WorkflowCard {
   allowed_ai_config_ids: number[]
   definition: WorkflowDefinition
   latest_version_id: string | null
+  default_device_id: string
   created_at: number
   updated_at: number
 }
@@ -39,6 +42,7 @@ export interface WorkflowCardVersion {
   definition_digest: string
   tool_contracts: Record<string, any>
   contract_device_ids: string[]
+  default_device_id: string
   published_by: number
   published_at: number
   definition?: WorkflowDefinition
@@ -53,6 +57,7 @@ export interface WorkflowCardInput {
   risk_level?: string
   definition?: Record<string, any>
   device_id?: string
+  default_device_id?: string
   device_ids?: string[]
 }
 
@@ -73,6 +78,14 @@ export const importWorkflowCard = (body: WorkflowCardInput) =>
 
 export const updateWorkflowCard = (cardId: string, body: Partial<WorkflowCardInput>) =>
   patch<WorkflowCard>(`/api/workflow-cards/${encodeURIComponent(cardId)}`, body, { fallbackError: '卡片保存失败' })
+
+export const patchWorkflowCardDefinition = (
+  cardId: string,
+  body: { base_version_id: string; operations: Array<{ op: 'add' | 'replace' | 'remove' | 'test'; path: string; value?: any }> },
+) => post<{ card_id: string; base_version_id: string; version: WorkflowCardVersion; changed_paths: string[] }>(
+  `/api/workflow-cards/${encodeURIComponent(cardId)}/patch-definition`, body,
+  { fallbackError: '卡片局部修改失败' },
+)
 
 export const validateWorkflowCard = (cardId: string) =>
   post<{ valid: boolean; digest: string; warnings: string[] }>(
