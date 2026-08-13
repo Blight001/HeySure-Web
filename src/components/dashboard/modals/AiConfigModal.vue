@@ -146,14 +146,9 @@ const boundEndpointAgents = computed<ConnectedDevice[]>(() => {
       || platform.includes('desktop') || platform.includes('windows') || platform.includes('browser')
   })
 })
-const selectedBotName = computed(() => props.form?.bot_channel === 'wechat' ? '微信机器人' : (props.form?.bot_channel === 'qq' ? 'QQ机器人' : '飞书机器人'))
 const selectedModelPreset = computed(() => {
   const selectedId = String(props.form?.model_preset_id || '')
   return (props.modelPresets || []).find(item => item.id === selectedId) || null
-})
-const selectedBotEnabled = computed(() => {
-  const channel = props.form?.bot_channel === 'wechat' ? 'wechat' : (props.form?.bot_channel === 'qq' ? 'qq' : 'feishu')
-  return !!props.form?.bot_configs?.[channel]?.enabled
 })
 
 const onModelPresetChange = () => {
@@ -182,6 +177,15 @@ const botChannels = [
   { channel: 'feishu', label: '飞书' },
 ] as const
 const connectionsFor = (channel: string) => botConnections.value.filter(item => item.channel === channel)
+const botConnectionSummary = computed(() => {
+  const labels: Record<string, string> = { feishu: '飞书', qq: 'QQ', wechat: '微信' }
+  const enabledChannels = editingConfigId.value
+    ? botChannels.filter(({ channel }) => connectionsFor(channel).some(item => item.enabled)).map(item => item.channel)
+    : botChannels.filter(({ channel }) => !!props.form?.bot_configs?.[channel]?.enabled).map(item => item.channel)
+  if (botConnectionsBusy.value && editingConfigId.value) return '正在读取机器人状态…'
+  if (!enabledChannels.length) return '尚未启用机器人'
+  return `${enabledChannels.map(channel => labels[channel]).join('、')}机器人已启用`
+})
 const botConnectionSaveState = ref<Record<string, 'saving' | 'saved' | 'error'>>({})
 const botConnectionSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -251,6 +255,13 @@ const autoSaveBotConnection = (item: BotConnectionItem) => {
     botConnectionSaveTimers.delete(item.connection_ref)
     void persistBotConnection(item)
   }, 600))
+}
+
+const saveBotConnectionNow = (item: BotConnectionItem) => {
+  const pending = botConnectionSaveTimers.get(item.connection_ref)
+  if (pending) clearTimeout(pending)
+  botConnectionSaveTimers.delete(item.connection_ref)
+  void persistBotConnection(item)
 }
 
 const removeBotConnection = async (item: BotConnectionItem) => {
@@ -668,7 +679,7 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
             >
               <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">机器人配置</span>
               <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">
-                {{ selectedBotName }}，{{ selectedBotEnabled ? '已启用' : '未启用' }}
+                {{ botConnectionSummary }}
               </span>
             </button>
             <button
@@ -797,7 +808,7 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
                     <div v-if="!connectionsFor(platform.channel).length && !botConnectionsBusy" class="rounded-lg border border-dashed border-zinc-300 p-3 text-center text-xs text-zinc-500 dark:border-zinc-700">
                       尚未添加{{ platform.label }}机器人
                     </div>
-                    <div v-for="item in connectionsFor(platform.channel)" :key="item.connection_ref" class="space-y-3 rounded-xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/50" @input="autoSaveBotConnection(item)" @change="autoSaveBotConnection(item)">
+                    <div v-for="item in connectionsFor(platform.channel)" :key="item.connection_ref" class="space-y-3 rounded-xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/50" @input="autoSaveBotConnection(item)" @change="saveBotConnectionNow(item)">
                     <div class="flex flex-wrap items-center gap-2">
                       <input v-model="item.name" class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="账号名称" />
                       <label class="flex items-center gap-1 text-xs"><input v-model="item.enabled" type="checkbox" />启用</label>

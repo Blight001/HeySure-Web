@@ -230,8 +230,7 @@ const roleBadge = computed(() => {
   return null
 })
 
-const botConnection = computed(() => {
-  const channel = props.agent.botChannel === 'wechat' ? 'wechat' : (props.agent.botChannel === 'qq' ? 'qq' : 'feishu')
+const buildBotConnection = (channel: 'feishu' | 'qq' | 'wechat') => {
   const enabled = channel === 'wechat' ? props.agent.wechatEnabled : (channel === 'qq' ? props.agent.qqEnabled : props.agent.feishuEnabled)
   if (!enabled) return null
   const botStatus = channel === 'wechat' ? props.agent.wechatStatus : (channel === 'qq' ? props.agent.qqStatus : props.agent.feishuStatus)
@@ -265,7 +264,15 @@ const botConnection = computed(() => {
     class: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300',
     title: message || `${name}机器人状态失败`,
   }
-})
+}
+
+const botConnections = computed(() => (
+  (['feishu', 'qq', 'wechat'] as const)
+    .flatMap(channel => {
+      const item = buildBotConnection(channel)
+      return item ? [item] : []
+    })
+))
 
 const desktopConnection = computed(() => {
   if (!props.agent.desktopAgentConnected) return null
@@ -581,7 +588,8 @@ const onCardPointerUp = (event: PointerEvent) => {
         </h3>
         <div class="mt-2 flex flex-wrap items-center justify-start gap-1.5">
           <span
-            v-if="botConnection"
+            v-for="botConnection in botConnections"
+            :key="botConnection.text"
             class="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none"
             :class="botConnection.class"
             :title="botConnection.title"
