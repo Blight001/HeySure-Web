@@ -25,6 +25,9 @@ import { getAuthToken } from '@/api/http'
 export interface RunLivePayload {
   run_id: string
   user_id?: number
+  session_id?: string
+  ai_config_id?: number | null
+  ai_kind?: string
   text?: string
   reasoning?: string
   phase?: string

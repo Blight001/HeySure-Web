@@ -1165,7 +1165,26 @@ const STREAM_PLAN_TOOLS = ['todo.manage']
 
 const handleStreamLive = (payload: RunLivePayload) => {
   const runId = String(payload?.run_id || '')
-  if (!runId || runId !== currentRunId.value) return
+  if (!runId) return
+  if (runId !== currentRunId.value) {
+    // A bot can start a run while this conversation is already open. Adopt it
+    // directly from the first matching live frame instead of waiting for the
+    // slower active-run discovery poll. Metadata is included by AI Runtime.
+    const sessionId = String(payload.session_id || '')
+    const aiKind = String(payload.ai_kind || 'assistant')
+    const eventConfigId = Number(payload.ai_config_id || 0)
+    const currentConfigId = Number(chatCtx.value.aiConfigId || 0)
+    if (
+      isRunActive.value
+      || !sessionId
+      || sessionId !== currentSessionId.value
+      || aiKind !== aiKindValue.value
+      || eventConfigId !== currentConfigId
+    ) return
+    currentRunId.value = runId
+    currentRunStatus.value = 'running'
+    startRunPolling()
+  }
   // Ignore any trailing live frame for a run we already finished/stopped, so it
   // can't flip the UI back into "typing".
   if (lastFinishedRunId === runId) return
@@ -2144,11 +2163,11 @@ const startRunPolling = () => {
   lastRealtimeTokenSyncAt = 0
   const epoch = runPollEpoch
   liveCursor.value = liveTargetText.value.length
-  // Socket primary: when connected, chat:run_live / chat:run_done drive the UI
-  // and we skip the 90 ms HTTP poll entirely. Fall back to polling only while
-  // the socket is down (the connection watcher re-runs this on disconnect).
-  if (runStream.connected.value) return
-  void pollRunLive(epoch)
+  // Socket primary: when connected, skip only the 90 ms live-state HTTP poll.
+  // Keep the lightweight history-tail poll in every mode because a bot-created
+  // run may begin before this page subscribes and its first boundary event can
+  // legitimately be missed.
+  if (!runStream.connected.value) void pollRunLive(epoch)
   void pollRunHistory(epoch)
 }
 
@@ -2660,12 +2679,11 @@ watch(() => props.currentUserId, (uid) => {
   if (uid) runStream.connect(uid)
 })
 
-// Socket dropped mid-run → resume fallback polling; recovered → hand back to the
-// socket (startRunPolling / stopRunPolling both honor runStream.connected).
-watch(() => runStream.connected.value, (isConnected) => {
+// Reconfigure the run pollers when socket connectivity changes: disconnected
+// mode adds live-state HTTP polling, while both modes retain history-tail sync.
+watch(() => runStream.connected.value, () => {
   if (!isRunActive.value) return
-  if (isConnected) stopRunPolling()
-  else startRunPolling()
+  startRunPolling()
 })
 
 
