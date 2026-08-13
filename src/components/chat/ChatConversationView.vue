@@ -531,7 +531,10 @@ const liveAssistantMessage = computed<ConversationMessage | null>(() => {
 })
 
 const typingThinkingText = computed(() => {
-  if (props.livePhase !== 'generating') return ''
+  // A relayed external run can briefly retain an idle/unknown phase while its
+  // reasoning snapshot is already available. The typing indicator is gated by
+  // isTyping, so never hide valid live reasoning solely because phase metadata
+  // arrived one frame later.
   return String(props.liveText || '').trim() ? '' : displayedLiveThinking.value
 })
 

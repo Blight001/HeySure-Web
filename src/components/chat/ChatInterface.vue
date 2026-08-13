@@ -1301,10 +1301,29 @@ const handleHistoryChanged = (payload: ChatHistoryChangedPayload) => {
     // Bot/device messages are committed outside this browser's own request.
     // Pull only the new tail, then adopt the externally-started run immediately
     // so its live AI reply streams into the already-open conversation.
-    void fetchRunHistoryIncrementalOnce().then(() => checkActiveRun())
+    void fetchRunHistoryIncrementalOnce().then(() => discoverExternalRun())
     return
   }
   void loadChatHistory(sessionId)
+}
+
+let externalRunDiscoveryEpoch = 0
+
+const discoverExternalRun = async () => {
+  const epoch = ++externalRunDiscoveryEpoch
+  const sessionId = currentSessionId.value
+  // Bot inbound persistence and ChatRun creation are separate commits. Retry
+  // briefly across that boundary so the browser adopts the run before its
+  // reasoning stream starts instead of waiting for the 3-second safety poll.
+  for (const delay of [0, 150, 450, 1000]) {
+    if (delay) await waitMs(delay)
+    if (
+      epoch !== externalRunDiscoveryEpoch
+      || sessionId !== currentSessionId.value
+      || isRunActive.value
+    ) return
+    await checkActiveRun()
+  }
 }
 
 const runStream = useChatRunStream({
@@ -2615,6 +2634,7 @@ watch(() => props.mcpCatalogRefreshKey, async (nextKey, previousKey) => {
 })
 
 watch(currentSessionId, async (sid, oldSid) => {
+  externalRunDiscoveryEpoch += 1
   emit('update:currentSessionId', sid || '')
   if (sid === oldSid) return
   // 新建空白对话时 sid 为空，也必须立即刷新预览，不能沿用上一段对话的 Prompt。
