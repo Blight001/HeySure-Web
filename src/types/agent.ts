@@ -44,7 +44,7 @@ export interface Agent {
   enabled?: boolean
   mcpEnabled?: boolean
   mcpTools?: string
-  botChannel?: 'feishu' | 'qq'
+  botChannel?: 'feishu' | 'qq' | 'wechat'
   botEnabled?: boolean
   botStatus?: {
     status?: string
@@ -69,6 +69,13 @@ export interface Agent {
   qqDefaultTargetId?: string
   qqDefaultTargetType?: string
   qqStatus?: {
+    status?: string
+    mode?: string
+    label?: string
+    message?: string
+  }
+  wechatEnabled?: boolean
+  wechatStatus?: {
     status?: string
     mode?: string
     label?: string

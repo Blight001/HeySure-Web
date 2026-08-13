@@ -35,9 +35,15 @@ export interface QqBotConfig {
   stream_enabled?: boolean
 }
 
+export interface WechatBotConfig {
+  enabled: boolean
+  bot_agent?: string
+}
+
 export interface BotConfigsPayload {
   feishu?: Partial<FeishuBotConfig>
   qq?: Partial<QqBotConfig>
+  wechat?: Partial<WechatBotConfig>
   // Future bots: any additional channel name keys an adapter is registered for.
   [channel: string]: Record<string, any> | undefined
 }
@@ -55,7 +61,7 @@ export interface AiConfigUpsertPayload {
   execution_mode?: 'internal_model' | 'external_mcp'
   prompt?: string
   mcp_tools: string
-  bot_channel: 'feishu' | 'qq'
+  bot_channel: 'feishu' | 'qq' | 'wechat'
   bot_configs: BotConfigsPayload
   system_auto_control: string
 }

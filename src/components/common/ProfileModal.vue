@@ -15,6 +15,7 @@ const zIndex = usePopupZIndex(() => props.show)
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'update-success', user: User): void
+  (e: 'password-changed'): void
 }>()
 
 const loading = ref(false)
@@ -49,6 +50,7 @@ const handleSubmit = async () => {
 
     const updated = await authApi.updateProfile(payload)
     emit('update-success', updated)
+    if (password.value) emit('password-changed')
     emit('close')
   } catch (err: any) {
     error.value = err?.message || '更新失败'

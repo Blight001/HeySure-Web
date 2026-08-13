@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch, type CSSProperties } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
+import QRCode from 'qrcode'
 // System MCPs (knowledge.* etc) are direct now; device tools + governance use scopes/toolbox. getMcpToolZhLabel not needed for server list here.
 import { fetchBuiltinDeviceBindings, setBuiltinDeviceBinding, type BuiltinDeviceItem } from '@/api/devices'
 import type { ModelPreset } from '@/types'
@@ -14,6 +15,11 @@ import memberAmberUrl from '../../../../game/assets/char_member_amber.png?url'
 import memberSlateUrl from '../../../../game/assets/char_member_slate.png?url'
 import assistantUrl from '../../../../game/assets/char_assistant.png?url'
 import { getExternalControlStatus, issueExternalControllerCredential, revokeExternalControllerCredential } from '@/api/ai'
+import {
+  createBotConnection, deleteBotConnection, disconnectBotLogin, getBotLoginStatus,
+  listBotConnections, startBotLogin, submitBotVerifyCode, updateBotConnection,
+  type BotConnectionItem, type BotLoginStatus,
+} from '@/api/bots'
 import { copyTextToClipboard } from '@/utils/clipboard'
 
 type SettingsSection = 'mcp' | 'bot' | 'appearance'
@@ -140,13 +146,13 @@ const boundEndpointAgents = computed<ConnectedDevice[]>(() => {
       || platform.includes('desktop') || platform.includes('windows') || platform.includes('browser')
   })
 })
-const selectedBotName = computed(() => props.form?.bot_channel === 'qq' ? 'QQ机器人' : '飞书机器人')
+const selectedBotName = computed(() => props.form?.bot_channel === 'wechat' ? '微信机器人' : (props.form?.bot_channel === 'qq' ? 'QQ机器人' : '飞书机器人'))
 const selectedModelPreset = computed(() => {
   const selectedId = String(props.form?.model_preset_id || '')
   return (props.modelPresets || []).find(item => item.id === selectedId) || null
 })
 const selectedBotEnabled = computed(() => {
-  const channel = props.form?.bot_channel === 'qq' ? 'qq' : 'feishu'
+  const channel = props.form?.bot_channel === 'wechat' ? 'wechat' : (props.form?.bot_channel === 'qq' ? 'qq' : 'feishu')
   return !!props.form?.bot_configs?.[channel]?.enabled
 })
 
@@ -165,6 +171,172 @@ const editingConfigId = computed(() => {
   const cfgId = Number(props.form?.id)
   return Number.isFinite(cfgId) && cfgId > 0 ? cfgId : 0
 })
+
+const botConnections = ref<BotConnectionItem[]>([])
+const botConnectionsBusy = ref(false)
+const botConnectionsError = ref('')
+const selectedConnectionRef = ref('')
+const selectedChannelConnections = computed(() => botConnections.value.filter(
+  item => item.channel === String(props.form?.bot_channel || 'feishu'),
+))
+
+const loadBotConnections = async () => {
+  if (!editingConfigId.value) return
+  botConnectionsBusy.value = true
+  botConnectionsError.value = ''
+  try {
+    const result = await listBotConnections(editingConfigId.value)
+    botConnections.value = Array.isArray(result.connections) ? result.connections : []
+  } catch (err: any) {
+    botConnectionsError.value = err?.message || '机器人账号列表加载失败'
+  } finally {
+    botConnectionsBusy.value = false
+  }
+}
+
+const addBotConnection = async () => {
+  if (!editingConfigId.value) return
+  const channel = String(props.form?.bot_channel || 'feishu')
+  botConnectionsBusy.value = true
+  try {
+    const item = await createBotConnection(editingConfigId.value, {
+      channel,
+      name: `${channel === 'wechat' ? '微信' : channel === 'qq' ? 'QQ' : '飞书'}账号 ${selectedChannelConnections.value.length + 1}`,
+      config: { enabled: true },
+    })
+    await loadBotConnections()
+    selectedConnectionRef.value = item.connection_ref
+    if (channel === 'wechat') await startWechatLogin(item.connection_ref)
+  } catch (err: any) {
+    botConnectionsError.value = err?.message || '新增机器人账号失败'
+  } finally {
+    botConnectionsBusy.value = false
+  }
+}
+
+const saveBotConnection = async (item: BotConnectionItem) => {
+  if (!editingConfigId.value) return
+  botConnectionsBusy.value = true
+  botConnectionsError.value = ''
+  try {
+    await updateBotConnection(editingConfigId.value, item.connection_ref, {
+      name: item.name,
+      enabled: item.enabled,
+      is_default: item.is_default,
+      config: item.config || {},
+    })
+    await loadBotConnections()
+  } catch (err: any) {
+    botConnectionsError.value = err?.message || '保存机器人账号失败'
+  } finally {
+    botConnectionsBusy.value = false
+  }
+}
+
+const removeBotConnection = async (item: BotConnectionItem) => {
+  if (!editingConfigId.value) return
+  botConnectionsBusy.value = true
+  try {
+    await deleteBotConnection(editingConfigId.value, item.connection_ref)
+    if (selectedConnectionRef.value === item.connection_ref) selectedConnectionRef.value = ''
+    await loadBotConnections()
+  } catch (err: any) {
+    botConnectionsError.value = err?.message || '删除机器人账号失败'
+  } finally {
+    botConnectionsBusy.value = false
+  }
+}
+
+const wechatLogin = ref<BotLoginStatus>({ state: 'disconnected', message: '尚未连接微信', connected: false })
+const wechatQrDataUrl = ref('')
+const wechatLoginBusy = ref(false)
+const wechatLoginError = ref('')
+const wechatVerifyCode = ref('')
+let wechatPollTimer: ReturnType<typeof setInterval> | null = null
+
+const applyWechatLoginStatus = async (status: BotLoginStatus) => {
+  wechatLogin.value = status
+  wechatQrDataUrl.value = status.qrcode_url
+    ? await QRCode.toDataURL(status.qrcode_url, { width: 240, margin: 1, errorCorrectionLevel: 'M' })
+    : ''
+}
+
+const loadWechatLoginStatus = async (connectionRef = selectedConnectionRef.value) => {
+  if (!editingConfigId.value || props.form?.bot_channel !== 'wechat') return
+  try {
+    await applyWechatLoginStatus(await getBotLoginStatus('wechat', editingConfigId.value, connectionRef))
+  } catch (err: any) {
+    wechatLoginError.value = err?.message || '微信连接状态读取失败'
+  }
+}
+
+const startWechatLogin = async (connectionRef = selectedConnectionRef.value) => {
+  if (!editingConfigId.value) return
+  wechatLoginBusy.value = true
+  wechatLoginError.value = ''
+  try {
+    props.form.bot_channel = 'wechat'
+    props.form.bot_configs.wechat.enabled = true
+    selectedConnectionRef.value = connectionRef
+    await applyWechatLoginStatus(await startBotLogin('wechat', editingConfigId.value, connectionRef))
+  } catch (err: any) {
+    wechatLoginError.value = err?.message || '生成微信二维码失败'
+  } finally {
+    wechatLoginBusy.value = false
+  }
+}
+
+const submitWechatCode = async () => {
+  if (!editingConfigId.value) return
+  wechatLoginBusy.value = true
+  wechatLoginError.value = ''
+  try {
+    await applyWechatLoginStatus(await submitBotVerifyCode('wechat', editingConfigId.value, wechatVerifyCode.value, selectedConnectionRef.value))
+    wechatVerifyCode.value = ''
+  } catch (err: any) {
+    wechatLoginError.value = err?.message || '验证码提交失败'
+  } finally {
+    wechatLoginBusy.value = false
+  }
+}
+
+const disconnectWechat = async () => {
+  if (!editingConfigId.value) return
+  wechatLoginBusy.value = true
+  wechatLoginError.value = ''
+  try {
+    await applyWechatLoginStatus(await disconnectBotLogin('wechat', editingConfigId.value, selectedConnectionRef.value))
+  } catch (err: any) {
+    wechatLoginError.value = err?.message || '断开微信失败'
+  } finally {
+    wechatLoginBusy.value = false
+  }
+}
+
+const stopWechatPolling = () => {
+  if (wechatPollTimer) clearInterval(wechatPollTimer)
+  wechatPollTimer = null
+}
+
+watch(
+  () => [props.show, props.settingsSection, props.form?.bot_channel, editingConfigId.value],
+  ([show, section, channel, cfgId]) => {
+    stopWechatPolling()
+    if (show && section === 'bot' && channel === 'wechat' && cfgId) {
+      void loadBotConnections().then(() => {
+        const first = selectedChannelConnections.value[0]
+        if (first && !selectedConnectionRef.value) selectedConnectionRef.value = first.connection_ref
+        return loadWechatLoginStatus()
+      })
+      wechatPollTimer = setInterval(() => void loadWechatLoginStatus(), 2500)
+    } else if (show && section === 'bot' && cfgId) {
+      void loadBotConnections()
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(stopWechatPolling)
 
 const DEFAULT_APPEARANCE: WorldActorAppearance = { skin: '', tint: '', scale: 1, aura: '' }
 const appearanceDraft = ref<WorldActorAppearance>({ ...DEFAULT_APPEARANCE })
@@ -583,14 +755,72 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
 
               <div v-else-if="settingsSection === 'bot'" class="space-y-3">
                 <div>
-                  <label class="block text-[11px] text-zinc-500 mb-1">机器人类型</label>
+                  <label class="block text-[11px] text-zinc-500 mb-1">配置渠道（可分别启用多个）</label>
                   <select v-model="form.bot_channel" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs">
                     <option value="feishu">飞书机器人</option>
                     <option value="qq">QQ机器人</option>
+                    <option value="wechat">微信机器人</option>
                   </select>
+                  <div class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    切换这里只是查看对应渠道配置，不会关闭其他已启用渠道。当前选择同时作为无明确目标时的默认渠道。
+                  </div>
                 </div>
 
-                <template v-if="form.bot_channel === 'feishu'">
+                <template v-if="editingConfigId">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-xs text-zinc-500">{{ selectedChannelConnections.length }} 个账号，可同时在线</div>
+                    <button type="button" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" :disabled="botConnectionsBusy" @click="addBotConnection">
+                      + 添加账号
+                    </button>
+                  </div>
+                  <div v-if="botConnectionsError" class="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">{{ botConnectionsError }}</div>
+                  <div v-if="!selectedChannelConnections.length && !botConnectionsBusy" class="rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 dark:border-zinc-700">
+                    还没有此渠道账号，点击“添加账号”创建。
+                  </div>
+                  <div v-for="item in selectedChannelConnections" :key="item.connection_ref" class="space-y-3 rounded-xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <input v-model="item.name" class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="账号名称" />
+                      <label class="flex items-center gap-1 text-xs"><input v-model="item.enabled" type="checkbox" />启用</label>
+                      <label class="flex items-center gap-1 text-xs"><input v-model="item.is_default" type="checkbox" />默认</label>
+                      <span class="rounded bg-zinc-100 px-2 py-1 text-[10px] text-zinc-500 dark:bg-zinc-800">{{ item.runtime_status?.message || item.state }}</span>
+                    </div>
+
+                    <div v-if="item.channel === 'feishu'" class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      <input v-model="item.config.app_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="App ID" />
+                      <input v-model="item.config.app_secret" type="password" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" :placeholder="item.credentials_configured ? 'App Secret（留空保持不变）' : 'App Secret'" />
+                      <input v-model="item.config.verification_token" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="Verification Token" />
+                      <input v-model="item.config.default_receive_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="默认接收 ID（可选）" />
+                    </div>
+                    <div v-else-if="item.channel === 'qq'" class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      <input v-model="item.config.app_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="App ID" />
+                      <input v-model="item.config.app_secret" type="password" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" :placeholder="item.credentials_configured ? 'App Secret（留空保持不变）' : 'App Secret'" />
+                      <input v-model="item.config.default_target_id" class="rounded border px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="默认接收 ID（可选）" />
+                      <label class="flex items-center gap-2 text-xs"><input v-model="item.config.sandbox" type="checkbox" />沙箱环境</label>
+                    </div>
+                    <div v-else class="space-y-2">
+                      <button type="button" class="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white" @click="startWechatLogin(item.connection_ref)">
+                        {{ item.state === 'connected' ? '重新扫码连接' : '生成扫码二维码' }}
+                      </button>
+                      <div v-if="selectedConnectionRef === item.connection_ref && wechatQrDataUrl" class="flex justify-center rounded bg-white p-3">
+                        <img :src="wechatQrDataUrl" alt="微信机器人授权二维码" class="h-52 w-52" />
+                      </div>
+                      <div v-if="selectedConnectionRef === item.connection_ref && wechatLogin.message" class="text-xs text-zinc-500">{{ wechatLogin.message }}</div>
+                      <div v-if="selectedConnectionRef === item.connection_ref && wechatLogin.needs_verify_code" class="flex gap-2">
+                        <input v-model="wechatVerifyCode" class="flex-1 rounded border px-2 py-1.5 text-xs" placeholder="微信验证码" />
+                        <button type="button" class="rounded bg-indigo-600 px-3 text-xs text-white" @click="submitWechatCode">提交</button>
+                      </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2">
+                      <button v-if="item.channel === 'wechat' && item.state === 'connected'" type="button" class="rounded border px-3 py-1.5 text-xs" @click="selectedConnectionRef = item.connection_ref; disconnectWechat()">断开</button>
+                      <button type="button" class="rounded border border-red-200 px-3 py-1.5 text-xs text-red-600" @click="removeBotConnection(item)">删除</button>
+                      <button type="button" class="rounded bg-zinc-900 px-3 py-1.5 text-xs text-white dark:bg-zinc-100 dark:text-zinc-900" @click="saveBotConnection(item)">保存账号</button>
+                    </div>
+                    <div class="break-all text-[10px] text-zinc-400">{{ item.connection_ref }}</div>
+                  </div>
+                </template>
+
+                <template v-else-if="form.bot_channel === 'feishu'">
                 <label class="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
                   <span>启用飞书机器人</span>
                   <input type="checkbox" v-model="form.bot_configs.feishu.enabled" />
@@ -632,7 +862,7 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
                 </div>
                 </template>
 
-                <template v-else>
+                <template v-else-if="form.bot_channel === 'qq'">
                 <label class="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300 px-2 py-2 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">
                   <span>启用 QQ机器人</span>
                   <input type="checkbox" v-model="form.bot_configs.qq.enabled" />
@@ -674,6 +904,83 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
                 <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
                   QQ 入站由服务端 botpy 长连接托管。原生 Markdown 和私聊流式输出需要 QQ 开放平台权限；未获权限时服务端会自动回退为纯文本。
                 </div>
+                </template>
+
+                <template v-else>
+                  <label class="flex items-center justify-between rounded border border-zinc-200 bg-zinc-50/60 px-2 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300">
+                    <span>启用微信机器人</span>
+                    <input
+                      type="checkbox"
+                      v-model="form.bot_configs.wechat.enabled"
+                      @change="form.bot_configs.wechat.enabled && startWechatLogin()"
+                    />
+                  </label>
+
+                  <div v-if="!editingConfigId" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                    请先保存 AI，重新打开机器人配置后即可生成微信授权二维码。
+                  </div>
+
+                  <div v-else class="space-y-3 rounded-xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+                    <div class="flex items-center justify-between gap-3">
+                      <div>
+                        <div class="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                          {{ wechatLogin.connected ? '微信已连接' : '微信扫码连接' }}
+                        </div>
+                        <div class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ wechatLogin.message }}</div>
+                      </div>
+                      <span
+                        class="rounded-full px-2 py-1 text-[10px]"
+                        :class="wechatLogin.connected
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'"
+                      >
+                        {{ wechatLogin.connected ? '已连接' : wechatLogin.state }}
+                      </span>
+                    </div>
+
+                    <div v-if="wechatQrDataUrl" class="flex justify-center rounded-lg bg-white p-3">
+                      <img :src="wechatQrDataUrl" class="h-56 w-56" alt="微信机器人授权二维码" />
+                    </div>
+
+                    <div v-if="wechatLogin.needs_verify_code" class="flex gap-2">
+                      <input
+                        v-model="wechatVerifyCode"
+                        inputmode="numeric"
+                        class="min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                        placeholder="输入微信中显示的数字"
+                      />
+                      <button type="button" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white disabled:opacity-50" :disabled="wechatLoginBusy || !wechatVerifyCode" @click="submitWechatCode">
+                        提交
+                      </button>
+                    </div>
+
+                    <div v-if="wechatLoginError" class="text-[11px] text-rose-600 dark:text-rose-300">{{ wechatLoginError }}</div>
+
+                    <div class="flex flex-wrap gap-2">
+                      <button
+                        v-if="!wechatLogin.connected"
+                        type="button"
+                        class="rounded-lg bg-emerald-600 px-3 py-2 text-xs text-white disabled:opacity-50"
+                        :disabled="wechatLoginBusy"
+                          @click="startWechatLogin()"
+                      >
+                        {{ wechatLoginBusy ? '生成中…' : (wechatQrDataUrl ? '刷新二维码' : '生成二维码') }}
+                      </button>
+                      <button
+                        v-else
+                        type="button"
+                        class="rounded-lg border border-rose-200 px-3 py-2 text-xs text-rose-600 disabled:opacity-50 dark:border-rose-500/40 dark:text-rose-300"
+                        :disabled="wechatLoginBusy"
+                        @click="disconnectWechat"
+                      >
+                        断开连接
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    通过腾讯 iLink 机器人授权；当前仅支持微信私聊，不支持微信群聊。二维码与连接凭据不会写入浏览器配置。
+                  </div>
                 </template>
               </div>
 

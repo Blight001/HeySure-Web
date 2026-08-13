@@ -22,7 +22,8 @@ class ApiError extends Error {
   }
 }
 
-const TOKEN_STORAGE_KEY = 'token'
+export const TOKEN_STORAGE_KEY = 'token'
+export const AUTH_EXPIRED_EVENT = 'heysure:auth-expired'
 
 export const getAuthToken = (): string => {
   try {
@@ -134,6 +135,10 @@ export const request = async <T = unknown>(path: string, options: RequestOptions
 
   if (!res.ok) {
     const { message, payload: errBody } = await parseDetail(res, fallbackError)
+    if (auth && res.status === 401) {
+      clearAuthToken()
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+    }
     throw new ApiError(message, res.status, errBody)
   }
 

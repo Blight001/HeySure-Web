@@ -52,6 +52,10 @@ const BOT_CONFIG_DEFAULTS: Record<string, Record<string, any>> = {
     markdown_template_id: '',
     stream_enabled: true,
   },
+  wechat: {
+    enabled: false,
+    bot_agent: 'HeySureAI/2.0.0',
+  },
 }
 
 function hydrateBotConfigs(raw: any): Record<string, Record<string, any>> {
@@ -84,15 +88,14 @@ function hydrateBotConfigs(raw: any): Record<string, Record<string, any>> {
 
 function buildBotConfigsPayload(
   formConfigs: Record<string, Record<string, any>>,
-  activeChannel: string,
+  _activeChannel: string,
 ): Record<string, Record<string, any>> {
-  // Bots that aren't the active channel are force-disabled before send so
-  // the server doesn't see a stray ``enabled=true`` from a previous toggle.
+  // Every channel is independently enabled. bot_channel only records the
+  // preferred/default channel and which configuration pane is selected.
   const out: Record<string, Record<string, any>> = {}
   for (const [channel, defaults] of Object.entries(BOT_CONFIG_DEFAULTS)) {
     const slice = formConfigs?.[channel] || {}
     const merged: Record<string, any> = { ...defaults, ...slice }
-    if (channel !== activeChannel) merged.enabled = false
     out[channel] = merged
   }
   return out
@@ -172,7 +175,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     prompt: '',
     // 新建 AI 默认勾选全部可用 MCP 工具（工具列表已加载时用全量，否则回退到基础默认集）。
     mcp_tools: availableMcpTools.value.length ? [...availableMcpTools.value] : [...defaultMcpTools],
-    bot_channel: 'feishu' as 'feishu' | 'qq',
+    bot_channel: 'feishu' as 'feishu' | 'qq' | 'wechat',
     bot_configs: {
       feishu: {
         enabled: false,
@@ -193,6 +196,10 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
         markdown_mode: 'native',
         markdown_template_id: '',
         stream_enabled: true,
+      },
+      wechat: {
+        enabled: false,
+        bot_agent: 'HeySureAI/2.0.0',
       },
     } as Record<string, Record<string, any>>,
     system_auto_control: normalizeSystemAutoControl({}),
@@ -307,7 +314,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       execution_mode: cfg.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: cfg.prompt || '',
       mcp_tools: parsedTools,
-      bot_channel: cfg.bot_channel === 'qq' ? 'qq' : 'feishu',
+      bot_channel: cfg.bot_channel === 'wechat' ? 'wechat' : (cfg.bot_channel === 'qq' ? 'qq' : 'feishu'),
       // Hydrate ``bot_configs`` from the server (default fills in any
       // missing keys so the form bindings always have a value).
       bot_configs: hydrateBotConfigs(cfg.bot_configs),
@@ -342,7 +349,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       execution_mode: agent.executionMode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: '',
       mcp_tools: parsedTools,
-      bot_channel: agent.botChannel === 'qq' ? 'qq' : 'feishu',
+      bot_channel: agent.botChannel === 'wechat' ? 'wechat' : (agent.botChannel === 'qq' ? 'qq' : 'feishu'),
       bot_configs: hydrateBotConfigs(null),
       system_auto_control: normalizeSystemAutoControl({}),
     }
@@ -353,7 +360,9 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
   const saveAiConfig = async () => {
     if (!aiConfigForm.value) return false
     if (!getAuthToken()) return false
-    const selectedBotChannel = aiConfigForm.value.bot_channel === 'qq' ? 'qq' : 'feishu'
+    const selectedBotChannel = aiConfigForm.value.bot_channel === 'wechat'
+      ? 'wechat'
+      : (aiConfigForm.value.bot_channel === 'qq' ? 'qq' : 'feishu')
     const executionMode = aiConfigForm.value.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model'
     const selectedPreset = modelPresets.value.find(item => item.id === aiConfigForm.value.model_preset_id)
     if (!selectedPreset && (executionMode === 'internal_model' || aiConfigMode.value === 'create')) {

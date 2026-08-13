@@ -250,7 +250,7 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
         enabled: !!row.enabled,
         mcpEnabled: !!row.mcp_enabled,
         mcpTools: row.mcp_tools || '[]',
-        botChannel: row.bot_channel === 'qq' ? 'qq' : 'feishu',
+        botChannel: row.bot_channel === 'wechat' ? 'wechat' : (row.bot_channel === 'qq' ? 'qq' : 'feishu'),
         botEnabled: !!row.bot_enabled,
         botStatus: row.bot_status || undefined,
         // The server now returns ``bot_configs`` (nested per-channel) and
@@ -270,6 +270,8 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
         qqDefaultTargetId: row.bot_configs?.qq?.default_target_id || '',
         qqDefaultTargetType: row.bot_configs?.qq?.default_target_type || 'c2c',
         qqStatus: row.bot_statuses?.qq || undefined,
+        wechatEnabled: !!row.bot_configs?.wechat?.enabled,
+        wechatStatus: row.bot_statuses?.wechat || undefined,
         desktopAgentConnected: false,
         desktopAgentId: '',
         desktopAgentName: '',
@@ -480,10 +482,15 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
   const connectDashboardSocket = (userId: number) => {
     if (!Number.isFinite(userId) || userId <= 0) return
     if (dashboardSocket) return
-    dashboardSocket = io('/', { transports: ['websocket', 'polling'] })
+    const token = getAuthToken()
+    if (!token) return
+    dashboardSocket = io('/', {
+      transports: ['websocket', 'polling'],
+      auth: { token },
+    })
     dashboardSocket.on('connect', () => {
       dashboardSocketConnected.value = true
-      dashboardSocket?.emit('ui:join', { userId })
+      dashboardSocket?.emit('ui:join')
       void loadConnectedDevices()
     })
     dashboardSocket.on('disconnect', () => {

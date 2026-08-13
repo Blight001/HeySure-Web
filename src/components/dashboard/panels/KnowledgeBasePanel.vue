@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs } from 'v
 import { formatDateMinute } from '@/utils/datetime'
 import AppIcon from '@/components/common/AppIcon.vue'
 import {
+  deleteEntry,
   deleteInstalledClawHubSkill,
   installClawHubSkill,
   readInstalledClawHubSkill,
@@ -13,6 +14,7 @@ import {
   searchClawHubSkills,
   setInstalledClawHubSkillEndpoint,
   updateInstalledClawHubSkill,
+  updateEntry,
   type ClawHubInstalledSkillDetail,
   type ClawHubSkillDetail,
   type ClawHubSkillSearchResult,
@@ -112,6 +114,8 @@ const installedClawhubNotice = ref('')
 const installedClawhubSelected = ref<ClawHubInstalledSkillDetail | null>(null)
 const installedClawhubDraft = ref('')
 const installedClawhubEditMode = ref(false)
+const installedKnowledgeMemoryId = ref('')
+const installedClawhubIsKnowledge = computed(() => Boolean(installedKnowledgeMemoryId.value))
 
 const stripSkillFrontmatter = (raw: string) => {
   const text = String(raw || '')
@@ -778,6 +782,7 @@ const openInstalledClawHubSkill = async (slug: string) => {
   installedClawhubSelected.value = null
   installedClawhubDraft.value = ''
   installedClawhubEditMode.value = false
+  installedKnowledgeMemoryId.value = ''
   try {
     const token = getAuthToken()
     const detail = await readInstalledClawHubSkill(token, targetSlug)
@@ -795,18 +800,30 @@ type InheritanceThoughtItem = NonNullable<KnowledgeEntryItem['inheritance_tools'
 const openInheritanceThoughtItem = async (item: InheritanceThoughtItem) => {
   const memoryId = String(item.memory_id || '').trim()
   if (item.kind === 'knowledge' && memoryId) {
-    detailLoading.value = true
-    detailError.value = ''
+    installedClawhubModalOpen.value = true
+    installedClawhubLoading.value = true
+    installedClawhubError.value = ''
+    installedClawhubNotice.value = ''
+    installedClawhubSelected.value = null
+    installedClawhubDraft.value = ''
+    installedClawhubEditMode.value = false
+    installedKnowledgeMemoryId.value = memoryId
     try {
       const token = getAuthToken()
-      const nextDetail = await readEntry(token, memoryId)
-      if (currentDetail.value) detailHistory.value.push(currentDetail.value)
-      currentDetail.value = nextDetail
-      detailQuery.value = ''
+      const detail = await readEntry(token, memoryId)
+      installedClawhubSelected.value = {
+        slug: memoryId,
+        skill: { displayName: detail.title, source: 'topic' },
+        skill_card: detail.body || '',
+        metadata: { source: 'topic' },
+        path: detail.file_path,
+        present: true,
+      }
+      installedClawhubDraft.value = detail.body || ''
     } catch (err) {
-      detailError.value = (err as Error).message || '条目加载失败'
+      installedClawhubError.value = (err as Error).message || '条目加载失败'
     } finally {
-      detailLoading.value = false
+      installedClawhubLoading.value = false
     }
     return
   }
@@ -821,6 +838,7 @@ const closeInstalledClawHubModal = () => {
   installedClawhubError.value = ''
   installedClawhubNotice.value = ''
   installedClawhubEditMode.value = false
+  installedKnowledgeMemoryId.value = ''
 }
 
 const requestCloseInstalledClawHubModal = async () => {
@@ -846,10 +864,24 @@ const saveInstalledClawHubSkill = async () => {
   installedClawhubNotice.value = ''
   try {
     const token = getAuthToken()
-    const updated = await updateInstalledClawHubSkill(token, slug, installedClawhubDraft.value)
-    installedClawhubSelected.value = updated.detail
-    installedClawhubDraft.value = updated.detail.skill_card || ''
-    currentDetail.value = updated.entry
+    if (installedKnowledgeMemoryId.value) {
+      const updated = await updateEntry(token, installedKnowledgeMemoryId.value, installedClawhubDraft.value)
+      installedClawhubSelected.value = {
+        slug: installedKnowledgeMemoryId.value,
+        skill: { displayName: updated.detail.title, source: 'topic' },
+        skill_card: updated.detail.body || '',
+        metadata: { source: 'topic' },
+        path: updated.detail.file_path,
+        present: true,
+      }
+      installedClawhubDraft.value = updated.detail.body || ''
+      currentDetail.value = updated.entry
+    } else {
+      const updated = await updateInstalledClawHubSkill(token, slug, installedClawhubDraft.value)
+      installedClawhubSelected.value = updated.detail
+      installedClawhubDraft.value = updated.detail.skill_card || ''
+      currentDetail.value = updated.entry
+    }
     installedClawhubNotice.value = '已保存'
     installedClawhubEditMode.value = false
   } catch (err) {
@@ -881,7 +913,9 @@ const removeInstalledClawHubSkill = async () => {
   const slug = installedClawhubSelected.value?.slug
   if (!slug) return
   const ok = await confirm({
-    message: `确认删除本地快照 ${slug}？删除后需要重新从 ClawHub 安装。`,
+    message: installedClawhubIsKnowledge.value
+      ? `确认永久删除传承知识「${installedClawhubSelected.value?.skill?.displayName || slug}」？此操作不可撤销。`
+      : `确认删除本地快照 ${slug}？删除后需要重新安装。`,
     type: 'warning',
     confirmText: '删除',
     cancelText: '取消',
@@ -891,11 +925,15 @@ const removeInstalledClawHubSkill = async () => {
   installedClawhubError.value = ''
   try {
     const token = getAuthToken()
-    const deleted = await deleteInstalledClawHubSkill(token, slug)
+    const deleted = installedKnowledgeMemoryId.value
+      ? await deleteEntry(token, installedKnowledgeMemoryId.value)
+      : await deleteInstalledClawHubSkill(token, slug)
     currentDetail.value = deleted.entry
-    clawhubResults.value = clawhubResults.value.map(item =>
-      item.slug === slug ? { ...item, installed: false } : item,
-    )
+    if (!installedKnowledgeMemoryId.value) {
+      clawhubResults.value = clawhubResults.value.map(item =>
+        item.slug === slug ? { ...item, installed: false } : item,
+      )
+    }
     installedClawhubModalOpen.value = false
     installedClawhubSelected.value = null
     installedClawhubDraft.value = ''
@@ -1676,7 +1714,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown)
                         <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">{{ endpointLabel(skill.endpoint_kind) }}</span>
                         <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ skill.kind === 'knowledge' ? '知识' : (skill.version || 'latest') }}</span>
                         <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60">{{ skill.present ? '文件可用' : '文件缺失' }}</span>
-                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60 text-indigo-600 dark:text-indigo-300">{{ skill.kind === 'knowledge' ? '查看' : '查看/编辑' }}</span>
+                        <span class="px-1.5 py-0.5 rounded bg-white/75 dark:bg-zinc-900/60 text-indigo-600 dark:text-indigo-300">查看/编辑</span>
                       </div>
                     </div>
                   </button>
@@ -1833,7 +1871,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown)
         <div class="flex items-center justify-between px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
           <div class="min-w-0">
             <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">
-              {{ installedClawhubSelected?.skill?.displayName || installedClawhubSelected?.slug || '本地快照' }}
+              {{ installedClawhubSelected?.skill?.displayName || installedClawhubSelected?.slug || (installedClawhubIsKnowledge ? '传承知识' : '本地快照') }}
             </div>
             <div class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 truncate">
               {{ installedClawhubSelected?.slug || '加载中' }}
@@ -1848,9 +1886,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleDetailKeydown)
         <div v-else class="flex-1 min-h-0 flex flex-col">
           <div class="px-5 py-3 border-b border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">{{ installedClawhubSelected?.skill?.version || 'latest' }}</span>
+              <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">{{ installedClawhubIsKnowledge ? '知识' : (installedClawhubSelected?.skill?.version || 'latest') }}</span>
               <span class="px-2 py-1 rounded bg-zinc-100/60 dark:bg-zinc-800/60">{{ installedClawhubSelected?.present ? '文件可用' : '文件缺失' }}</span>
-              <label class="flex items-center gap-1">
+              <label v-if="!installedClawhubIsKnowledge" class="flex items-center gap-1">
                 端
                 <select
                   :value="installedEndpointKind"

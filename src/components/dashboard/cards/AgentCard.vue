@@ -47,7 +47,7 @@ interface AgentProps {
     enabled?: boolean
     mcpEnabled?: boolean
     mcpTools?: string
-    botChannel?: 'feishu' | 'qq'
+    botChannel?: 'feishu' | 'qq' | 'wechat'
     botEnabled?: boolean
     botStatus?: {
       status?: string
@@ -72,6 +72,13 @@ interface AgentProps {
     qqDefaultTargetId?: string
     qqDefaultTargetType?: string
     qqStatus?: {
+      status?: string
+      mode?: string
+      label?: string
+      message?: string
+    }
+    wechatEnabled?: boolean
+    wechatStatus?: {
       status?: string
       mode?: string
       label?: string
@@ -133,21 +140,10 @@ watch(
   },
   { immediate: true },
 )
-// AI 自身的代数（进化代际），与任务无关。
-const syncedGeneration = computed(() => Math.max(1, Number(props.agent.generation) || 1))
-
 const aiAvatarUrl = computed(() => resolveAiAvatarUrl(props.agent.avatar))
 
 const statusDisplay = computed(() => {
-  const runtimeSuffix = !props.agent.enabled
-    ? ' · 已停止'
-    : props.agent.runtimeStatus === 'running' && props.agent.runtimeTool
-      ? ` · 调用中: ${props.agent.runtimeTool}`
-      : props.agent.runtimeStatus === 'running'
-        ? ' · MCP 调用中'
-      : props.agent.runtimeStatus === 'error'
-        ? ' · MCP 调用失败'
-        : ''
+  const lifecycleSuffix = props.agent.enabled ? '' : ' · 已停止'
 
   const taskStatus = String(props.agent.currentTaskStatus || '').toLowerCase()
   const isTaskRunning = taskStatus === 'running' || props.agent.runtimeStatus === 'running'
@@ -155,18 +151,19 @@ const statusDisplay = computed(() => {
   const isUserChatActive = !!props.agent.userChatActive
 
   switch (props.agent.status) {
-    case 'learning': return { text: `学习中 (下载记忆)${runtimeSuffix}`, class: 'text-blue-600 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-500/10 dark:border-blue-500/30' }
+    case 'learning': return { text: `学习中 (下载记忆)${lifecycleSuffix}`, class: 'text-blue-600 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-500/10 dark:border-blue-500/30' }
     case 'working':
-      if (isUserChatActive) return { text: `与用户沟通中${runtimeSuffix}`, class: 'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-300 dark:bg-cyan-500/10 dark:border-cyan-500/30' }
-      if (isTaskRunning) return { text: `工作中${runtimeSuffix}`, class: 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/30' }
-      if (isTaskWaiting) return { text: `等待中${runtimeSuffix}`, class: 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-500/10 dark:border-amber-500/30' }
-      return { text: `空闲中${runtimeSuffix}`, class: 'text-zinc-600 bg-zinc-100/60 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-800/80 dark:border-zinc-700' }
+      if (isUserChatActive) return { text: `与用户沟通中${lifecycleSuffix}`, class: 'text-cyan-700 bg-cyan-50 border-cyan-200 dark:text-cyan-300 dark:bg-cyan-500/10 dark:border-cyan-500/30' }
+      if (isTaskRunning) return { text: `工作中${lifecycleSuffix}`, class: 'text-emerald-600 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/30' }
+      if (isTaskWaiting) return { text: `等待中${lifecycleSuffix}`, class: 'text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-500/10 dark:border-amber-500/30' }
+      return { text: `空闲中${lifecycleSuffix}`, class: 'text-zinc-600 bg-zinc-100/60 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-800/80 dark:border-zinc-700' }
     case 'reproducing': return { text: '传宗接代 (总结任务)', class: 'text-purple-600 bg-purple-50 border-purple-200 animate-pulse dark:text-purple-300 dark:bg-purple-500/10 dark:border-purple-500/30' }
     case 'dead': return { text: '已枯竭', class: 'text-zinc-500 bg-zinc-100/60 border-zinc-200 dark:text-zinc-400 dark:bg-zinc-800/60 dark:border-zinc-700' }
     default: return { text: '未知', class: 'text-gray-500' }
   }
 })
-const showStatusDisplay = computed(() => !statusDisplay.value.text.startsWith('空闲中'))
+const showStatusDisplay = computed(() => !statusDisplay.value.text.startsWith('空闲中')
+  && !statusDisplay.value.text.startsWith('与用户沟通中'))
 
 const cardBorderClass = computed(() => {
   if (props.agent.aiRole === 'assistant_admin') return 'border-2 border-violet-300 ring-1 ring-inset ring-violet-200/80 shadow-[0_0_14px_rgba(196,181,253,0.5)] dark:border-violet-400/70 dark:ring-violet-500/35 dark:shadow-[0_0_16px_rgba(139,92,246,0.22)]'
@@ -234,18 +231,18 @@ const roleBadge = computed(() => {
 })
 
 const botConnection = computed(() => {
-  const channel = props.agent.botChannel === 'qq' ? 'qq' : 'feishu'
-  const enabled = channel === 'qq' ? props.agent.qqEnabled : props.agent.feishuEnabled
+  const channel = props.agent.botChannel === 'wechat' ? 'wechat' : (props.agent.botChannel === 'qq' ? 'qq' : 'feishu')
+  const enabled = channel === 'wechat' ? props.agent.wechatEnabled : (channel === 'qq' ? props.agent.qqEnabled : props.agent.feishuEnabled)
   if (!enabled) return null
-  const botStatus = channel === 'qq' ? props.agent.qqStatus : props.agent.feishuStatus
+  const botStatus = channel === 'wechat' ? props.agent.wechatStatus : (channel === 'qq' ? props.agent.qqStatus : props.agent.feishuStatus)
   const status = String(botStatus?.status || '').trim()
   const mode = String(botStatus?.mode || '').trim()
   const message = String(botStatus?.message || '').trim()
   const receiveId = channel === 'qq'
     ? String(props.agent.qqDefaultTargetId || '').trim()
     : String(props.agent.feishuDefaultReceiveId || '').trim()
-  const name = channel === 'qq' ? 'QQ' : '飞书'
-  const modeText = channel === 'qq'
+  const name = channel === 'wechat' ? '微信' : (channel === 'qq' ? 'QQ' : '飞书')
+  const modeText = channel === 'wechat' ? 'iLink' : channel === 'qq'
     ? (mode === 'long_connection' ? '长连接' : mode === 'sandbox_webhook' ? '沙箱仅通知' : mode === 'webhook' ? '仅通知' : '未配置')
     : (mode === 'long_connection' ? '长连接' : mode === 'webhook' ? '仅通知' : '未配置')
   const botName = `${name}机器人`
@@ -319,6 +316,22 @@ const syncedMcpText = computed(() => {
 
 const IDLE_THINKING_TEXT = '空闲中'
 const thinkingPreview = ref(IDLE_THINKING_TEXT)
+const isConversationRunActive = computed(() => {
+  const runStatus = String(props.agent.activeRunStatus || '').toLowerCase()
+  const runPhase = String(props.agent.activeRunPhase || '').toLowerCase()
+  return props.agent.userChatActive
+    || props.agent.runtimeStatus === 'running'
+    || ['running', 'queued'].includes(runStatus)
+    || (!!runStatus && !['completed', 'failed', 'cancelled', 'canceled'].includes(runStatus)
+      && !['', 'idle', 'completed', 'failed', 'cancelled', 'canceled'].includes(runPhase))
+})
+
+const thinkingFallbackText = () => {
+  if (props.agent.runtimeStatus === 'running') {
+    return props.agent.runtimeTool ? `正在调用 ${props.agent.runtimeTool}…` : '正在调用 MCP…'
+  }
+  return isConversationRunActive.value ? '等待 AI 回复…' : IDLE_THINKING_TEXT
+}
 
 // 手机/平板与“减少动态效果”设备不为每张卡片启动独立的逐帧滚动。
 // 多个 AI 同时流式思考时，每卡一个 rAF 会叠加布局读写，明显拖慢列表滚动。
@@ -390,7 +403,7 @@ const startThinkingMotion = (reset = true) => {
 }
 
 const showIdleThinking = async () => {
-  thinkingPreview.value = IDLE_THINKING_TEXT
+  thinkingPreview.value = thinkingFallbackText()
   lastLiveThinking = ''
   await nextTick()
   stopThinkingMotion()
@@ -409,7 +422,12 @@ const scheduleIdleThinking = () => {
 const syncThinkingFromLive = async () => {
   const liveThinking = String(props.agent.latestThinking || '').trim()
   if (!liveThinking) {
-    scheduleIdleThinking()
+    if (isConversationRunActive.value) {
+      clearThinkingIdleTimer()
+      await showIdleThinking()
+    } else {
+      scheduleIdleThinking()
+    }
     return
   }
 
@@ -444,7 +462,14 @@ const syncThinkingFromLive = async () => {
 }
 
 watch(
-  () => props.agent.latestThinking,
+  () => [
+    props.agent.latestThinking,
+    props.agent.activeRunStatus,
+    props.agent.activeRunPhase,
+    props.agent.userChatActive,
+    props.agent.runtimeStatus,
+    props.agent.runtimeTool,
+  ],
   () => {
     void syncThinkingFromLive()
   }
@@ -543,8 +568,8 @@ const onCardPointerUp = (event: PointerEvent) => {
       <div class="min-w-0 flex-1 pr-2">
         <h3 class="font-bold text-zinc-900 flex items-center gap-2 text-base dark:text-zinc-100 transition-colors min-w-0" :class="titleHoverClass">
           <span class="truncate transition-all group-hover:scale-[1.1] group-hover:origin-left group-hover:[text-shadow:0_0_3px_var(--agent-glow-color),0_0_6px_var(--agent-glow-color)]">{{ agent.name }}</span>
-          <span class="text-xs font-normal text-zinc-400 bg-zinc-100/60 px-1.5 py-0.5 rounded border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-400">
-            第 {{ syncedGeneration }} 代
+          <span class="shrink-0 text-xs font-mono font-normal text-zinc-400 dark:text-zinc-500">
+            ID: {{ agent.id.slice(-4) }}
           </span>
           <span
             class="min-w-0 inline-flex items-center gap-1 rounded border border-zinc-200 bg-zinc-50/60 px-1.5 py-0.5 text-xs font-normal text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400"
@@ -562,9 +587,6 @@ const onCardPointerUp = (event: PointerEvent) => {
             :title="botConnection.title"
           >
             {{ botConnection.text }}
-          </span>
-          <span class="shrink-0 text-xs font-mono text-zinc-400 dark:text-zinc-500">
-            ID: {{ agent.id.slice(-4) }}
           </span>
           <span
             v-if="desktopConnection"
@@ -632,7 +654,6 @@ const onCardPointerUp = (event: PointerEvent) => {
 
     <!-- 当前任务/行为 -->
     <div class="min-h-[3.5rem] bg-transparent text-xs text-zinc-700 dark:text-zinc-300">
-      <span class="mb-1 block font-semibold text-zinc-900 dark:text-zinc-100">实时状态:</span>
       <p class="leading-relaxed text-zinc-600 dark:text-zinc-400">
         {{ syncedMcpText }}
       </p>
@@ -642,7 +663,7 @@ const onCardPointerUp = (event: PointerEvent) => {
         :title="thinkingPreview"
       >
         <p ref="thinkingTextRef" class="task-thinking-content">
-          思考: {{ thinkingPreview }}
+          {{ thinkingPreview }}
         </p>
       </div>
       <div v-if="showTaskSnapshotBlock" class="mt-2 space-y-1.5">

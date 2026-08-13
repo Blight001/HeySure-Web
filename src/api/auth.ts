@@ -51,6 +51,9 @@ export const login = (payload: LoginPayload) =>
     fallbackError: '登录失败',
   })
 
+export const logout = () =>
+  post<void>('/api/auth/logout', undefined, { fallbackError: '退出登录失败' })
+
 export const register = (payload: RegisterPayload) =>
   post<unknown>('/api/auth/register', payload, {
     auth: false,

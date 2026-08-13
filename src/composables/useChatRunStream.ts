@@ -1,5 +1,6 @@
 import { onUnmounted, ref } from 'vue'
 import { io, type Socket } from 'socket.io-client'
+import { getAuthToken } from '@/api/http'
 
 /**
  * Live streaming socket for chat runs.
@@ -128,11 +129,16 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     if (!Number.isFinite(uid) || uid <= 0) return
     if (socket && joinedUserId === uid) return
     disconnect()
+    const token = getAuthToken()
+    if (!token) return
     joinedUserId = uid
-    socket = io('/', { transports: ['websocket', 'polling'] })
+    socket = io('/', {
+      transports: ['websocket', 'polling'],
+      auth: { token },
+    })
     socket.on('connect', () => {
       connected.value = true
-      socket?.emit('ui:join', { userId: uid })
+      socket?.emit('ui:join')
     })
     socket.on('disconnect', () => {
       connected.value = false

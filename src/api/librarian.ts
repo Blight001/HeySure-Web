@@ -229,6 +229,19 @@ export const readEntry = (token: string, memoryId: string) =>
     fallbackError: '条目加载失败',
   })
 
+export const updateEntry = (token: string, memoryId: string, content: string) =>
+  put<{ updated: boolean; detail: KnowledgeEntryItem; entry: KnowledgeEntryItem }>(
+    `/api/librarian/entries/${encodeURIComponent(memoryId)}`,
+    { content },
+    { token, fallbackError: '知识条目保存失败' },
+  )
+
+export const deleteEntry = (token: string, memoryId: string) =>
+  del<{ deleted: boolean; memory_id: string; entry: KnowledgeEntryItem }>(
+    `/api/librarian/entries/${encodeURIComponent(memoryId)}`,
+    { token, fallbackError: '知识条目删除失败' },
+  )
+
 export const saveIntrinsicProperties = (
   token: string,
   tools: Array<{

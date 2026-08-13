@@ -206,6 +206,7 @@ onBeforeUnmount(() => {
       :user="user"
       @close="showProfile = false"
       @update-success="onUpdateSuccess"
+      @password-changed="logout"
     />
 
     <MessageDialog />
