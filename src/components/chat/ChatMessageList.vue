@@ -95,6 +95,27 @@ const messageTimeLabels = computed<Record<number, string>>(() => {
 const messageText = (message?: Message) =>
   String(message?.display_text || message?.content || '').trim()
 
+const isCompressionToolMessage = (message?: Message) => {
+  const text = messageText(message)
+  return message?.role === 'system'
+    && text.startsWith('[MCP工具]')
+    && /^工具[：:]\s*conversation\.manage\s*$/m.test(text)
+    && /["']?action["']?\s*[:=]\s*["']compress["']/.test(text)
+}
+
+const isCompressionBoundaryMessage = (message?: Message, index?: number) => {
+  if (message?.role !== 'system') return false
+  const tags = new Set(
+    String(message.tags || '')
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean),
+  )
+  return tags.has('system_notice_compress_result')
+    && typeof index === 'number'
+    && isCompressionToolMessage(props.messages[index - 1])
+}
+
 const messageTimeMs = (message?: Message) => {
   const timestamp = Number(message?.created_at || 0)
   if (!Number.isFinite(timestamp) || timestamp <= 0) return null
@@ -171,6 +192,18 @@ const emit = defineEmits<{
           @apply="(msgIdx, blockIdx) => emit('apply', msgIdx, blockIdx)"
           @revert="(msgIdx, blockIdx) => emit('revert', msgIdx, blockIdx)"
         />
+        <div
+          v-else-if="isCompressionBoundaryMessage(messages[item.index], item.index)"
+          class="flex w-full items-center gap-3 py-2"
+          role="separator"
+          aria-label="压缩上文"
+        >
+          <span class="h-1 flex-1 rounded-full bg-red-500 dark:bg-red-400" aria-hidden="true"></span>
+          <strong class="shrink-0 text-base font-extrabold tracking-wide text-red-600 dark:text-red-400">
+            压缩上文
+          </strong>
+          <span class="h-1 flex-1 rounded-full bg-red-500 dark:bg-red-400" aria-hidden="true"></span>
+        </div>
         <ChatMessage
           v-else
           :message="messages[item.index]"
