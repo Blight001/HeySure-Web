@@ -176,9 +176,14 @@ const botConnections = ref<BotConnectionItem[]>([])
 const botConnectionsBusy = ref(false)
 const botConnectionsError = ref('')
 const selectedConnectionRef = ref('')
-const selectedChannelConnections = computed(() => botConnections.value.filter(
-  item => item.channel === String(props.form?.bot_channel || 'feishu'),
-))
+const botChannels = [
+  { channel: 'wechat', label: '微信' },
+  { channel: 'qq', label: 'QQ' },
+  { channel: 'feishu', label: '飞书' },
+] as const
+const connectionsFor = (channel: string) => botConnections.value.filter(item => item.channel === channel)
+const botConnectionSaveState = ref<Record<string, 'saving' | 'saved' | 'error'>>({})
+const botConnectionSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const loadBotConnections = async () => {
   if (!editingConfigId.value) return
@@ -194,14 +199,13 @@ const loadBotConnections = async () => {
   }
 }
 
-const addBotConnection = async () => {
+const addBotConnection = async (channel: 'wechat' | 'qq' | 'feishu') => {
   if (!editingConfigId.value) return
-  const channel = String(props.form?.bot_channel || 'feishu')
   botConnectionsBusy.value = true
   try {
     const item = await createBotConnection(editingConfigId.value, {
       channel,
-      name: `${channel === 'wechat' ? '微信' : channel === 'qq' ? 'QQ' : '飞书'}账号 ${selectedChannelConnections.value.length + 1}`,
+      name: `${channel === 'wechat' ? '微信' : channel === 'qq' ? 'QQ' : '飞书'}账号 ${connectionsFor(channel).length + 1}`,
       config: { enabled: true },
     })
     await loadBotConnections()
@@ -214,10 +218,10 @@ const addBotConnection = async () => {
   }
 }
 
-const saveBotConnection = async (item: BotConnectionItem) => {
+const persistBotConnection = async (item: BotConnectionItem) => {
   if (!editingConfigId.value) return
-  botConnectionsBusy.value = true
   botConnectionsError.value = ''
+  botConnectionSaveState.value[item.connection_ref] = 'saving'
   try {
     await updateBotConnection(editingConfigId.value, item.connection_ref, {
       name: item.name,
@@ -225,12 +229,26 @@ const saveBotConnection = async (item: BotConnectionItem) => {
       is_default: item.is_default,
       config: item.config || {},
     })
-    await loadBotConnections()
+    botConnectionSaveState.value[item.connection_ref] = 'saved'
   } catch (err: any) {
+    botConnectionSaveState.value[item.connection_ref] = 'error'
     botConnectionsError.value = err?.message || '保存机器人账号失败'
-  } finally {
-    botConnectionsBusy.value = false
   }
+}
+
+const autoSaveBotConnection = (item: BotConnectionItem) => {
+  if (item.is_default) {
+    for (const peer of connectionsFor(item.channel)) {
+      if (peer.connection_ref !== item.connection_ref) peer.is_default = false
+    }
+  }
+  const previous = botConnectionSaveTimers.get(item.connection_ref)
+  if (previous) clearTimeout(previous)
+  botConnectionSaveState.value[item.connection_ref] = 'saving'
+  botConnectionSaveTimers.set(item.connection_ref, setTimeout(() => {
+    botConnectionSaveTimers.delete(item.connection_ref)
+    void persistBotConnection(item)
+  }, 600))
 }
 
 const removeBotConnection = async (item: BotConnectionItem) => {
@@ -262,7 +280,7 @@ const applyWechatLoginStatus = async (status: BotLoginStatus) => {
 }
 
 const loadWechatLoginStatus = async (connectionRef = selectedConnectionRef.value) => {
-  if (!editingConfigId.value || props.form?.bot_channel !== 'wechat') return
+  if (!editingConfigId.value || !connectionRef) return
   try {
     await applyWechatLoginStatus(await getBotLoginStatus('wechat', editingConfigId.value, connectionRef))
   } catch (err: any) {
@@ -275,7 +293,6 @@ const startWechatLogin = async (connectionRef = selectedConnectionRef.value) => 
   wechatLoginBusy.value = true
   wechatLoginError.value = ''
   try {
-    props.form.bot_channel = 'wechat'
     props.form.bot_configs.wechat.enabled = true
     selectedConnectionRef.value = connectionRef
     await applyWechatLoginStatus(await startBotLogin('wechat', editingConfigId.value, connectionRef))
@@ -319,24 +336,26 @@ const stopWechatPolling = () => {
 }
 
 watch(
-  () => [props.show, props.settingsSection, props.form?.bot_channel, editingConfigId.value],
-  ([show, section, channel, cfgId]) => {
+  () => [props.show, props.settingsSection, editingConfigId.value],
+  ([show, section, cfgId]) => {
     stopWechatPolling()
-    if (show && section === 'bot' && channel === 'wechat' && cfgId) {
+    if (show && section === 'bot' && cfgId) {
       void loadBotConnections().then(() => {
-        const first = selectedChannelConnections.value[0]
+        const first = connectionsFor('wechat')[0]
         if (first && !selectedConnectionRef.value) selectedConnectionRef.value = first.connection_ref
         return loadWechatLoginStatus()
       })
       wechatPollTimer = setInterval(() => void loadWechatLoginStatus(), 2500)
-    } else if (show && section === 'bot' && cfgId) {
-      void loadBotConnections()
     }
   },
   { immediate: true },
 )
 
-onBeforeUnmount(stopWechatPolling)
+onBeforeUnmount(() => {
+  stopWechatPolling()
+  for (const timer of botConnectionSaveTimers.values()) clearTimeout(timer)
+  botConnectionSaveTimers.clear()
+})
 
 const DEFAULT_APPEARANCE: WorldActorAppearance = { skin: '', tint: '', scale: 1, aura: '' }
 const appearanceDraft = ref<WorldActorAppearance>({ ...DEFAULT_APPEARANCE })
@@ -754,35 +773,31 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
               </div>
 
               <div v-else-if="settingsSection === 'bot'" class="space-y-3">
-                <div>
-                  <label class="block text-[11px] text-zinc-500 mb-1">配置渠道（可分别启用多个）</label>
-                  <select v-model="form.bot_channel" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-700 dark:text-zinc-100 text-xs">
-                    <option value="feishu">飞书机器人</option>
-                    <option value="qq">QQ机器人</option>
-                    <option value="wechat">微信机器人</option>
-                  </select>
-                  <div class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    切换这里只是查看对应渠道配置，不会关闭其他已启用渠道。当前选择同时作为无明确目标时的默认渠道。
-                  </div>
-                </div>
-
                 <template v-if="editingConfigId">
-                  <div class="flex items-center justify-between gap-3">
-                    <div class="text-xs text-zinc-500">{{ selectedChannelConnections.length }} 个账号，可同时在线</div>
-                    <button type="button" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" :disabled="botConnectionsBusy" @click="addBotConnection">
-                      + 添加账号
+                  <div class="grid grid-cols-3 gap-2">
+                    <button v-for="platform in botChannels" :key="platform.channel" type="button" class="rounded-lg bg-indigo-600 px-3 py-2 text-xs text-white disabled:opacity-50" :disabled="botConnectionsBusy" @click="addBotConnection(platform.channel)">
+                      + 添加{{ platform.label }}机器人
                     </button>
                   </div>
                   <div v-if="botConnectionsError" class="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">{{ botConnectionsError }}</div>
-                  <div v-if="!selectedChannelConnections.length && !botConnectionsBusy" class="rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 dark:border-zinc-700">
-                    还没有此渠道账号，点击“添加账号”创建。
-                  </div>
-                  <div v-for="item in selectedChannelConnections" :key="item.connection_ref" class="space-y-3 rounded-xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/50">
+                  <div class="text-[11px] text-zinc-500">账号配置会在输入后自动保存，无需再点击保存按钮。</div>
+                  <section v-for="platform in botChannels" :key="platform.channel" class="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
+                    <div class="flex items-center justify-between">
+                      <div class="text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ platform.label }}机器人</div>
+                      <div class="text-[11px] text-zinc-400">{{ connectionsFor(platform.channel).length }} 个账号</div>
+                    </div>
+                    <div v-if="!connectionsFor(platform.channel).length && !botConnectionsBusy" class="rounded-lg border border-dashed border-zinc-300 p-3 text-center text-xs text-zinc-500 dark:border-zinc-700">
+                      尚未添加{{ platform.label }}机器人
+                    </div>
+                    <div v-for="item in connectionsFor(platform.channel)" :key="item.connection_ref" class="space-y-3 rounded-xl border border-zinc-200 bg-white/70 p-4 dark:border-zinc-700 dark:bg-zinc-900/50" @input="autoSaveBotConnection(item)" @change="autoSaveBotConnection(item)">
                     <div class="flex flex-wrap items-center gap-2">
                       <input v-model="item.name" class="min-w-0 flex-1 rounded border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-900" placeholder="账号名称" />
                       <label class="flex items-center gap-1 text-xs"><input v-model="item.enabled" type="checkbox" />启用</label>
                       <label class="flex items-center gap-1 text-xs"><input v-model="item.is_default" type="checkbox" />默认</label>
                       <span class="rounded bg-zinc-100 px-2 py-1 text-[10px] text-zinc-500 dark:bg-zinc-800">{{ item.runtime_status?.message || item.state }}</span>
+                      <span class="text-[10px]" :class="botConnectionSaveState[item.connection_ref] === 'error' ? 'text-red-500' : 'text-zinc-400'">
+                        {{ botConnectionSaveState[item.connection_ref] === 'saving' ? '保存中…' : botConnectionSaveState[item.connection_ref] === 'error' ? '保存失败' : botConnectionSaveState[item.connection_ref] === 'saved' ? '已自动保存' : '' }}
+                      </span>
                     </div>
 
                     <div v-if="item.channel === 'feishu'" class="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -814,10 +829,10 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
                     <div class="flex justify-end gap-2">
                       <button v-if="item.channel === 'wechat' && item.state === 'connected'" type="button" class="rounded border px-3 py-1.5 text-xs" @click="selectedConnectionRef = item.connection_ref; disconnectWechat()">断开</button>
                       <button type="button" class="rounded border border-red-200 px-3 py-1.5 text-xs text-red-600" @click="removeBotConnection(item)">删除</button>
-                      <button type="button" class="rounded bg-zinc-900 px-3 py-1.5 text-xs text-white dark:bg-zinc-100 dark:text-zinc-900" @click="saveBotConnection(item)">保存账号</button>
                     </div>
                     <div class="break-all text-[10px] text-zinc-400">{{ item.connection_ref }}</div>
                   </div>
+                  </section>
                 </template>
 
                 <template v-else-if="form.bot_channel === 'feishu'">
