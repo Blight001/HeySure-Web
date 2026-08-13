@@ -189,6 +189,8 @@ const loadBotConnections = async () => {
   if (!editingConfigId.value) return
   botConnectionsBusy.value = true
   botConnectionsError.value = ''
+  // Never retain another AI's accounts while a new request is pending/fails.
+  botConnections.value = []
   try {
     const result = await listBotConnections(editingConfigId.value)
     botConnections.value = Array.isArray(result.connections) ? result.connections : []
@@ -339,13 +341,19 @@ watch(
   () => [props.show, props.settingsSection, editingConfigId.value],
   ([show, section, cfgId]) => {
     stopWechatPolling()
+    selectedConnectionRef.value = ''
+    botConnections.value = []
+    wechatQrDataUrl.value = ''
+    wechatLoginError.value = ''
+    wechatLogin.value = { state: 'disconnected', message: '尚未连接微信', connected: false }
     if (show && section === 'bot' && cfgId) {
       void loadBotConnections().then(() => {
         const first = connectionsFor('wechat')[0]
-        if (first && !selectedConnectionRef.value) selectedConnectionRef.value = first.connection_ref
-        return loadWechatLoginStatus()
+        if (!first) return
+        selectedConnectionRef.value = first.connection_ref
+        void loadWechatLoginStatus(first.connection_ref)
+        wechatPollTimer = setInterval(() => void loadWechatLoginStatus(), 2500)
       })
-      wechatPollTimer = setInterval(() => void loadWechatLoginStatus(), 2500)
     }
   },
   { immediate: true },
@@ -798,6 +806,10 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
                       <span class="text-[10px]" :class="botConnectionSaveState[item.connection_ref] === 'error' ? 'text-red-500' : 'text-zinc-400'">
                         {{ botConnectionSaveState[item.connection_ref] === 'saving' ? '保存中…' : botConnectionSaveState[item.connection_ref] === 'error' ? '保存失败' : botConnectionSaveState[item.connection_ref] === 'saved' ? '已自动保存' : '' }}
                       </span>
+                    </div>
+
+                    <div v-if="item.credentials_unreadable" class="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                      机器人加密密钥已更换，旧凭据无法解密。请重新填写 App Secret/Token，输入后会自动保存。
                     </div>
 
                     <div v-if="item.channel === 'feishu'" class="grid grid-cols-1 gap-2 md:grid-cols-2">

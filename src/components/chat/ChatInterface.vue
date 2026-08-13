@@ -1252,6 +1252,13 @@ const handleHistoryChanged = (payload: ChatHistoryChangedPayload) => {
   const eventConfigId = Number(payload.ai_config_id || 0)
   const currentConfigId = Number(chatCtx.value.aiConfigId || 0)
   if (eventConfigId !== currentConfigId) return
+  if (payload.action === 'append') {
+    // Bot/device messages are committed outside this browser's own request.
+    // Pull only the new tail, then adopt the externally-started run immediately
+    // so its live AI reply streams into the already-open conversation.
+    void fetchRunHistoryIncrementalOnce().then(() => checkActiveRun())
+    return
+  }
   void loadChatHistory(sessionId)
 }
 

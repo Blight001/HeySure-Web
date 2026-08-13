@@ -9,6 +9,7 @@ export interface BotConnectionItem {
   state: string
   config: Record<string, any>
   credentials_configured?: boolean
+  credentials_unreadable?: boolean
   runtime_status?: Record<string, any>
 }
 

@@ -66,6 +66,8 @@ export interface ChatHistoryChangedPayload {
   ai_config_id?: number | null
   ai_kind?: string
   from_message_id?: number
+  message_id?: number
+  source?: string
 }
 
 export interface ChatRunStreamHandlers {
