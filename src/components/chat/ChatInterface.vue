@@ -8,7 +8,8 @@ import FrontPromptPreview from './FrontPromptPreview.vue'
 import { parseChatResponseInline, type ActionBlock, type InlineContent as InlineContentType } from '@/utils/chatParser'
 import { isSameAssistantVisibleReply, normalizeAssistantReplyText } from '@/utils/chatReplyCompare'
 import * as chatApi from '@/api/chat'
-import { getExternalControlStatus, listAiConfigs, type ExternalControlEvent } from '@/api/ai'
+import { getExternalControlStatus, listAiConfigs, updateAiConfigFields, type ExternalControlEvent } from '@/api/ai'
+import { me } from '@/api/auth'
 import { callMcpTool, listMcpTools } from '@/api/mcp'
 import { getAuthToken } from '@/api/http'
 import { formatTokenCount } from '@/utils/formatTokenCount'
@@ -101,6 +102,7 @@ const emit = defineEmits<{
   (e: 'refreshFiles'): void
   (e: 'totalChatTokensUpdate', value: number): void
   (e: 'open-settings'): void
+  (e: 'modelChanged', payload: { aiConfigId: number; model: string; modelPresetId: string }): void
 }>()
 const aiKindValue = computed(() => props.aiKind || 'assistant')
 const preferredInitialSessionId = computed(() => String(props.initialSessionId || '').trim())
@@ -288,6 +290,29 @@ const configuredFrontPrompt = ref('')
 const externalControlMode = ref(false)
 const externalControlEvents = ref<ExternalControlEvent[]>([])
 const externalControlError = ref('')
+interface ChatModelOption {
+  id: string
+  name: string
+  model: string
+}
+const modelOptions = ref<ChatModelOption[]>([])
+const selectedModelId = ref('')
+const modelSwitching = ref(false)
+
+const parseModelOptions = (raw: unknown): ChatModelOption[] => {
+  let parsed = raw
+  if (typeof raw === 'string') {
+    try { parsed = JSON.parse(raw || '[]') } catch { parsed = [] }
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map((item: any) => ({
+      id: String(item?.id || item?.model || '').trim(),
+      name: String(item?.name || item?.model || '').trim(),
+      model: String(item?.model || '').trim(),
+    }))
+    .filter(item => item.id && item.model)
+}
 const effectiveSystemPromptPreview = ref('')
 const frontPromptPreviewError = ref('')
 const frontPromptCopied = ref(false)
@@ -1660,19 +1685,53 @@ const loadConfiguredFrontPrompt = async () => {
   configuredFrontPrompt.value = ''
   externalControlMode.value = false
   externalControlEvents.value = []
+  modelOptions.value = []
+  selectedModelId.value = ''
   if (!getAuthToken()) return
   if (props.aiConfigId === undefined || props.aiConfigId === null) return
   let rows
+  let currentUser
   try {
-    rows = await listAiConfigs()
+    ;[rows, currentUser] = await Promise.all([listAiConfigs(), me()])
   } catch {
     return
   }
   const cfg = (Array.isArray(rows) ? rows : []).find((row: any) => Number(row?.id) === Number(props.aiConfigId))
+  modelOptions.value = parseModelOptions(currentUser?.model_presets)
+  const configuredPresetId = String(cfg?.model_preset_id || '').trim()
+  selectedModelId.value = modelOptions.value.some(option => option.id === configuredPresetId)
+    ? configuredPresetId
+    : (modelOptions.value.find(option => option.model === String(cfg?.model || ''))?.id || '')
   configuredFrontPrompt.value = String(cfg?.prompt || '').trim()
   externalControlMode.value = cfg?.execution_mode === 'external_mcp'
   if (externalControlMode.value) await loadExternalControlEvents()
   syncExternalControlPolling()
+}
+
+const switchConversationModel = async (modelId: string) => {
+  const configId = Number(props.aiConfigId || 0)
+  const option = modelOptions.value.find(item => item.id === modelId)
+  if (!configId || !option || modelId === selectedModelId.value) return
+  if (isRunActive.value || isTyping.value) {
+    alert({ message: '请等待当前回复结束后再切换模型', type: 'warning' })
+    return
+  }
+  const previousId = selectedModelId.value
+  modelSwitching.value = true
+  selectedModelId.value = modelId
+  try {
+    await updateAiConfigFields(configId, {
+      model_preset_id: option.id,
+      model: option.model,
+    })
+    emit('modelChanged', { aiConfigId: configId, model: option.model, modelPresetId: option.id })
+    alert({ message: `已切换到 ${option.name || option.model}`, type: 'success' })
+  } catch (error: any) {
+    selectedModelId.value = previousId
+    alert({ message: error?.message || '模型切换失败', type: 'error' })
+  } finally {
+    modelSwitching.value = false
+  }
 }
 
 const loadExternalControlEvents = async () => {
@@ -2900,6 +2959,9 @@ onBeforeUnmount(() => {
         :selectedToolGroups="selectedToolGroupKeys"
         :uploadedAttachments="uploadedAttachments"
         :uploadingCount="uploadingCount"
+        :modelOptions="aiKindValue === 'core' ? modelOptions : []"
+        :selectedModelId="selectedModelId"
+        :modelSwitching="modelSwitching"
         @toggleToolGroup="toggleToolGroup"
         @send="sendChat"
         @stop="stopCurrentRun"
@@ -2912,6 +2974,7 @@ onBeforeUnmount(() => {
         @refreshFiles="handleRefreshFiles"
         @uploadFiles="uploadLocalFiles"
         @removeUpload="removeUploadedAttachment"
+        @selectModel="switchConversationModel"
       />
     </div>
   </div>

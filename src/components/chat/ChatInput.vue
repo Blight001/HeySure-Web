@@ -15,6 +15,12 @@ interface UploadAttachmentItem {
   status: 'uploading' | 'ready'
 }
 
+interface ChatModelOption {
+  id: string
+  name: string
+  model: string
+}
+
 const props = defineProps<{
   modelValue: string
   isTyping: boolean
@@ -27,6 +33,9 @@ const props = defineProps<{
   selectedToolGroups?: string[]
   uploadedAttachments?: UploadAttachmentItem[]
   uploadingCount?: number
+  modelOptions?: ChatModelOption[]
+  selectedModelId?: string
+  modelSwitching?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +52,7 @@ const emit = defineEmits<{
   (e: 'toggleToolGroup', groupKey: string): void
   (e: 'uploadFiles', files: File[]): void
   (e: 'removeUpload', clientId: string): void
+  (e: 'selectModel', modelId: string): void
 }>()
 
 const inputValue = computed({
@@ -61,9 +71,14 @@ const hasReadyUpload = computed(() => (props.uploadedAttachments || []).some(ite
 // 才切换成「停止」。空闲无内容时禁用。
 const showStop = computed(() => props.isTyping && !hasContent.value && !hasReadyUpload.value)
 const canSend = computed(() => (hasContent.value || hasReadyUpload.value) && !props.uploadingCount)
+const selectedModel = computed(() =>
+  (props.modelOptions || []).find(item => item.id === props.selectedModelId) || null)
+const showModelSwitcher = computed(() => (props.modelOptions || []).length > 0)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
+const modelSwitcherRef = ref<HTMLElement | null>(null)
+const modelMenuOpen = ref(false)
 const isDraggingFiles = ref(false)
 const TEXTAREA_MIN_HEIGHT = 36
 const TEXTAREA_MAX_HEIGHT = 146
@@ -146,6 +161,17 @@ useDismissibleLayer({
   roots: [rootRef],
   onDismiss: () => emit('closeFileSelector'),
 })
+
+useDismissibleLayer({
+  open: () => modelMenuOpen.value,
+  roots: [modelSwitcherRef],
+  onDismiss: () => { modelMenuOpen.value = false },
+})
+
+const selectModel = (modelId: string) => {
+  modelMenuOpen.value = false
+  if (modelId && modelId !== props.selectedModelId) emit('selectModel', modelId)
+}
 
 watch(() => props.modelValue, async () => {
   await nextTick()
@@ -249,6 +275,43 @@ watch(() => props.modelValue, async () => {
         @input="handleInput"
         @paste="handlePaste"
       ></textarea>
+
+      <div v-if="showModelSwitcher" ref="modelSwitcherRef" class="relative shrink-0">
+        <button
+          type="button"
+          class="flex h-9 max-w-[7.5rem] items-center gap-1 rounded-full border border-zinc-200 bg-white/70 px-2 text-[11px] text-zinc-600 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
+          :disabled="modelSwitching"
+          :title="modelSwitching ? '正在切换模型' : `当前模型：${selectedModel?.name || selectedModel?.model || '请选择'}`"
+          :aria-expanded="modelMenuOpen"
+          @click="modelMenuOpen = !modelMenuOpen"
+        >
+          <span class="truncate">{{ modelSwitching ? '切换中…' : (selectedModel?.name || selectedModel?.model || '选择模型') }}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0 transition-transform" :class="modelMenuOpen ? '' : 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 15l-7-7-7 7" />
+          </svg>
+        </button>
+        <div
+          v-if="modelMenuOpen"
+          class="absolute bottom-full right-0 z-50 mb-2 w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white/95 p-1 shadow-2xl backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95"
+        >
+          <div class="max-h-60 overflow-y-auto">
+            <button
+              v-for="option in modelOptions"
+              :key="option.id"
+              type="button"
+              class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              :class="option.id === selectedModelId ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300' : 'text-zinc-700 dark:text-zinc-200'"
+              @click="selectModel(option.id)"
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-xs font-medium">{{ option.name || option.model }}</span>
+                <span class="block truncate text-[10px] opacity-70">{{ option.model }}</span>
+              </span>
+              <span v-if="option.id === selectedModelId" class="shrink-0 text-xs">✓</span>
+            </button>
+          </div>
+        </div>
+      </div>
 
       <button
         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200"

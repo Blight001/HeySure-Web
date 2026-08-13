@@ -279,6 +279,15 @@ const onMainChatTotalTokensUpdate = (value: number) => {
   chatLiveTokenUsed.value = Math.max(0, Number(value) || 0)
 }
 
+const onConversationModelChanged = (payload: { aiConfigId: number; model: string }) => {
+  const updateAgent = (agent: Agent | null | undefined) => {
+    if (agent && Number(agent.aiConfigId) === Number(payload.aiConfigId)) agent.model = payload.model
+  }
+  agents.value.forEach(updateAgent)
+  updateAgent(chatTarget.value)
+  floatingAgentChats.value.forEach(window => updateAgent(window.agent))
+}
+
 const syncOpenAgentReferences = () => {
   chatTarget.value = findFreshAgent(chatTarget.value)
   taskListTarget.value = findFreshAgent(taskListTarget.value)
@@ -1301,6 +1310,7 @@ onUnmounted(() => {
                 @open-settings="chatTarget && openAgentSettings(chatTarget)"
                 @totalChatTokensUpdate="onMainChatTotalTokensUpdate"
                 @refreshFiles="loadProjectContext"
+                @modelChanged="onConversationModelChanged"
               />
             </div>
             <!-- 悬浮/PiP 对话使用独立的 chat 弹窗宿主：确认、提示和输入框只覆盖
@@ -1330,6 +1340,7 @@ onUnmounted(() => {
       @expand="expandFloatingAgentChat(window.windowId)"
       @open-settings="openAgentSettings(window.agent)"
       @refresh-files="loadProjectContext"
+      @model-changed="onConversationModelChanged"
     />
 
     <AiConfigModal

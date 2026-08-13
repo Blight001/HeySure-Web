@@ -274,42 +274,6 @@ const botConnections = computed(() => (
     })
 ))
 
-const desktopConnection = computed(() => {
-  if (!props.agent.desktopAgentConnected) return null
-  const name = String(props.agent.desktopAgentName || props.agent.name || '').trim()
-  const platform = String(props.agent.desktopAgentPlatform || 'Windows Desktop').trim()
-  const id = String(props.agent.desktopAgentId || '').trim()
-  return {
-    text: '桌面已连接',
-    class: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300',
-    title: [name ? `桌面 Agent：${name}` : '', platform ? `平台：${platform}` : '', id ? `ID：${id}` : ''].filter(Boolean).join('；') || '桌面 Agent 已连接',
-  }
-})
-
-const browserConnection = computed(() => {
-  if (!props.agent.browserAgentConnected) return null
-  const name = String(props.agent.browserAgentName || props.agent.name || '').trim()
-  const platform = String(props.agent.browserAgentPlatform || 'Browser Extension').trim()
-  const id = String(props.agent.browserAgentId || '').trim()
-  return {
-    text: '浏览器已连接',
-    class: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-300',
-    title: [name ? `浏览器 Agent：${name}` : '', platform ? `平台：${platform}` : '', id ? `ID：${id}` : ''].filter(Boolean).join('；') || '浏览器 Agent 已连接',
-  }
-})
-
-const androidConnection = computed(() => {
-  if (!props.agent.androidAgentConnected) return null
-  const name = String(props.agent.androidAgentName || props.agent.name || '').trim()
-  const platform = String(props.agent.androidAgentPlatform || 'Android Mobile').trim()
-  const id = String(props.agent.androidAgentId || '').trim()
-  return {
-    text: '安卓已连接',
-    class: 'border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-300',
-    title: [name ? `安卓 Agent：${name}` : '', platform ? `平台：${platform}` : '', id ? `ID：${id}` : ''].filter(Boolean).join('；') || '安卓 Agent 已连接',
-  }
-})
-
 const syncedMcpText = computed(() => {
   if (!props.agent.enabled) return 'AI 已停止'
   const activeCalling = props.agent.runtimeStatus === 'running'
@@ -595,30 +559,6 @@ const onCardPointerUp = (event: PointerEvent) => {
             :title="botConnection.title"
           >
             {{ botConnection.text }}
-          </span>
-          <span
-            v-if="desktopConnection"
-            class="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none"
-            :class="desktopConnection.class"
-            :title="desktopConnection.title"
-          >
-            {{ desktopConnection.text }}
-          </span>
-          <span
-            v-if="browserConnection"
-            class="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none"
-            :class="browserConnection.class"
-            :title="browserConnection.title"
-          >
-            {{ browserConnection.text }}
-          </span>
-          <span
-            v-if="androidConnection"
-            class="shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none"
-            :class="androidConnection.class"
-            :title="androidConnection.title"
-          >
-            {{ androidConnection.text }}
           </span>
         </div>
       </div>

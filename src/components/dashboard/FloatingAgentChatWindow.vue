@@ -25,6 +25,7 @@ const emit = defineEmits<{
   (e: 'expand'): void
   (e: 'open-settings'): void
   (e: 'refresh-files'): void
+  (e: 'model-changed', payload: { aiConfigId: number; model: string; modelPresetId: string }): void
 }>()
 
 const panelRef = ref<HTMLElement | null>(null)
@@ -173,6 +174,7 @@ onBeforeUnmount(() => {
             @open-settings="emit('open-settings')"
             @totalChatTokensUpdate="onTotalTokensUpdate"
             @refreshFiles="emit('refresh-files')"
+            @modelChanged="emit('model-changed', $event)"
           />
         </div>
         <MessageDialog :host="dialogHost" inline />

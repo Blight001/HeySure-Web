@@ -576,7 +576,7 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
               外部 MCP 模式不调用服务器模型，用户对话只读，只展示控制器的 MCP 执行记录。
             </div>
           </div>
-          <div v-if="form.execution_mode !== 'external_mcp'">
+          <div v-if="form.execution_mode !== 'external_mcp' && (mode === 'create' || form.ai_role_group !== 'digital_member')">
             <label class="block text-xs text-zinc-500 mb-1">模型</label>
             <select
               v-model="form.model_preset_id"
@@ -646,6 +646,15 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
             <textarea :value="controllerHandoff" readonly rows="10" class="w-full resize-y rounded-lg border border-cyan-200 bg-white/80 p-3 font-mono text-[11px] leading-5 text-zinc-700 dark:border-cyan-500/30 dark:bg-zinc-950/70 dark:text-zinc-200"></textarea>
             <div class="flex justify-end">
               <button type="button" class="rounded border border-cyan-300 px-3 py-1.5 text-xs text-cyan-700 dark:border-cyan-500/40 dark:text-cyan-200" @click="copyControllerHandoff">复制控制文档</button>
+            </div>
+          </div>
+          <div v-else-if="form.execution_mode !== 'external_mcp'">
+            <label class="block text-xs text-zinc-500 mb-1">模型</label>
+            <div class="w-full rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-200">
+              {{ selectedModelPreset?.name || form.model || '未设置模型' }}
+            </div>
+            <div class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+              请在该数字成员的对话框中，通过发送按钮左侧的模型菜单切换。
             </div>
           </div>
           <div v-if="controllerCredentials.some(item => item.state === 'active')" class="mt-3 space-y-1">
