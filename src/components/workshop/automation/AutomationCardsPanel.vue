@@ -18,14 +18,12 @@ import {
 } from '@/api/workflowCards'
 import {
   cancelWorkflowRun,
-  confirmWorkflowRun,
-  getWorkflowRun,
-  listWorkflowConfirmations,
+  listWorkflowAiReviews,
   listWorkflowRuns,
   listWorkflowRunSteps,
   retryWorkflowRun,
   startWorkflowRun,
-  type WorkflowConfirmation,
+  type WorkflowAiReview,
   type WorkflowRun,
   type WorkflowStepRun,
 } from '@/api/workflowRuns'
@@ -52,7 +50,7 @@ interface AiMemberLike {
   enabled?: boolean
 }
 
-const props = defineProps<{ devices: DeviceLike[]; agents: AiMemberLike[]; initialRunId?: string }>()
+const props = defineProps<{ devices: DeviceLike[]; agents: AiMemberLike[] }>()
 const { confirm } = useMessage()
 
 type StepEditor = {
@@ -79,13 +77,11 @@ type StepEditor = {
   extraText: string
 }
 
-const AI_INTERVENTION_TOOL = '__workflow.ai_intervention'
 const defaultStepTitles: Record<WorkflowStepType, string> = {
   mcp: '设备 MCP',
   condition: '判断分支',
   delay: '等待',
-  confirm: '人工确认',
-  ai: 'AI 介入',
+  ai: 'AI 审核',
   end: '结束',
 }
 
@@ -170,8 +166,8 @@ const closeDeviceSettings = (save: boolean) => {
   if (!save) {
     publishDeviceIds.value = [...deviceSettingsSnapshot.ids]
     defaultDeviceId.value = deviceSettingsSnapshot.defaultId
-  } else if (!publishDeviceIds.value.includes(defaultDeviceId.value)) {
-    defaultDeviceId.value = publishDeviceIds.value[0] || ''
+  } else if (defaultDeviceId.value && !onlineDevices.value.some(device => device.id === defaultDeviceId.value)) {
+    defaultDeviceId.value = ''
   }
   deviceSettingsOpen.value = false
 }
@@ -181,17 +177,9 @@ const runDeviceId = ref('')
 const runInputText = ref('{}')
 const selectedRun = ref<WorkflowRun | null>(null)
 const selectedSteps = ref<WorkflowStepRun[]>([])
-const confirmations = ref<WorkflowConfirmation[]>([])
-const pendingConfirmations = ref<Array<{ run: WorkflowRun; confirmation: WorkflowConfirmation }>>([])
-const confirmationClock = ref(Date.now())
-const confirmationBusyId = ref('')
+const aiReviews = ref<WorkflowAiReview[]>([])
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
-const contractDevices = computed(() => [...(props.devices || [])].sort((first, second) => {
-  const onlineOrder = Number(second.online !== false) - Number(first.online !== false)
-  if (onlineOrder) return onlineOrder
-  return String(first.name || first.id).localeCompare(String(second.name || second.id), 'zh-CN')
-}))
 const ownerTags = ref<string[]>([])
 const aiMemberOptions = computed(() => (props.agents || [])
   .filter(agent => Number.isFinite(Number(agent.aiConfigId)) && Number(agent.aiConfigId) > 0)
@@ -226,12 +214,12 @@ const toolDefsForStep = (row: StepEditor) => deviceScopes.value[row.deviceId]?.t
 const toolNamesForStep = (row: StepEditor) => Object.keys(toolDefsForStep(row)).sort()
 const boundMcpDeviceIds = (definition: WorkflowDefinition) => Array.from(new Set(
   Object.values(definition.steps || {})
-    .filter(step => step?.type === 'mcp' && step?.toolRef?.name !== AI_INTERVENTION_TOOL)
+    .filter(step => step?.type === 'mcp')
     .map(step => String(step?.toolRef?.deviceId || '').trim())
     .filter(Boolean),
 ))
 const selectedStep = computed(() => editorSteps.value.find(step => step.id === selectedStepId.value) || null)
-const activeStatuses = new Set(['pending', 'running', 'waiting_device', 'waiting_confirmation', 'waiting_ai', 'retry_wait', 'paused_offline'])
+const activeStatuses = new Set(['pending', 'running', 'waiting_device', 'waiting_ai', 'retry_wait', 'paused_offline'])
 const filteredCards = computed(() => {
   const query = cardSearch.value.trim().toLowerCase()
   return cards.value.filter(card =>
@@ -268,7 +256,7 @@ const emptyStep = (type: WorkflowStepType = 'mcp', index = editorSteps.value.len
   onTrue: '',
   onFalse: '',
   delaySeconds: 1,
-  message: type === 'ai' ? '请核对当前流程上下文，并返回继续执行所需的参数' : '请确认继续执行此自动化步骤',
+  message: type === 'ai' ? '请核对此前完整运行过程，完成本节点任务并返回继续执行所需的参数' : '',
   onDenied: '',
   extraText: '{}',
 })
@@ -300,14 +288,6 @@ const loadCards = async () => {
 const loadRuns = async () => {
   try {
     runs.value = (await listWorkflowRuns({ limit: 200 })).items
-    const waiting = runs.value.filter(item => ['waiting_confirmation', 'waiting_ai'].includes(item.status))
-    const pendingRows = await Promise.all(waiting.map(async run => ({
-      run,
-      items: (await listWorkflowConfirmations(run.id)).items,
-    })))
-    pendingConfirmations.value = pendingRows.flatMap(({ run, items }) => items
-      .filter(confirmation => confirmation.status === 'pending' && confirmation.type !== 'ai_review')
-      .map(confirmation => ({ run, confirmation })))
     if (selectedRun.value) {
       selectedRun.value = runs.value.find(item => item.id === selectedRun.value?.id) || selectedRun.value
       await loadRunDetail(selectedRun.value)
@@ -318,12 +298,12 @@ const loadRuns = async () => {
 }
 
 const fromStep = (id: string, step: Record<string, any>): StepEditor => {
-  const isAi = step.type === 'mcp' && step.toolRef?.name === AI_INTERVENTION_TOOL
-  const type = (isAi ? 'ai' : step.type || 'mcp') as WorkflowStepType
+  const isAi = step.type === 'ai'
+  const type = (step.type || 'mcp') as WorkflowStepType
   const knownKeys = new Set([
     'type', 'title', 'toolRef', 'arguments', 'saveAs', 'next', 'onError', 'timeoutSeconds',
     'resultProjection', 'retryPolicy', 'expression', 'onTrue', 'onFalse', 'delaySeconds',
-    'seconds', 'message', 'riskSummary', 'onDenied',
+    'seconds', 'prompt',
   ])
   const extra = Object.fromEntries(Object.entries(step).filter(([key]) => !knownKeys.has(key)))
   return ({
@@ -346,8 +326,8 @@ const fromStep = (id: string, step: Record<string, any>): StepEditor => {
   onTrue: String(step.onTrue || ''),
   onFalse: String(step.onFalse || ''),
   delaySeconds: Number(step.delaySeconds ?? step.seconds ?? 1),
-  message: String((isAi ? step.arguments?.prompt : step.message || step.riskSummary) || '请确认继续执行此自动化步骤'),
-  onDenied: String(isAi && step.onError !== 'fail' ? step.onError || '' : step.onDenied || ''),
+  message: String(step.prompt || ''),
+  onDenied: String(isAi && step.onError !== 'fail' ? step.onError || '' : ''),
   extraText: JSON.stringify(extra, null, 2),
   })
 }
@@ -610,9 +590,6 @@ const buildDefinition = (): WorkflowDefinition => {
       if (!row.deviceId.trim()) {
         throw new Error(`步骤 ${id}：请先选择此节点绑定的契约设备`)
       }
-      if (!publishDeviceIds.value.includes(row.deviceId)) {
-        throw new Error(`步骤 ${id}：绑定设备未勾选为契约设备`)
-      }
       if (!row.tool.trim()) {
         throw new Error(`步骤 ${id}：请选择绑定设备上报的工具`)
       }
@@ -653,18 +630,11 @@ const buildDefinition = (): WorkflowDefinition => {
       }
     } else if (row.type === 'delay') {
       steps[id] = { ...extra, type: 'delay', delaySeconds: Number(row.delaySeconds), next: row.next.trim() }
-    } else if (row.type === 'confirm') {
-      steps[id] = {
-        ...extra,
-        type: 'confirm', message: row.message, timeoutSeconds: Number(row.timeoutSeconds),
-        next: row.next.trim(), ...(row.onDenied.trim() ? { onDenied: row.onDenied.trim() } : {}),
-      }
     } else if (row.type === 'ai') {
       steps[id] = {
         ...extra,
-        type: 'mcp',
-        toolRef: { namespace: 'device', name: AI_INTERVENTION_TOOL },
-        arguments: { prompt: row.message },
+        type: 'ai',
+        prompt: row.message,
         saveAs: row.saveAs.trim(),
         timeoutSeconds: Number(row.timeoutSeconds),
         next: row.next.trim(),
@@ -696,21 +666,21 @@ const buildDefinition = (): WorkflowDefinition => {
 
 const saveCard = async () => {
   resetMessages()
-  const hasMcpStep = editorSteps.value.some(step => step.type === 'mcp')
-  if (hasMcpStep && !publishDeviceIds.value.length) {
-    error.value = '请至少选择一台用于冻结工具契约的设备'
-    return
-  }
   const unboundStep = editorSteps.value.find(step => step.type === 'mcp'
-    && (!step.deviceId || !publishDeviceIds.value.includes(step.deviceId) || !step.tool))
+    && (!step.deviceId || !step.tool))
   if (unboundStep) {
     selectedStepId.value = unboundStep.id
-    error.value = `设备 MCP 节点“${unboundStep.title || unboundStep.id}”必须选择契约设备及该设备的工具`
+    error.value = `设备 MCP 节点“${unboundStep.title || unboundStep.id}”必须选择设备及该设备的工具`
     return
   }
   busy.value = true
   try {
     const wasExisting = Boolean(editingId.value)
+    const inferredDeviceIds = Array.from(new Set(editorSteps.value
+      .filter(step => step.type === 'mcp')
+      .map(step => step.deviceId.trim())
+      .filter(Boolean)))
+    publishDeviceIds.value = inferredDeviceIds
     const body = {
       name: editor.name.trim(), description: editor.description.trim(),
       tags: [
@@ -720,8 +690,8 @@ const saveCard = async () => {
       access_scope: editor.accessScope,
       allowed_ai_config_ids: editor.accessScope === 'selected' ? [...editor.allowedAiConfigIds] : [],
       risk_level: editor.riskLevel, definition: buildDefinition(),
-      default_device_id: defaultDeviceId.value || publishDeviceIds.value[0] || undefined,
-      device_ids: [...publishDeviceIds.value],
+      default_device_id: defaultDeviceId.value || inferredDeviceIds[0] || undefined,
+      device_ids: inferredDeviceIds,
     }
     const saved = wasExisting
       ? await updateWorkflowCard(editingId.value, body)
@@ -739,7 +709,7 @@ const saveCard = async () => {
 
 const loadDeviceTools = async () => {
   const requestId = ++deviceToolsRequestId
-  const deviceIds = [...publishDeviceIds.value]
+  const deviceIds = onlineDevices.value.map(device => device.id)
   deviceScopes.value = {}
   deviceToolsError.value = ''
   if (!deviceIds.length) {
@@ -813,7 +783,7 @@ const openRun = (card: WorkflowCard) => {
 }
 
 const startRun = async () => {
-  if (!runModalCard.value || !runDeviceId.value) return
+  if (!runModalCard.value) return
   resetMessages()
   busy.value = true
   try {
@@ -835,11 +805,11 @@ const startRun = async () => {
 
 const loadRunDetail = async (run: WorkflowRun) => {
   selectedRun.value = run
-  const [stepRows, confirmationRows] = await Promise.all([
-    listWorkflowRunSteps(run.id), listWorkflowConfirmations(run.id),
+  const [stepRows, reviewRows] = await Promise.all([
+    listWorkflowRunSteps(run.id), listWorkflowAiReviews(run.id),
   ])
   selectedSteps.value = stepRows.items
-  confirmations.value = confirmationRows.items
+  aiReviews.value = reviewRows.items
 }
 
 const cancelRun = async (run: WorkflowRun) => {
@@ -866,59 +836,6 @@ const cloneCurrentCard = async () => {
   } finally {
     busy.value = false
   }
-}
-
-const submitConfirmation = async (run: WorkflowRun, confirmationId: string, approved: boolean) => {
-  if (confirmationBusyId.value) return
-  resetMessages()
-  confirmationBusyId.value = confirmationId
-  try {
-    const updated = await confirmWorkflowRun(run.id, approved)
-    if (selectedRun.value?.id === run.id) selectedRun.value = updated
-    notice.value = approved ? '已批准，自动化将继续执行' : '已拒绝，本次自动化已停止'
-    await loadRuns()
-  } catch (cause: any) {
-    error.value = cause?.message || '提交确认失败'
-  } finally {
-    confirmationBusyId.value = ''
-  }
-}
-
-const decide = async (approved: boolean) => {
-  if (!selectedRun.value) return
-  const pending = confirmations.value.find(item => item.status === 'pending' && item.type !== 'ai_review')
-  if (!pending) return
-  await submitConfirmation(selectedRun.value, pending.id, approved)
-}
-
-const decidePending = async (
-  item: { run: WorkflowRun; confirmation: WorkflowConfirmation },
-  approved: boolean,
-) => {
-  await submitConfirmation(item.run, item.confirmation.id, approved)
-}
-
-const openPendingConfirmation = async (item: { run: WorkflowRun }) => {
-  tab.value = 'runs'
-  await loadRunDetail(item.run)
-}
-
-const focusRequestedRun = async (runId: string) => {
-  const safeRunId = runId.trim()
-  if (!safeRunId) return
-  try {
-    const run = runs.value.find(item => item.id === safeRunId) || await getWorkflowRun(safeRunId)
-    tab.value = 'runs'
-    await loadRunDetail(run)
-  } catch (cause: any) {
-    error.value = cause?.message || '待确认任务不存在或已无权访问'
-  }
-}
-
-const confirmationRemaining = (expiresAt: number) => {
-  const seconds = Math.max(0, Math.ceil(expiresAt - confirmationClock.value / 1000))
-  const minutes = Math.floor(seconds / 60)
-  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 const deleteCurrentCard = async () => {
@@ -1030,7 +947,7 @@ const comparisonStatuses = computed(() => {
 
 const statusLabel = (status: string) => ({
   active: '可执行', deprecated: '旧版本', draft: '历史草稿', validated: '历史已校验', published: '可执行',
-  pending: '待领取', running: '推进中', waiting_device: '等待设备', waiting_confirmation: '等待确认',
+  pending: '待领取', running: '推进中', waiting_device: '等待设备',
   waiting_ai: '等待 AI', retry_wait: '等待重试', paused_offline: '设备离线', succeeded: '成功', failed: '失败',
   cancelled: '已取消', timed_out: '超时', dispatch_pending: '待派发', dispatching: '派发中',
 }[status] || status)
@@ -1045,13 +962,12 @@ const runStatusLabel = (run: WorkflowRun) => {
 const statusClass = (status: string) => {
   if (status === 'succeeded' || ['active', 'published'].includes(status)) return 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-500/10'
   if (['failed', 'timed_out', 'cancelled'].includes(status)) return 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/10'
-  if (['waiting_confirmation', 'waiting_ai', 'paused_offline', 'retry_wait'].includes(status)) return 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10'
+  if (['waiting_ai', 'paused_offline', 'retry_wait'].includes(status)) return 'text-amber-600 bg-amber-50 dark:text-amber-300 dark:bg-amber-500/10'
   return 'text-indigo-600 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-500/10'
 }
 
-watch(publishDeviceIds, loadDeviceTools, { deep: true })
+watch(onlineDevices, loadDeviceTools, { deep: true, immediate: true })
 watch(tab, value => { if (value === 'runs') loadRuns() })
-watch(() => props.initialRunId, value => { if (value) focusRequestedRun(value) })
 watch(editorOpen, value => { if (!value) editorFullscreen.value = false })
 watch(
   [() => ({ ...editor }), editorSteps, canvasPositions],
@@ -1063,9 +979,7 @@ let timer: number | undefined
 onMounted(async () => {
   window.addEventListener('keydown', handleEditorShortcut)
   await Promise.all([loadCards(), loadRuns()])
-  if (props.initialRunId) await focusRequestedRun(props.initialRunId)
   timer = window.setInterval(() => {
-    confirmationClock.value = Date.now()
     if (runs.value.some(run => activeStatuses.has(run.status))) loadRuns()
   }, 2500)
 })
@@ -1084,25 +998,6 @@ onBeforeUnmount(() => {
       </div>
       <span class="rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-900/50">{{ cards.length }} 张</span>
     </header>
-
-    <div v-if="pendingConfirmations.length" class="mt-3 space-y-2">
-      <article
-        v-for="item in pendingConfirmations"
-        :key="item.confirmation.id"
-        class="flex w-full flex-col gap-2 rounded-lg border border-amber-300 bg-amber-100/90 px-3 py-2 text-left sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/40 dark:bg-amber-500/15"
-      >
-        <button type="button" class="min-w-0 flex-1 text-left" @click="openPendingConfirmation(item)">
-          <span class="block truncate text-[11px] font-semibold text-amber-800 dark:text-amber-200">待人工确认：{{ cards.find(card => card.id === item.run.card_id)?.name || item.run.card_id }}</span>
-          <span class="mt-0.5 block text-[9px] text-amber-700/80 dark:text-amber-200/70">{{ item.confirmation.risk_summary }}</span>
-        </button>
-        <div class="flex shrink-0 items-center gap-1.5">
-          <span class="mr-1 text-[10px] font-medium text-amber-700 dark:text-amber-200">剩余 {{ confirmationRemaining(item.confirmation.expires_at) }}</span>
-          <button type="button" class="rounded border border-amber-400 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-200 disabled:cursor-wait disabled:opacity-50 dark:border-amber-500/50 dark:text-amber-200 dark:hover:bg-amber-500/20" :disabled="Boolean(confirmationBusyId)" @click="openPendingConfirmation(item)">详情</button>
-          <button type="button" class="rounded bg-rose-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decidePending(item, false)">拒绝</button>
-          <button type="button" class="rounded bg-emerald-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decidePending(item, true)">{{ confirmationBusyId === item.confirmation.id ? '提交中…' : '批准' }}</button>
-        </div>
-      </article>
-    </div>
 
     <div class="mt-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1171,16 +1066,9 @@ onBeforeUnmount(() => {
               <button v-if="activeStatuses.has(selectedRun.status)" class="rounded border border-rose-200 px-2 py-1 text-rose-500" @click="cancelRun(selectedRun)">取消</button>
               <button v-if="['failed', 'timed_out', 'cancelled'].includes(selectedRun.status)" class="rounded border border-indigo-200 px-2 py-1 text-indigo-600" @click="retryRun(selectedRun)">新运行重试</button>
             </div>
-            <div v-for="confirmation in confirmations.filter(item => item.status === 'pending')" :key="confirmation.id" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
-              <template v-if="confirmation.type === 'ai_review'">
-                <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">{{ confirmation.type === 'ai_review' ? '等待 AI 核对' : '等待 AI 转达确认' }}：{{ confirmation.risk_summary }}</div>
-                <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">{{ confirmation.notified_at ? 'AI 已收到通知，正在处理' : '正在通知负责本次运行的 AI' }}</div>
-              </template>
-              <template v-else>
-                <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">人工授权：{{ confirmation.risk_summary }}</div>
-                <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">剩余 {{ confirmationRemaining(confirmation.expires_at) }}；手机与网页均可处理，原任务保持等待</div>
-                <div class="mt-1 flex gap-1"><button class="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decide(true)">{{ confirmationBusyId === confirmation.id ? '提交中…' : '批准' }}</button><button class="rounded bg-rose-600 px-2 py-0.5 text-[10px] text-white disabled:cursor-wait disabled:opacity-50" :disabled="Boolean(confirmationBusyId)" @click="decide(false)">拒绝</button></div>
-              </template>
+            <div v-for="review in aiReviews.filter(item => item.status === 'pending')" :key="review.id" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">AI 节点任务：{{ review.risk_summary }}</div>
+              <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">{{ review.notified_at ? 'AI 已收到此前运行轨迹，正在处理' : '正在把此前完整运行过程交给负责本次运行的 AI' }}</div>
             </div>
             <div class="mt-3 text-[10px] font-semibold text-zinc-500">步骤</div>
             <div class="mt-1 space-y-1">
@@ -1245,32 +1133,15 @@ onBeforeUnmount(() => {
 
         <div v-if="deviceSettingsOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/55 p-4" @click.self="closeDeviceSettings(false)">
         <section class="contract-device-select w-full max-w-3xl rounded-xl border shadow-2xl">
-          <header class="flex items-center justify-between gap-3 px-3 py-2.5 text-xs"><span class="font-semibold">契约设备（多选）</span><button class="rounded border px-2 py-1" @click="closeDeviceSettings(false)">✕</button></header>
+          <header class="flex items-center justify-between gap-3 px-3 py-2.5 text-xs"><span class="font-semibold">跨设备 MCP</span><button class="rounded border px-2 py-1" @click="closeDeviceSettings(false)">✕</button></header>
           <div class="contract-device-options border-t p-2.5">
-            <div class="grid max-h-48 gap-1 overflow-y-auto overscroll-contain pr-1 custom-scrollbar sm:grid-cols-2 lg:grid-cols-3">
-              <label
-                v-for="device in contractDevices"
-                :key="device.id"
-                class="flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-[10px]"
-                :class="device.online === false ? 'opacity-60' : ''"
-              >
-                <input
-                  v-model="publishDeviceIds"
-                  type="checkbox"
-                  :value="device.id"
-                  :disabled="device.online === false && !publishDeviceIds.includes(device.id)"
-                />
-                <span class="min-w-0"><span class="block truncate">{{ device.name || '未命名设备' }}</span><span class="block truncate font-mono text-[9px] text-zinc-400">{{ device.id }}</span></span>
-                <span class="ml-auto shrink-0 text-zinc-400">{{ device.online === false ? '离线' : (device.deviceType || device.platform) }}</span>
-              </label>
-              <div v-if="!contractDevices.length" class="text-[10px] text-zinc-400">暂无可选设备</div>
-            </div>
-            <label class="mt-2 block text-[10px] text-zinc-500">默认设备<select v-model="defaultDeviceId" class="mt-1 w-full rounded border px-2 py-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="">请选择默认设备</option><option v-for="deviceId in publishDeviceIds" :key="deviceId" :value="deviceId">{{ contractDevices.find(item => item.id === deviceId)?.name || '未命名设备' }} · {{ deviceId }}</option></select></label>
+            <div class="rounded border p-2 text-[10px] dark:border-zinc-700">所有当前可用设备都会自动提供给 MCP 节点；保存时只冻结节点实际引用的设备和工具。</div>
+            <label class="mt-2 block text-[10px] text-zinc-500">可选默认设备<select v-model="defaultDeviceId" class="mt-1 w-full rounded border px-2 py-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="">由各节点决定</option><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || '未命名设备' }} · {{ device.id }}</option></select></label>
             <div class="mt-2 text-[10px] leading-5 text-zinc-500">
               <span v-if="deviceToolsLoading">正在读取所选设备的 MCP 工具…</span>
               <span v-else-if="deviceToolsError" class="text-rose-500">{{ deviceToolsError }}</span>
-              <span v-else>已读取 {{ Object.keys(deviceScopes).length }} 台契约设备的独立工具清单。</span>
-              每个 MCP 节点可分别绑定一台已选设备及其工具。
+              <span v-else>已读取 {{ Object.keys(deviceScopes).length }} 台可用设备的独立工具清单。</span>
+              每个 MCP 节点可分别选择任意设备及其工具。
             </div>
           </div>
           <footer class="flex justify-end gap-2 border-t p-3"><button class="rounded border px-3 py-1.5 text-xs" @click="closeDeviceSettings(false)">取消</button><button class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="closeDeviceSettings(true)">保存设置</button></footer>
@@ -1292,7 +1163,7 @@ onBeforeUnmount(() => {
           >
           <template #bottom-left>
             <button class="canvas-overlay-button" type="button" @click="openCardSettings">卡片设置</button>
-            <button class="canvas-overlay-button" type="button" @click="openDeviceSettings">契约设备 · {{ publishDeviceIds.length }}</button>
+            <button class="canvas-overlay-button" type="button" @click="openDeviceSettings">跨设备 MCP · 自动</button>
           </template>
           <template #inspector>
 
@@ -1304,10 +1175,10 @@ onBeforeUnmount(() => {
               </div>
               <div class="mt-3 grid gap-2">
                 <label class="text-[9px] text-zinc-500">步骤标题<input v-model="selectedStep.title" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-                <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','confirm','ai','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
+                <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in (['mcp','condition','delay','ai','end'] as WorkflowStepType[])" :key="kind">{{ kind }}</option></select></label>
 
                 <template v-if="selectedStep.type === 'mcp'">
-                  <label class="text-[9px] text-zinc-500">节点绑定设备<select v-model="selectedStep.deviceId" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="changeStepDevice(selectedStep)"><option value="">选择契约设备</option><option v-for="device in onlineDevices.filter(item => publishDeviceIds.includes(item.id))" :key="device.id" :value="device.id">{{ device.name || '未命名设备' }} · {{ device.id }} · {{ device.deviceType || device.platform }}</option></select></label>
+                  <label class="text-[9px] text-zinc-500">节点执行设备<select v-model="selectedStep.deviceId" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="changeStepDevice(selectedStep)"><option value="">选择任意可用设备</option><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || '未命名设备' }} · {{ device.id }} · {{ device.deviceType || device.platform }}</option></select></label>
                   <label class="text-[9px] text-zinc-500">设备工具<select v-model="selectedStep.tool" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="scaffoldArguments(selectedStep)"><option value="">{{ deviceToolsLoading ? '正在加载设备工具…' : deviceToolsError ? '设备工具加载失败' : !selectedStep.deviceId ? '请先选择节点绑定设备' : toolNamesForStep(selectedStep).length ? '选择该设备的工具' : '该设备没有可用工具' }}</option><option v-if="selectedStep.tool && !toolNamesForStep(selectedStep).includes(selectedStep.tool)" :value="selectedStep.tool" disabled>{{ selectedStep.tool }}（绑定设备当前未上报）</option><option v-for="tool in toolNamesForStep(selectedStep)" :key="tool">{{ tool }}</option></select></label>
                   <label class="text-[9px] text-zinc-500">结果保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                   <label class="text-[9px] text-zinc-500">参数模板<textarea v-model="selectedStep.argumentsText" rows="6" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
@@ -1317,8 +1188,7 @@ onBeforeUnmount(() => {
 
                 <label v-else-if="selectedStep.type === 'condition'" class="text-[9px] text-zinc-500">条件表达式<textarea v-model="selectedStep.expressionText" rows="8" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
                 <label v-else-if="selectedStep.type === 'delay'" class="text-[9px] text-zinc-500">延迟秒数<input v-model.number="selectedStep.delaySeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
-                <template v-else-if="selectedStep.type === 'confirm'"><label class="text-[9px] text-zinc-500">需要 AI 向用户发送的确认问题<input v-model="selectedStep.message" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">确认超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label></template>
-                <template v-else-if="selectedStep.type === 'ai'"><label class="text-[9px] text-zinc-500">AI 核对说明<textarea v-model="selectedStep.message" rows="5" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">回调参数保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="ai_review" /></label><label class="text-[9px] text-zinc-500">AI 回调超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="rounded bg-sky-50 p-2 text-[9px] text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">回调参数可在后续节点中用 ${steps.保存名.result.字段} 引用。</div></template>
+                <template v-else-if="selectedStep.type === 'ai'"><label class="text-[9px] text-zinc-500">到达节点后 AI 要完成的任务<textarea v-model="selectedStep.message" rows="5" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><label class="text-[9px] text-zinc-500">AI 返回参数保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="ai_review" /></label><label class="text-[9px] text-zinc-500">AI 处理超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="rounded bg-sky-50 p-2 text-[9px] text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">运行到此节点会暂停，并把此前完整步骤轨迹和本节点任务交给 AI；AI 完成后返回的参数可在后续节点中用 ${steps.保存名.result.字段} 引用。</div></template>
                 <div v-else class="rounded-lg bg-emerald-50 p-3 text-[10px] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">结束节点会生成卡片输出并终止运行。</div>
               </div>
             </template>
@@ -1348,7 +1218,7 @@ onBeforeUnmount(() => {
       </div>
     </Teleport>
 
-    <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><div class="mt-3 rounded border border-indigo-200 bg-indigo-50 p-2 text-[10px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">可指定本次运行设备；不指定时服务端使用卡片默认设备。多端卡片中，显式绑定到其他设备的节点保持原绑定。</div><label class="mt-3 block text-[10px] text-zinc-500">本次运行设备<select v-model="runDeviceId" class="mt-1 w-full rounded border p-2 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="deviceId in (runModalCard.definition.contractDeviceIds || boundMcpDeviceIds(runModalCard.definition))" :key="deviceId" :value="deviceId">{{ props.devices.find(item => item.id === deviceId)?.name || '未命名设备' }} · {{ deviceId }}</option></select></label><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy || !runDeviceId" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
+    <div v-if="runModalCard" class="absolute inset-0 z-50 flex items-center justify-center bg-zinc-950/45 p-4 backdrop-blur-sm" @click.self="runModalCard = null"><div class="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl dark:bg-zinc-900"><div class="flex justify-between"><div class="text-sm font-semibold">运行 {{ runModalCard.name }}</div><button @click="runModalCard = null">✕</button></div><div class="mt-3 rounded border border-indigo-200 bg-indigo-50 p-2 text-[10px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">每个 MCP 节点使用自己绑定的设备；无 MCP 节点的卡片无需设备。下方覆盖项仅替换卡片默认设备。</div><label v-if="(runModalCard.definition.contractDeviceIds || boundMcpDeviceIds(runModalCard.definition)).length" class="mt-3 block text-[10px] text-zinc-500">可选默认设备覆盖<select v-model="runDeviceId" class="mt-1 w-full rounded border p-2 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option value="">不覆盖</option><option v-for="deviceId in (runModalCard.definition.contractDeviceIds || boundMcpDeviceIds(runModalCard.definition))" :key="deviceId" :value="deviceId">{{ props.devices.find(item => item.id === deviceId)?.name || '未命名设备' }} · {{ deviceId }}</option></select></label><label class="mt-3 block text-[10px] text-zinc-500">运行输入<textarea v-model="runInputText" rows="10" class="mt-1 w-full rounded border p-2 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label><div class="mt-3 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="runModalCard = null">取消</button><button :disabled="busy" class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white disabled:opacity-50" @click="startRun">启动</button></div></div></div>
   </section>
 </template>
 

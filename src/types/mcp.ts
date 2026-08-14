@@ -18,14 +18,6 @@ export interface McpToolDefinition {
   zhTags?: string[]
 }
 
-export interface McpRoleMeta {
-  order: string[]
-  labels: Record<string, string>
-  defaults: Record<string, string[]>
-  options: Record<string, string[]>
-  permissions: Record<string, string[]>
-}
-
 export interface McpToolParamRow {
   name: string
   type: string

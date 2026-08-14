@@ -1,7 +1,7 @@
-import { ref, watch, type Ref } from 'vue'
+import { ref, watch } from 'vue'
 import { normalizeSystemAutoControl as normalizeTaskSystemAutoControl } from '@/utils/taskSystem'
 import { syncUiPreferencesToStorage } from '@/utils/uiPreferences'
-import type { McpRoleMeta, ModelPreset, User } from '@/types'
+import type { ModelPreset, User } from '@/types'
 import { updateProfile } from '@/api/auth'
 
 type ThemeMode = 'light' | 'dark'
@@ -14,7 +14,6 @@ interface UseDashboardSystemSettingsOptions {
   getCurrentUser: () => User | null | undefined
   alert: AlertFn
   onRefreshUser: (user: User) => void
-  mcpRoleMeta: Ref<McpRoleMeta>
 }
 
 const clampIdleSeconds = (value: unknown) => {
@@ -142,88 +141,6 @@ Rules:
 - 不要写成 <arguments><paths>...</paths></arguments> 这种嵌套标签格式。
 - 一次只调用一个工具，等待 MCP 返回后再继续。
 {details}`)
-  // Per-role MCP allow-list working copy: { roleTier: [toolName, ...] }.
-  const roleMcpPermissions = ref<Record<string, string[]>>({})
-  let roleMcpPermissionsInitialized = false
-
-  const parseSavedRolePermissions = (raw: unknown): Record<string, string[]> => {
-    if (typeof raw !== 'string' || !raw.trim()) return {}
-    try {
-      const parsed = JSON.parse(raw)
-      if (!parsed || typeof parsed !== 'object') return {}
-      const out: Record<string, string[]> = {}
-      for (const [role, tools] of Object.entries(parsed as Record<string, unknown>)) {
-        if (Array.isArray(tools)) {
-          out[role] = tools.map(item => String(item || '').trim()).filter(Boolean)
-        }
-      }
-      return out
-    } catch {
-      return {}
-    }
-  }
-
-  // Initialise the editable copy from the saved user policy (falling back to the
-  // per-role default ceiling) once the role metadata is available.
-  const initRoleMcpPermissions = (force = false) => {
-    const meta = options.mcpRoleMeta.value
-    const roles = meta.order || []
-    if (roles.length === 0) return
-    if (roleMcpPermissionsInitialized && !force) return
-    const saved = parseSavedRolePermissions(options.getCurrentUser()?.role_mcp_permissions)
-    const next: Record<string, string[]> = {}
-    for (const role of roles) {
-      const options = meta.options?.[role] || meta.defaults?.[role] || []
-      const optionSet = new Set(options)
-      const defaults = meta.defaults?.[role] || []
-      const savedForRole = saved[role]
-      next[role] = Array.isArray(savedForRole)
-        ? savedForRole.filter(tool => optionSet.has(tool))
-        : [...defaults]
-    }
-    roleMcpPermissions.value = next
-    roleMcpPermissionsInitialized = true
-  }
-
-  const isRoleToolAllowed = (role: string, tool: string) =>
-    (roleMcpPermissions.value[role] || []).includes(tool)
-
-  const toggleRoleTool = (role: string, tool: string, checked: boolean) => {
-    const current = new Set(roleMcpPermissions.value[role] || [])
-    if (checked) current.add(tool)
-    else current.delete(tool)
-    roleMcpPermissions.value = { ...roleMcpPermissions.value, [role]: Array.from(current) }
-  }
-
-  const setRoleAllTools = (role: string, checked: boolean) => {
-    const roleOptions = options.mcpRoleMeta.value.options?.[role] || options.mcpRoleMeta.value.defaults?.[role] || []
-    roleMcpPermissions.value = { ...roleMcpPermissions.value, [role]: checked ? [...roleOptions] : [] }
-  }
-
-  const resetRoleMcpPermissions = () => {
-    initRoleMcpPermissions(true)
-  }
-
-  // Persist only the per-role MCP allow-list. Used by the toolbox panel's
-  // per-AI role-permission editor so it does not have to push the whole system
-  // settings payload (which lives elsewhere in this composable).
-  const saveRoleMcpPermissions = async () => {
-    const currentUser = options.getCurrentUser()
-    if (!currentUser) return
-    try {
-      const updatedUser = await updateProfile({
-        role_mcp_permissions: roleMcpPermissionsInitialized
-          ? JSON.stringify(roleMcpPermissions.value)
-          : (options.getCurrentUser()?.role_mcp_permissions ?? ''),
-      })
-      void options.alert({ message: 'MCP 角色权限已保存', type: 'success' })
-      options.onRefreshUser(updatedUser)
-    } catch (err: any) {
-      console.error('Failed to save role MCP permissions:', err)
-      void options.alert({ message: `保存失败: ${err?.message || '未知错误'}`, type: 'error' })
-    }
-  }
-
   const defaultStartTaskPrompt = ref('你将收到一个任务，请先理解目标、约束与优先级，然后开始执行。')
   const defaultResumeTaskPrompt = ref('请继续执行刚才被暂停的任务，先简要回顾当前进度，再继续推进直到可交付。')
   const defaultSupervisionPrompt = ref('系统监督提醒：请确认当前任务是否已完成。若已完成可自然结束；若未完成请给出剩余步骤并继续执行。复杂任务请使用 todo.manage(action=create) 拆分阶段，阶段完成后用 action=edit 更新状态。')
@@ -324,9 +241,6 @@ Rules:
         mcp_max_steps: clampMcpMaxSteps(mcpMaxSteps.value),
         mcp_history_result_max_chars: clampMcpHistoryResultChars(mcpHistoryResultMaxChars.value),
         conversation_auto_compress_enabled: conversationAutoCompressEnabled.value,
-        role_mcp_permissions: roleMcpPermissionsInitialized
-          ? JSON.stringify(roleMcpPermissions.value)
-          : (options.getCurrentUser()?.role_mcp_permissions ?? ''),
         default_start_task_prompt: defaultStartTaskPrompt.value,
         default_resume_task_prompt: defaultResumeTaskPrompt.value,
         default_supervision_prompt: defaultSupervisionPrompt.value,
@@ -459,18 +373,7 @@ Rules:
       if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_user_message_notice')) {
         promptUserMessageNotice.value = String(rawUser.prompt_user_message_notice ?? '')
       }
-      initRoleMcpPermissions()
     },
-    { immediate: true }
-  )
-
-  watch(
-    () => JSON.stringify({
-      order: options.mcpRoleMeta.value.order,
-      options: options.mcpRoleMeta.value.options,
-      defaults: options.mcpRoleMeta.value.defaults,
-    }),
-    () => initRoleMcpPermissions(),
     { immediate: true }
   )
 
@@ -503,11 +406,5 @@ Rules:
     normalizeSystemAutoControl,
     saveSystemSettings,
     saveBrainViewMode,
-    roleMcpPermissions,
-    isRoleToolAllowed,
-    toggleRoleTool,
-    setRoleAllTools,
-    resetRoleMcpPermissions,
-    saveRoleMcpPermissions,
   }
 }

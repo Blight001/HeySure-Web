@@ -32,6 +32,7 @@ export interface RunLivePayload {
   reasoning?: string
   phase?: string
   current_tool?: string
+  current_tool_arguments?: string
   prompt_tokens?: number
   completion_tokens?: number
   total_tokens?: number

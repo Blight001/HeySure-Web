@@ -7,6 +7,8 @@ export interface McpCatalogTool {
 export interface McpCatalogToolGroup {
   groupKey: string
   groupLabel: string
+  /** 设备或工具组整体面向 AI 的用途说明 */
+  groupDescription?: string
   groupKind?: 'workspace' | 'device'
   deviceId?: string
   deviceType?: string
@@ -87,6 +89,7 @@ export const renderGroupedMcpToolCatalog = (groups: McpCatalogToolGroup[]): stri
     .map(group => ({
       groupKey: String(group?.groupKey || '').trim(),
       groupLabel: String(group?.groupLabel || '').trim(),
+      groupDescription: String(group?.groupDescription || '').trim(),
       tools: Array.isArray(group?.tools) ? group.tools : [],
     }))
     .filter(group => group.groupLabel || group.tools.length > 0)
@@ -105,7 +108,9 @@ export const renderGroupedMcpToolCatalog = (groups: McpCatalogToolGroup[]): stri
       sections.push(`${group.groupLabel}\n- （当前无可用工具）`)
       continue
     }
-    sections.push(group.groupLabel)
+    sections.push(group.groupDescription
+      ? `${group.groupLabel}\n  设备说明：${group.groupDescription}`
+      : group.groupLabel)
     sections.push(catalog)
   }
   return sections.join('\n\n')

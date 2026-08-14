@@ -12,3 +12,19 @@ export const formatTokenCount = (value?: number | null): string => {
   const decimals = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2
   return `${Number(scaled.toFixed(decimals))}${unit.suffix}`
 }
+
+/**
+ * Estimate the context tokens occupied by tool parameters/results.
+ * Exact tokenizers vary by model and are unavailable in the browser, so the
+ * badge deliberately marks this value as an estimate.
+ */
+export const estimateTokenCount = (value?: string | null): number => {
+  let weightedTokens = 0
+  for (const char of String(value || '')) {
+    if (/\s/u.test(char)) weightedTokens += 0.1
+    else if (/\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(char)) weightedTokens += 1
+    else if (/[\p{L}\p{N}]/u.test(char)) weightedTokens += 0.25
+    else weightedTokens += 0.5
+  }
+  return Math.ceil(weightedTokens)
+}

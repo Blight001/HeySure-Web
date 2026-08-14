@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import MarkdownText from './MarkdownText.vue'
 import { stripPromptSection, type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
+import ChatMentionTooltip from './ChatMentionTooltip.vue'
+import { useChatMentionTooltip } from '@/composables/useChatMentionTooltip'
 
 interface PromptTool {
   name?: string
@@ -18,6 +20,8 @@ const props = defineProps<{
   mcpEnabled?: boolean | null
   toolSchemaError?: string
 }>()
+
+const { mentionTooltip, showMentionTooltip, hideMentionTooltip, keepMentionTooltip } = useChatMentionTooltip()
 
 const promptBody = computed(() => {
   return stripPromptSection(
@@ -65,10 +69,15 @@ const groupTone = (group: McpCatalogToolGroup, index: number) => {
   if (group.groupKind === 'device') return `front-prompt-mcp-card--device-${index % 3}`
   return `front-prompt-mcp-card--workspace-${index % 2}`
 }
+
+const toolDetail = (group: McpCatalogToolGroup, tool: McpCatalogToolGroup['tools'][number]) => [
+  group.groupDescription,
+  tool.description,
+].map(item => String(item || '').trim()).filter(Boolean).join('\n')
 </script>
 
 <template>
-  <div class="front-prompt-preview">
+  <div class="front-prompt-preview" @pointerover="showMentionTooltip" @pointerout="hideMentionTooltip">
     <section class="front-prompt-section front-prompt-section--body">
       <div class="front-prompt-section-label">
         <span class="front-prompt-section-dot front-prompt-section-dot--prompt"></span>
@@ -111,12 +120,28 @@ const groupTone = (group: McpCatalogToolGroup, index: number) => {
             <span class="front-prompt-mcp-group-name" :title="group.groupLabel">{{ group.groupLabel }}</span>
             <span class="front-prompt-mcp-group-count">{{ group.tools.length }}</span>
           </div>
+          <div
+            v-if="group.groupDescription"
+            class="front-prompt-mcp-group-description"
+            :data-mention-label="group.groupLabel"
+            data-mention-type="mcp"
+            :data-mention-detail="group.groupDescription"
+          >
+            {{ group.groupDescription }}
+          </div>
           <div v-if="group.tools.length > 0" class="front-prompt-tool-list">
-            <div v-for="tool in group.tools" :key="tool.name" class="front-prompt-tool-row">
-              <div class="front-prompt-tool-name" :title="tool.name">
-                {{ tool.name }}<span v-if="tool.destructive" class="front-prompt-tool-risk" title="可能产生副作用">!</span>
+            <div
+              v-for="tool in group.tools"
+              :key="tool.name"
+              class="front-prompt-tool-row"
+              :data-mention-label="tool.name"
+              data-mention-type="mcp"
+              :data-mention-detail="toolDetail(group, tool)"
+            >
+              <div class="front-prompt-tool-name">
+                {{ tool.name }}<span v-if="tool.destructive" class="front-prompt-tool-risk">!</span>
               </div>
-              <div v-if="tool.description" class="front-prompt-tool-description" :title="tool.description">
+              <div v-if="tool.description" class="front-prompt-tool-description">
                 {{ tool.description }}
               </div>
             </div>
@@ -127,6 +152,7 @@ const groupTone = (group: McpCatalogToolGroup, index: number) => {
         </article>
       </div>
     </section>
+    <ChatMentionTooltip :state="mentionTooltip" @keep="keepMentionTooltip" @hide="hideMentionTooltip" />
   </div>
 </template>
 
@@ -250,6 +276,21 @@ const groupTone = (group: McpCatalogToolGroup, index: number) => {
   border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
+}
+
+.front-prompt-mcp-group-description {
+  border-bottom: 1px solid rgba(161, 161, 170, 0.14);
+  padding: 7px 9px;
+  color: rgb(82 82 91);
+  font-size: 10px;
+  line-height: 1.55;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dark .front-prompt-mcp-group-description {
+  color: rgb(161 161 170);
 }
 
 .front-prompt-mcp-count {
@@ -394,10 +435,10 @@ const groupTone = (group: McpCatalogToolGroup, index: number) => {
 
 .front-prompt-tool-description {
   margin-top: 2px;
-  overflow: hidden;
   color: rgb(82 82 91);
   font-size: 10px;
-  line-height: 1.45;
+  line-height: 1.55;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

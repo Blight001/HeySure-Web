@@ -179,22 +179,3 @@ export const setBuiltinDeviceBinding = (aiConfigId: number, deviceId: string, bo
     { ai_config_id: aiConfigId, device_id: deviceId, bound },
     { fallbackError: '更新内置设备绑定失败' },
   )
-
-export interface LibraryMcpScope {
-  aiConfigId: number
-  capabilities: string[]
-  allowed: string[]
-  mcpTools: string[]
-}
-
-export const getLibraryMcpScope = (aiConfigId: number) =>
-  get<LibraryMcpScope>('/api/devices/library-mcp-scope', {
-    query: { ai_config_id: aiConfigId },
-    fallbackError: '图书馆 MCP 权限加载失败',
-  })
-
-export const setLibraryMcpScope = (aiConfigId: number, tools: string[]) =>
-  put<LibraryMcpScope>('/api/devices/library-mcp-scope', {
-    ai_config_id: aiConfigId,
-    tools,
-  }, { fallbackError: '图书馆 MCP 权限保存失败' })

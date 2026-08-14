@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import BrainCorePanel from './BrainCorePanel.vue'
 
@@ -9,7 +9,7 @@ const KnowledgeBasePanel = defineAsyncComponent(() => import('./KnowledgeBasePan
 const WorkshopPanel = defineAsyncComponent(() => import('./WorkshopPanel.vue'))
 const AutomationCardsPanel = defineAsyncComponent(() => import('@/components/workshop/automation/AutomationCardsPanel.vue'))
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
-import type { KnowledgeItem, McpRoleMeta, User } from '@/types'
+import type { KnowledgeItem, User } from '@/types'
 
 interface Agent {
   id: string
@@ -52,8 +52,6 @@ interface Props {
   knowledgeFocusSignal?: number
   focusedDeviceId?: string
   deviceFocusSignal?: number
-  mcpRoleMeta: McpRoleMeta
-  roleMcpPermissions: Record<string, string[]>
 }
 
 const props = defineProps<Props>()
@@ -67,31 +65,10 @@ const emit = defineEmits<{
   (e: 'refresh-user', user: User): void
   (e: 'view-all-mcp'): void
   (e: 'manage-device-tools', payload?: { deviceType?: string }): void
-  (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
-  (e: 'save-role-mcp-permissions'): void
   (e: 'open-device-doc'): void
 }>()
 
 const activeTab = ref<'brain' | 'knowledge' | 'device' | 'work'>('brain')
-const requestedWorkflowRunId = ref('')
-
-const openWorkflowConfirmation = (rawRunId: string) => {
-  const runId = rawRunId.trim()
-  if (!/^[A-Za-z0-9_-]{1,160}$/.test(runId)) return
-  requestedWorkflowRunId.value = runId
-  activeTab.value = 'work'
-}
-
-const onWorkflowConfirmation = (event: Event) => {
-  openWorkflowConfirmation(String((event as CustomEvent<{ runId?: string }>).detail?.runId || ''))
-}
-
-onMounted(() => {
-  openWorkflowConfirmation(new URLSearchParams(window.location.search).get('workflow_confirmation') || '')
-  window.addEventListener('heysure:open-workflow-confirmation', onWorkflowConfirmation)
-})
-
-onBeforeUnmount(() => window.removeEventListener('heysure:open-workflow-confirmation', onWorkflowConfirmation))
 
 watch(() => props.focusSignal, () => {
   if (props.focusedAiConfigId) activeTab.value = 'brain'
@@ -183,19 +160,14 @@ watch(() => props.deviceFocusSignal, () => {
           class="flex-1"
           :devices="connectedDevices"
           :agents="activeAgents"
-          :initial-run-id="requestedWorkflowRunId"
         />
         <WorkshopPanel
           v-else
           class="flex-1"
           :devices="connectedDevices"
           :agents="activeAgents"
-          :mcp-role-meta="mcpRoleMeta"
-          :role-mcp-permissions="roleMcpPermissions"
           :focused-device-id="focusedDeviceId"
           :focus-signal="deviceFocusSignal"
-          @toggle-role-tool="emit('toggle-role-tool', $event)"
-          @save-role-mcp-permissions="emit('save-role-mcp-permissions')"
           @open-device-doc="emit('open-device-doc')"
         />
       </Transition>

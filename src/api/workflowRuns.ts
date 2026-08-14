@@ -1,7 +1,7 @@
 import { get, post } from './http'
 
 export type WorkflowRunStatus =
-  | 'pending' | 'running' | 'waiting_device' | 'waiting_confirmation'
+  | 'pending' | 'running' | 'waiting_device'
   | 'retry_wait' | 'paused_offline' | 'waiting_ai' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out'
 
 export interface WorkflowRun {
@@ -40,11 +40,11 @@ export interface WorkflowStepRun {
   finished_at: number | null
 }
 
-export interface WorkflowConfirmation {
+export interface WorkflowAiReview {
   id: string
   run_id: string
   step_id: string
-  type: 'explicit' | 'forced' | 'ai_review' | 'user_via_ai' | 'user_via_ai_dispatch'
+  type: 'ai_review'
   status: string
   risk_summary: string
   expires_at: number
@@ -52,27 +52,6 @@ export interface WorkflowConfirmation {
   ai_config_id?: number | null
   notified_at?: number | null
 }
-
-export interface WorkflowConfirmationNotice {
-  confirmation_id: string
-  run_id: string
-  requested_user_id: number
-  card_id: string
-  card_name: string
-  risk_level: string
-  actor_name: string
-  risk_summary: string
-  type: string
-  status: string
-  created_at: number
-  expires_at: number
-}
-
-export const listPendingWorkflowConfirmations = (limit = 100) =>
-  get<{ items: WorkflowConfirmationNotice[] }>('/api/workflow-confirmations/pending', {
-    query: { limit },
-    fallbackError: '待确认事项加载失败',
-  })
 
 export const startWorkflowRun = (
   cardId: string,
@@ -96,19 +75,14 @@ export const listWorkflowRunSteps = (runId: string) =>
     fallbackError: '步骤历史加载失败',
   })
 
-export const listWorkflowConfirmations = (runId: string) =>
-  get<{ items: WorkflowConfirmation[] }>(`/api/workflow-runs/${encodeURIComponent(runId)}/confirmations`, {
-    fallbackError: '确认请求加载失败',
+export const listWorkflowAiReviews = (runId: string) =>
+  get<{ items: WorkflowAiReview[] }>(`/api/workflow-runs/${encodeURIComponent(runId)}/ai-reviews`, {
+    fallbackError: 'AI 审核记录加载失败',
   })
 
 export const cancelWorkflowRun = (runId: string, reason = 'cancelled by user') =>
   post<WorkflowRun>(`/api/workflow-runs/${encodeURIComponent(runId)}/cancel`, { reason }, {
     fallbackError: '取消运行失败',
-  })
-
-export const confirmWorkflowRun = (runId: string, approved: boolean) =>
-  post<WorkflowRun>(`/api/workflow-runs/${encodeURIComponent(runId)}/confirm`, { approved }, {
-    fallbackError: '提交确认失败',
   })
 
 export const retryWorkflowRun = (runId: string, idempotencyKey?: string) =>

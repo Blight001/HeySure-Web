@@ -18,7 +18,16 @@ const suppressTransition = ref(false)
 
 let resizeObserver: ResizeObserver | null = null
 
-const measureContentHeight = () => innerRef.value?.scrollHeight ?? 0
+const measureContentHeight = () => {
+  const element = innerRef.value
+  if (!element) return 0
+  const style = window.getComputedStyle(element)
+  const marginTop = Number.parseFloat(style.marginTop) || 0
+  const marginBottom = Number.parseFloat(style.marginBottom) || 0
+  // scrollHeight excludes vertical margins. The animated wrapper clips overflow,
+  // so omitting them cuts off the final line in system/MCP expanded bodies.
+  return Math.ceil(element.scrollHeight + marginTop + marginBottom) + 1
+}
 
 const syncOpenHeight = () => {
   if (!open.value) return
@@ -91,7 +100,7 @@ onUnmounted(() => {
       @click="toggle"
       @keydown="onSummaryKeydown"
     >
-      <slot name="summary" />
+      <slot name="summary" :open="open" />
     </div>
     <div
       class="chat-collapsible-content"

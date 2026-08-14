@@ -8,6 +8,7 @@ export interface McpEndpointToolEntry {
 export interface McpPromptToolGroup {
   groupKey: string
   groupLabel: string
+  groupDescription?: string
   groupKind?: 'workspace' | 'device'
   deviceId?: string
   deviceType?: string
@@ -23,11 +24,6 @@ export interface McpToolsResponse {
   promptToolsScope?: 'current_ai' | 'all_current'
   promptToolsAiConfigId?: number | null
   promptToolsMcpEnabled?: boolean
-  roleOrder?: string[]
-  roleLabels?: Record<string, string>
-  roleDefaults?: Record<string, string[]>
-  roleOptions?: Record<string, string[]>
-  rolePermissions?: Record<string, string[]>
 }
 
 export interface McpCallPayload {

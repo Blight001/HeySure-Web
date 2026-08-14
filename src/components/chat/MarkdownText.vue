@@ -5,6 +5,7 @@ import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
 const props = defineProps<{
   text: string
   plainTextMode?: boolean
+  mentionTokens?: Array<{ token: string; type: 'mcp' | 'file'; detail?: string }>
 }>()
 
 const escapeHtml = (raw: string) => String(raw || '')
@@ -14,12 +15,31 @@ const escapeHtml = (raw: string) => String(raw || '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;')
 
+const escapeRegExp = (raw: string) => raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const highlightMentions = (html: string) => {
+  const mentions = [...(props.mentionTokens || [])]
+    .filter(item => item.token)
+    .sort((a, b) => b.token.length - a.token.length)
+  return mentions.reduce((result, mention) => {
+    const escapedToken = escapeHtml(mention.token)
+    const visibleLabel = escapedToken.startsWith('@') ? escapedToken.slice(1) : escapedToken
+    const title = escapeHtml(mention.detail || '')
+    const type = mention.type === 'file' ? 'file' : 'mcp'
+    const className = mention.type === 'mcp' ? 'md-mention md-mention-mcp' : 'md-mention md-mention-file'
+    return result.replace(
+      new RegExp(`${escapeRegExp(escapedToken)}(?![\\w.+/\\-])`, 'g'),
+      `<span class="${className}" data-mention-label="${visibleLabel}" data-mention-type="${type}" data-mention-detail="${title}">${visibleLabel}</span>`,
+    )
+  }, html)
+}
+
 const renderInline = (raw: string) => {
   let text = escapeHtml(raw)
   text = text.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>')
   text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>')
-  return text
+  return highlightMentions(text)
 }
 
 const isTableSeparator = (line: string) => {
@@ -182,11 +202,12 @@ const renderBlocks = (raw: string) => {
 
 const renderedHtml = computed(() => renderBlocks(props.text))
 const plainTextContent = computed(() => stripMarkdownFormatting(props.text))
+const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextContent.value)).replace(/\n/g, '<br>'))
 </script>
 
 <template>
   <div v-if="!props.plainTextMode" class="markdown-text" v-html="renderedHtml"></div>
-  <div v-else class="markdown-text markdown-text-plain">{{ plainTextContent }}</div>
+  <div v-else class="markdown-text markdown-text-plain" v-html="plainRenderedHtml"></div>
 </template>
 
 <style scoped>
@@ -381,6 +402,28 @@ const plainTextContent = computed(() => stripMarkdownFormatting(props.text))
   font-size: 0.88em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: rgb(63 66 243);
+}
+
+.markdown-text :deep(.md-mention) {
+  display: inline;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.markdown-text :deep(.md-mention-mcp) {
+  color: rgb(5 150 105);
+}
+
+.markdown-text :deep(.md-mention-file) {
+  color: rgb(2 132 199);
+}
+
+.dark .markdown-text :deep(.md-mention-mcp) {
+  color: rgb(110 231 183);
+}
+
+.dark .markdown-text :deep(.md-mention-file) {
+  color: rgb(125 211 252);
 }
 
 .dark .markdown-text :deep(.md-inline-code) {

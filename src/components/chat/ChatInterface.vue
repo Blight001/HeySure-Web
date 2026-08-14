@@ -20,6 +20,12 @@ import { type McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
 import heySureLogo from '@/assets/logo/HeySure.png'
+import {
+  activeChatMentions,
+  buildMentionContextSection,
+  encodeChatMentions,
+  type ChatMention,
+} from '@/utils/chatMentions'
 
 /** 新建空白对话的默认标题；首条消息发出后会自动改成摘要标题。 */
 const BLANK_SESSION_NAME = '新对话'
@@ -109,6 +115,9 @@ const preferredInitialSessionId = computed(() => String(props.initialSessionId |
 const isFileSelectorOpen = ref(false)
 const currentPath = ref('')
 const chatInput = ref('')
+const CHAT_DRAFT_STORAGE_PREFIX = 'heysure:chat-draft:v1'
+let restoringChatDraft = false
+let preserveDraftForSessionId = ''
 const uploadedAttachments = ref<PendingUploadAttachment[]>([])
 const uploadingCount = computed(() => uploadedAttachments.value.filter(item => item.status === 'uploading').length)
 const chatMessages = ref<ChatMessage[]>([])
@@ -118,6 +127,7 @@ const currentRunIsExternal = ref(false)
 const currentRunStatus = ref<'idle' | 'queued' | 'running' | 'completed' | 'error' | 'stopped'>('idle')
 const currentRunPhase = ref<'idle' | 'generating' | 'waiting_mcp'>('idle')
 const currentMcpTool = ref('')
+const currentMcpArguments = ref('')
 const currentDeviceTaskId = ref('')
 const currentDeviceProgress = ref('')
 const liveThinkingText = ref('')
@@ -206,6 +216,60 @@ let prevRunPhaseForBoundary = 'idle'
 // localStorage，网页关闭/重开后仍能同步（进行中→本轮完成后续发；已结束→重开即续发）。
 const pendingQueue = ref<string[]>([])
 
+interface StoredChatDraft {
+  content: string
+  mentions: ChatMention[]
+  updatedAt: number
+}
+
+const chatDraftStorageKey = (sessionId = currentSessionId.value) => [
+  CHAT_DRAFT_STORAGE_PREFIX,
+  String(props.currentUserId || 'anonymous'),
+  aiKindValue.value,
+  String(props.aiConfigId || 'default'),
+  sessionId || '__new__',
+].join(':')
+
+const readChatDraft = (sessionId: string): StoredChatDraft | null => {
+  try {
+    const raw = window.localStorage.getItem(chatDraftStorageKey(sessionId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredChatDraft>
+    if (typeof parsed.content !== 'string') return null
+    return {
+      content: parsed.content,
+      mentions: Array.isArray(parsed.mentions) ? parsed.mentions : [],
+      updatedAt: Number(parsed.updatedAt || 0),
+    }
+  } catch {
+    return null
+  }
+}
+
+const writeChatDraft = (sessionId = currentSessionId.value) => {
+  if (restoringChatDraft) return
+  const content = chatInput.value
+  const mentions = activeChatMentions(content, chatMentions.value)
+  const key = chatDraftStorageKey(sessionId)
+  try {
+    if (!content) {
+      window.localStorage.removeItem(key)
+      return
+    }
+    window.localStorage.setItem(key, JSON.stringify({ content, mentions, updatedAt: Date.now() }))
+  } catch {
+    // 浏览器禁用或存储空间不足时不影响正常聊天。
+  }
+}
+
+const restoreChatDraft = (sessionId: string) => {
+  const draft = readChatDraft(sessionId)
+  restoringChatDraft = true
+  chatInput.value = draft?.content || ''
+  chatMentions.value = draft?.mentions || []
+  queueMicrotask(() => { restoringChatDraft = false })
+}
+
 // Runtime duration tracking for current AI run (total / MCP / deep-thinking)
 const runStartTs = ref<number | null>(null)
 const mcpElapsedMs = ref(0)
@@ -271,6 +335,8 @@ let tokenLoadEpoch = 0
 let lastProgrammaticScrollTs = 0
 let lastObservedScrollTop = 0
 let userScrollIntentUntil = 0
+let touchScrollPointerId: number | null = null
+let touchScrollStartY = 0
 const PROGRAMMATIC_SCROLL_GRACE_MS = 260
 const USER_SCROLL_INTENT_MS = 900
 const currentSessionId = ref<string>('')
@@ -480,6 +546,10 @@ const runTimingText = computed(() => {
   return ''
 })
 
+watch(currentRunPhase, phase => {
+  if (phase !== 'waiting_mcp') currentMcpArguments.value = ''
+})
+
 function startTimeTicker() {
   if (timeTickTimer != null) return
   timeTickTimer = window.setInterval(() => {
@@ -582,33 +652,50 @@ const STATE_PREFIX = '__HS_MCP_STATE__='
 const ATTACHMENTS_PREFIX = '__HS_ATTACHMENTS__='
 // MCP 工具组仅控制本轮真实 allowlist；目录本身进入系统 Prompt，
 // 不再写入用户正文或消息 tags。
-const uncheckedToolGroupKeys = ref<string[]>([])
+const uncheckedMcpToolNames = ref<string[]>([])
+const chatMentions = ref<ChatMention[]>([])
+watch(chatInput, () => writeChatDraft())
+watch(chatMentions, () => writeChatDraft(), { deep: true })
 const attachableToolGroups = computed<McpCatalogToolGroup[]>(() => {
   if (frontPromptToolMcpEnabled.value === false) return []
   return frontPromptToolGroups.value.filter(group => group.tools.length > 0)
 })
 const selectedToolGroupKeys = computed(() => attachableToolGroups.value
-  .filter(group => !group.disabled && !uncheckedToolGroupKeys.value.includes(group.groupKey))
+  .filter(group => !group.disabled && group.tools.some(tool => !uncheckedMcpToolNames.value.includes(tool.name)))
   .map(group => group.groupKey))
 const checkedToolGroups = computed(() => attachableToolGroups.value
   .filter(group => selectedToolGroupKeys.value.includes(group.groupKey)))
 const selectedMcpToolNames = computed(() => Array.from(new Set(
-  checkedToolGroups.value.flatMap(group => group.tools.map(tool => String(tool.name || '').trim()).filter(Boolean))
+  checkedToolGroups.value.flatMap(group => group.tools
+    .map(tool => String(tool.name || '').trim())
+    .filter(name => name && !uncheckedMcpToolNames.value.includes(name)))
 )))
 const toggleToolGroup = (groupKey: string) => {
   const group = attachableToolGroups.value.find(item => item.groupKey === groupKey)
   if (group?.disabled) return
-  const next = [...uncheckedToolGroupKeys.value]
-  const idx = next.indexOf(groupKey)
-  if (idx >= 0) next.splice(idx, 1)
-  else next.push(groupKey)
-  uncheckedToolGroupKeys.value = next
+  const names = group?.tools.map(tool => String(tool.name || '').trim()).filter(Boolean) || []
+  const unchecked = new Set(uncheckedMcpToolNames.value)
+  const allChecked = names.length > 0 && names.every(name => !unchecked.has(name))
+  names.forEach(name => allChecked ? unchecked.add(name) : unchecked.delete(name))
+  uncheckedMcpToolNames.value = [...unchecked]
+  void loadEffectiveSystemPromptPreview()
+}
+
+const toggleMcpTool = (toolName: string) => {
+  const name = String(toolName || '').trim()
+  if (!name) return
+  const unchecked = new Set(uncheckedMcpToolNames.value)
+  if (unchecked.has(name)) unchecked.delete(name)
+  else unchecked.add(name)
+  uncheckedMcpToolNames.value = [...unchecked]
   void loadEffectiveSystemPromptPreview()
 }
 
 const clearAttachments = () => {
   emit('update:selectedFiles', [])
-  uncheckedToolGroupKeys.value = attachableToolGroups.value.map(group => group.groupKey)
+  uncheckedMcpToolNames.value = attachableToolGroups.value.flatMap(
+    group => group.tools.map(tool => String(tool.name || '').trim()).filter(Boolean),
+  )
   void loadEffectiveSystemPromptPreview()
 }
 
@@ -845,6 +932,30 @@ const navigateBack = () => {
   emit('refreshFiles')
   const parts = currentPath.value.split('/')
   currentPath.value = parts.length <= 1 ? '' : parts.slice(0, -1).join('/')
+}
+
+const addChatMention = (mention: ChatMention) => {
+  const normalizedMention = mention.type === 'file'
+    ? {
+        ...mention,
+        reference: toAiWorkspacePath(mention.reference),
+        detail: toAiWorkspacePath(mention.reference),
+      }
+    : mention
+  const key = `${normalizedMention.type}:${normalizedMention.reference}`
+  chatMentions.value = [
+    ...chatMentions.value.filter(item => `${item.type}:${item.reference}` !== key),
+    normalizedMention,
+  ]
+}
+
+const encodeUserContextTags = (files: string[], mentions: ChatMention[]) => [
+  encodeUserAttachmentTags(files),
+  encodeChatMentions(mentions),
+].filter(Boolean).join(' | ')
+const navigatePath = (path: string) => {
+  emit('refreshFiles')
+  currentPath.value = normalizeSelectionPath(path).replace(/\/+$/g, '')
 }
 const toggleFileSelection = (file: string) => {
   let fullPath = normalizeSelectionPath(file)
@@ -1133,6 +1244,13 @@ const markUserScrollIntent = () => {
   userScrollIntentUntil = Date.now() + USER_SCROLL_INTENT_MS
 }
 
+const resumeFollowingLatest = async () => {
+  stickToBottom.value = true
+  userScrollIntentUntil = 0
+  await scrollToBottom(true)
+  pinToBottomSettled()
+}
+
 const handleWheel = (event: WheelEvent) => {
   if (event.deltaY < 0) markUserScrollIntent()
 }
@@ -1142,13 +1260,33 @@ const handlePointerDown = (event: PointerEvent) => {
   const el = chatScrollRef.value
   if (!el) return
   const nearScrollbar = event.clientX >= el.getBoundingClientRect().right - 24
-  if (event.pointerType !== 'mouse' || nearScrollbar) markUserScrollIntent()
+  if (event.pointerType === 'mouse') {
+    if (nearScrollbar) markUserScrollIntent()
+    return
+  }
+  touchScrollPointerId = event.pointerId
+  touchScrollStartY = event.clientY
+}
+
+const handlePointerMove = (event: PointerEvent) => {
+  if (event.pointerId !== touchScrollPointerId) return
+  // A downward finger gesture moves the viewport toward older messages.
+  // Taps and upward gestures must not disable latest-message following.
+  if (event.clientY - touchScrollStartY > 8) markUserScrollIntent()
+}
+
+const handlePointerEnd = (event: PointerEvent) => {
+  if (event.pointerId === touchScrollPointerId) touchScrollPointerId = null
 }
 
 const handleScrollKey = (event: KeyboardEvent) => {
-  if (!['ArrowUp', 'PageUp', 'Home'].includes(event.key)) return
   const target = event.target as HTMLElement | null
   if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+  if (event.key === 'End') {
+    void resumeFollowingLatest()
+    return
+  }
+  if (!['ArrowUp', 'PageUp', 'Home'].includes(event.key)) return
   markUserScrollIntent()
 }
 
@@ -1209,6 +1347,7 @@ const handleStreamLive = (payload: RunLivePayload) => {
   // timer so the header shows this call's own elapsed, not a running total.
   if (toolChanged && incomingTool && currentRunPhase.value === 'waiting_mcp') resetSegmentTimer()
   currentMcpTool.value = incomingTool
+  currentMcpArguments.value = String(payload.current_tool_arguments || '')
 
   const hadContentBefore = !!(prevLiveTextForBoundary || prevLiveReasoningForBoundary)
   const prevPhase = prevRunPhaseForBoundary
@@ -1604,7 +1743,7 @@ const loadSessions = async () => {
 }
 
 /** 创建空白对话（默认标题，首条消息后自动命名；nameInput 可覆盖）。 */
-const createSession = async (nameInput?: string) => {
+const createSession = async (nameInput?: string, options: { carryDraft?: boolean } = {}) => {
   const name = String(nameInput ?? BLANK_SESSION_NAME).trim() || BLANK_SESSION_NAME
   if (!getAuthToken()) return ''
   let session
@@ -1614,6 +1753,7 @@ const createSession = async (nameInput?: string) => {
     return ''
   }
   await loadSessions()
+  if (options.carryDraft) preserveDraftForSessionId = session.id
   currentSessionId.value = session.id
   chatMessages.value = []
   // 首条消息前刷新运行时 Prompt 工具信息，保证预览与当前权限一致。
@@ -1650,6 +1790,7 @@ const deleteSession = async (sid: string) => {
   } catch {
     return
   }
+  try { window.localStorage.removeItem(chatDraftStorageKey(sid)) } catch { /* no-op */ }
   await loadSessions()
   if (currentSessionId.value === sid) {
     // 删除当前对话后回到空白态，而不是强制跳到另一条旧会话。
@@ -1820,6 +1961,7 @@ const sortPromptTools = (items: any[]) =>
 const normalizePromptToolGroup = (group: any): McpCatalogToolGroup => ({
   groupKey: String(group?.groupKey || '').trim(),
   groupLabel: String(group?.groupLabel || '').trim(),
+  groupDescription: String(group?.groupDescription || '').trim() || undefined,
   groupKind: group?.groupKind === 'device' ? 'device' : 'workspace',
   deviceId: String(group?.deviceId || '').trim() || undefined,
   deviceType: String(group?.deviceType || '').trim() || undefined,
@@ -2104,6 +2246,7 @@ const pollRunLive = async (epoch: number) => {
       resetSegmentTimer()
     }
     currentMcpTool.value = incomingTool
+    currentMcpArguments.value = String(run.current_tool_arguments || '')
 
     const hadContentBefore = !!(prevLiveTextForBoundary || prevLiveReasoningForBoundary)
     const prevPhase = prevRunPhaseForBoundary
@@ -2200,6 +2343,7 @@ const checkActiveRun = async () => {
     if (incomingPhase !== 'idle') phaseEnterTs.value = Date.now()
   }
   currentMcpTool.value = String(data.run.current_tool || '')
+  currentMcpArguments.value = String(data.run.current_tool_arguments || '')
   liveThinkingText.value = String(data.run.live_reasoning || '')
   updateLiveAssistantView(String(data.run.live_text || ''))
   liveCursor.value = Number(data.run.live_len || String(data.run.live_text || '').length || 0)
@@ -2472,7 +2616,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
 
   // 空白对话：首条消息发出时再真正创建会话，避免每次点角色就刷一堆空会话。
   if (!currentSessionId.value) {
-    const createdId = await createSession(BLANK_SESSION_NAME)
+    const createdId = await createSession(BLANK_SESSION_NAME, { carryDraft: true })
     if (!createdId) return
   }
 
@@ -2491,6 +2635,7 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
         attachments: readyUploads.map(item => ({ file_ref: item.file_ref })),
       })
       if (res?.active) {
+        chatMentions.value = []
         if (readyUploads.length > 0) clearUploadedAttachments()
         // 消息已投递给运行中的 run：立刻把用户气泡拉出来，并确保在轮询这个 run。
         await fetchRunHistoryIncrementalOnce()
@@ -2515,15 +2660,18 @@ const sendChat = async (overrideContent?: string, options: { silent?: boolean } 
     .filter(file => isSelectableFilePath(file))
   const selectedAiPaths = selectedReadableFiles.map(path => toAiWorkspacePath(path))
   const attachedPathStr = buildAttachedPathSection(selectedReadableFiles)
+  const activeMentions = activeChatMentions(content, chatMentions.value)
+  const mentionContext = buildMentionContextSection(activeMentions)
 
   const currentSessionName = sessionList.value.find(s => s.id === currentSessionId.value)?.name || BLANK_SESSION_NAME
   const shouldAutoTitle = isPlaceholderSessionName(currentSessionName)
   const visibleUserContent = content || `已上传 ${readyUploads.length} 个附件`
-  const fullContentWithContext = [visibleUserContent, attachedPathStr]
+  const fullContentWithContext = [visibleUserContent, mentionContext, attachedPathStr]
     .filter(Boolean)
     .join('\n\n')
-  const visibleTags = encodeUserAttachmentTags(selectedAiPaths)
+  const visibleTags = encodeUserContextTags(selectedAiPaths, activeMentions)
   chatInput.value = ''
+  chatMentions.value = []
   isTyping.value = true
   currentRunStatus.value = 'queued'
   currentMcpTool.value = ''
@@ -2605,6 +2753,7 @@ const initializeSessions = async () => {
     currentSessionId.value = ''
     chatMessages.value = []
     emit('totalChatTokensUpdate', 0)
+    restoreChatDraft('')
   }
   // 空白新对话没有 session id，session watcher 不一定触发；这里也加载一次，
   // 让用户在发送首条消息前就能看到当前勾选工具对应的动态 MCP 说明。
@@ -2637,6 +2786,13 @@ watch(currentSessionId, async (sid, oldSid) => {
   externalRunDiscoveryEpoch += 1
   emit('update:currentSessionId', sid || '')
   if (sid === oldSid) return
+  if (preserveDraftForSessionId === sid) {
+    preserveDraftForSessionId = ''
+    writeChatDraft(sid)
+    try { window.localStorage.removeItem(chatDraftStorageKey(oldSid)) } catch { /* no-op */ }
+  } else {
+    restoreChatDraft(sid)
+  }
   // 新建空白对话时 sid 为空，也必须立即刷新预览，不能沿用上一段对话的 Prompt。
   void loadEffectiveSystemPromptPreview()
   if (!sid) {
@@ -2696,6 +2852,9 @@ watch(chatScrollRef, (newEl, oldEl) => {
     oldEl.removeEventListener('scroll', handleScroll)
     oldEl.removeEventListener('wheel', handleWheel)
     oldEl.removeEventListener('pointerdown', handlePointerDown)
+    oldEl.removeEventListener('pointermove', handlePointerMove)
+    oldEl.removeEventListener('pointerup', handlePointerEnd)
+    oldEl.removeEventListener('pointercancel', handlePointerEnd)
   }
   if (chatResizeObserver) {
     chatResizeObserver.disconnect()
@@ -2706,6 +2865,9 @@ watch(chatScrollRef, (newEl, oldEl) => {
     newEl.addEventListener('scroll', handleScroll, { passive: true })
     newEl.addEventListener('wheel', handleWheel, { passive: true })
     newEl.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    newEl.addEventListener('pointermove', handlePointerMove, { passive: true })
+    newEl.addEventListener('pointerup', handlePointerEnd, { passive: true })
+    newEl.addEventListener('pointercancel', handlePointerEnd, { passive: true })
     if (typeof ResizeObserver !== 'undefined') {
       chatResizeObserver = new ResizeObserver(handleScrollContentResize)
       // Observe the inner content wrapper so growth in rendered messages is caught,
@@ -2764,6 +2926,9 @@ onBeforeUnmount(() => {
     el.removeEventListener('scroll', handleScroll)
     el.removeEventListener('wheel', handleWheel)
     el.removeEventListener('pointerdown', handlePointerDown)
+    el.removeEventListener('pointermove', handlePointerMove)
+    el.removeEventListener('pointerup', handlePointerEnd)
+    el.removeEventListener('pointercancel', handlePointerEnd)
   }
 })
 </script>
@@ -2872,7 +3037,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 聊天内容区：消息 + 输入（任务流程已移到顶部标题边上，水平显示） -->
-    <div class="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+    <div class="relative flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
       <div ref="chatScrollRef" class="chat-scroll-viewport flex-1 overflow-y-auto">
         <div v-if="externalControlMode" class="mx-auto flex w-full max-w-4xl flex-col gap-3 p-4 sm:p-6">
           <div class="rounded-xl border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-500/30 dark:bg-cyan-950/20">
@@ -2948,6 +3113,7 @@ onBeforeUnmount(() => {
           :liveThinking="liveThinkingText"
           :livePhase="currentRunPhase"
           :typingStatusText="isRunActive ? runTimingText : ''"
+          :typingStatusDetails="currentRunPhase === 'waiting_mcp' ? currentMcpArguments : ''"
           :nowTimestamp="isRunActive ? timeTick : undefined"
           :liveSegmentStartedAt="currentRunPhase === 'generating' ? phaseEnterTs ?? undefined : undefined"
           :appliedEdits="appliedEditsArray"
@@ -2963,6 +3129,20 @@ onBeforeUnmount(() => {
         />
       </div>
 
+      <button
+        v-if="!stickToBottom && !isBlankConversation"
+        type="button"
+        class="absolute bottom-20 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-zinc-200 bg-white/95 px-3 py-1.5 text-[11px] font-normal text-zinc-600 shadow-lg backdrop-blur transition hover:border-indigo-300 hover:text-indigo-600 dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-300 dark:hover:border-indigo-500 dark:hover:text-indigo-300"
+        title="回到最新消息并继续自动跟随"
+        @click="resumeFollowingLatest"
+      >
+        <span v-if="isRunActive" class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
+        </svg>
+        <span>{{ isRunActive ? '跟随最新消息' : '回到最新消息' }}</span>
+      </button>
+
       <div v-if="externalControlMode" class="rounded-xl border border-zinc-200 bg-zinc-50/80 px-4 py-3 text-center text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400">
         对话输入已关闭；请通过已绑定的远程 MCP 控制器操作该成员。
       </div>
@@ -2977,17 +3157,21 @@ onBeforeUnmount(() => {
         :selectable-file-root="selectableFileRoot"
         :toolGroups="attachableToolGroups"
         :selectedToolGroups="selectedToolGroupKeys"
+        :selectedToolNames="selectedMcpToolNames"
+        :mentions="chatMentions"
         :uploadedAttachments="uploadedAttachments"
         :uploadingCount="uploadingCount"
         :modelOptions="aiKindValue === 'core' ? modelOptions : []"
         :selectedModelId="selectedModelId"
         :modelSwitching="modelSwitching"
         @toggleToolGroup="toggleToolGroup"
+        @toggleTool="toggleMcpTool"
         @send="sendChat"
         @stop="stopCurrentRun"
         @toggleFileSelector="handleToggleFileSelector"
         @closeFileSelector="isFileSelectorOpen = false"
         @navigateTo="navigateTo"
+        @navigatePath="navigatePath"
         @navigateBack="navigateBack"
         @toggleFile="toggleFileSelection"
         @clearFiles="clearAttachments"
@@ -2995,6 +3179,7 @@ onBeforeUnmount(() => {
         @uploadFiles="uploadLocalFiles"
         @removeUpload="removeUploadedAttachment"
         @selectModel="switchConversationModel"
+        @addMention="addChatMention"
       />
     </div>
   </div>

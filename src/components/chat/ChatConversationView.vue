@@ -49,6 +49,7 @@ const props = withDefaults(defineProps<{
   liveThinking?: string
   livePhase?: 'idle' | 'generating' | 'waiting_mcp'
   typingStatusText?: string
+  typingStatusDetails?: string
   nowTimestamp?: number
   liveSegmentStartedAt?: number | null
   collapseLiveThinking?: boolean
@@ -75,6 +76,7 @@ const props = withDefaults(defineProps<{
   liveThinking: '',
   livePhase: 'idle',
   typingStatusText: '',
+  typingStatusDetails: '',
   nowTimestamp: 0,
   liveSegmentStartedAt: null,
   collapseLiveThinking: false,
@@ -398,6 +400,7 @@ const loadEffectiveSystemPromptPreview = async () => {
 const normalizePromptToolGroup = (group: any): McpCatalogToolGroup => ({
   groupKey: String(group?.groupKey || '').trim(),
   groupLabel: String(group?.groupLabel || '').trim(),
+  groupDescription: String(group?.groupDescription || '').trim() || undefined,
   groupKind: group?.groupKind === 'device' ? 'device' : 'workspace',
   deviceId: String(group?.deviceId || '').trim() || undefined,
   deviceType: String(group?.deviceType || '').trim() || undefined,
@@ -495,7 +498,25 @@ const trimKnownLiveReasoningPrefix = (live: string, known: string) => {
 
 const displayedLiveThinking = computed(() => {
   const live = stripMcpCallFormatText(props.liveThinking)
-  if (!normalizeReasoningText(live)) return ''
+  const normalizedLive = normalizeReasoningText(live)
+  if (!normalizedLive) return ''
+
+  const persistedThinking = normalizedMessages.value
+    .filter((msg) => msg.role === 'assistant')
+    .map((msg) => stripMcpCallFormatText(msg.think || ''))
+    .map(normalizeReasoningText)
+    .filter(Boolean)
+
+  // A newly-created run can briefly receive the previous run's last live
+  // snapshot. Never render an already-persisted reasoning segment again.
+  const lastPersistedThinking = persistedThinking[persistedThinking.length - 1] || ''
+  if (lastPersistedThinking) {
+    const known = lastPersistedThinking
+    if (normalizedLive === known) return ''
+    if (normalizedLive.startsWith(known)) {
+      return normalizedLive.slice(known.length).replace(/^\s+/, '')
+    }
+  }
 
   let latestUserIndex = -1
   for (let i = normalizedMessages.value.length - 1; i >= 0; i -= 1) {
@@ -519,28 +540,39 @@ const displayedLiveThinking = computed(() => {
 const liveAssistantMessage = computed<ConversationMessage | null>(() => {
   const text = stripMcpCallFormatText(props.liveText)
   if (!text.trim()) return null
-  const think = displayedLiveThinking.value
   return {
     id: -1,
     role: 'assistant',
     content: text,
     display_text: text,
-    think: think || undefined,
     created_at: props.liveSegmentStartedAt ?? props.nowTimestamp,
   }
 })
 
-const typingThinkingText = computed(() => {
-  // A relayed external run can briefly retain an idle/unknown phase while its
-  // reasoning snapshot is already available. The typing indicator is gated by
-  // isTyping, so never hide valid live reasoning solely because phase metadata
-  // arrived one frame later.
-  return String(props.liveText || '').trim() ? '' : displayedLiveThinking.value
+const liveThinkingMessage = computed<ConversationMessage | null>(() => {
+  const think = displayedLiveThinking.value
+  if (!think) return null
+  return {
+    id: -3,
+    role: 'assistant',
+    content: '',
+    display_text: '',
+    think,
+    created_at: props.liveSegmentStartedAt ?? props.nowTimestamp,
+  }
 })
+
+const activeLiveThinking = computed(() => Boolean(
+  liveThinkingMessage.value
+  && props.livePhase === 'generating'
+  && !liveAssistantMessage.value,
+))
 
 const renderMessages = computed<ConversationMessage[]>(() => {
   const base = [...normalizedMessages.value]
   if (frontPromptMessage.value) base.unshift(frontPromptMessage.value)
+  const liveThinking = liveThinkingMessage.value
+  if (liveThinking) base.push(liveThinking)
   const liveMessage = liveAssistantMessage.value
   if (liveMessage) {
     const liveCandidates = [
@@ -559,6 +591,7 @@ const renderMessages = computed<ConversationMessage[]>(() => {
       const persistedText = normalizeAssistantReplyText(
         base[i].display_text || base[i].content,
       )
+      if (!persistedText) continue
       const sameReply = liveCandidates.some((liveText) =>
         isSameAssistantVisibleReply(persistedText, liveText))
       if (sameReply) {
@@ -596,15 +629,17 @@ const onRevert = (msgIdx: number, blockIdx: number) => {
     :appliedSignatures="mergedAppliedSignatures"
     :actionResults="mergedActionResults"
     :actionResultsBySignature="mergedActionResultsBySignature"
-  :isTyping="isTyping"
-  :thinkingText="typingThinkingText"
+  :isTyping="isTyping && !liveThinkingMessage"
+  thinkingText=""
   :statusText="typingStatusText"
+  :statusDetails="typingStatusDetails"
   :collapseThinking="collapseLiveThinking"
   :stripMarkdownSymbols="stripMarkdownSymbols"
   :isEmpty="renderMessages.length === 0"
   :readonly="readonly"
   :mcpIcon="mcpIcon"
   :nowTimestamp="nowTimestamp"
+  :activeLiveThinking="activeLiveThinking"
   @delete="onDelete"
   @recall="onRecall"
   @apply="onApply"

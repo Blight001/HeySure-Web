@@ -29,6 +29,7 @@ const props = defineProps<{
   plainTextMode?: boolean
   mcpIcon?: string
   memberTimeLabels?: string[]
+  activeLiveThinking?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -49,11 +50,14 @@ const summaryText = computed(() => formatActivityGroupSummary(props.thinkCount, 
       body-class="activity-group-body"
       :default-open="true"
     >
-      <template #summary>
-        <span class="chat-collapsible-arrow text-[10px] leading-none">➣</span>
+      <template #summary="{ open }">
+        <span
+          class="chat-collapsible-arrow text-[10px] leading-none"
+          :style="{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }"
+        >➣</span>
         <span class="font-medium tracking-wide">{{ summaryText }}</span>
       </template>
-      <div class="space-y-1.5">
+      <div class="space-y-0.5">
         <ChatMessage
           v-for="(member, memberIdx) in members"
           :key="`activity-${member.kind}-${member.index}-${memberIdx}`"
@@ -67,6 +71,7 @@ const summaryText = computed(() => formatActivityGroupSummary(props.thinkCount, 
           :plain-text-mode="plainTextMode"
           :mcp-icon="mcpIcon"
           :think-only="member.kind === 'think'"
+          :expand-think-by-default="activeLiveThinking && messages[member.index]?.id === -3"
           :time-label="memberTimeLabels?.[memberIdx] || ''"
           embedded
           @delete="(idx) => emit('delete', idx)"

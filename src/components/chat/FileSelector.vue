@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { fetchWorkspaceFileBlob, readWorkspaceFile, type WorkspaceFileKind } from '@/api/workspace'
 import type { McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
+import WorkspaceFilePreviewDialog from './WorkspaceFilePreviewDialog.vue'
 
 interface Props {
   isOpen: boolean
@@ -13,6 +13,10 @@ interface Props {
   toolGroups?: McpCatalogToolGroup[]
   /** 已勾选的工具组 groupKey 列表 */
   selectedToolGroups?: string[]
+  selectedToolNames?: string[]
+  modelOptions?: Array<{ id: string; name: string; model: string }>
+  selectedModelId?: string
+  modelSwitching?: boolean
 }
 
 const props = defineProps<Props>()
@@ -20,12 +24,15 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'navigate', path: string): void
+  (e: 'navigatePath', path: string): void
   (e: 'navigateBack'): void
   (e: 'toggle', file: string): void
   (e: 'clear'): void
   (e: 'refresh'): void
   (e: 'pickLocalFiles'): void
   (e: 'toggleToolGroup', groupKey: string): void
+  (e: 'toggleTool', toolName: string): void
+  (e: 'selectModel', modelId: string): void
 }>()
 
 const isHiddenSandboxPath = (path: string) => {
@@ -40,19 +47,8 @@ const normalizedSelectedFiles = computed(() => props.selectedFiles.map(file => f
 const normalizedSelectableRoot = computed(() =>
   String(props.selectableFileRoot || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, ''))
 const previewPath = ref('')
-const previewContent = ref('')
-const previewKind = ref<WorkspaceFileKind>('text')
-const previewSize = ref(0)
-const previewBinary = ref(false)
-const previewTooLarge = ref(false)
-const previewLoading = ref(false)
-const previewError = ref('')
-const previewMediaUrl = ref('')
-const previewDownloading = ref(false)
+const expandedToolGroups = ref<string[]>([])
 let fileClickTimer: number | null = null
-
-const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.ico', '.avif'])
-const VIDEO_EXTS = new Set(['.mp4', '.webm', '.ogg', '.ogv', '.mov', '.m4v'])
 
 const currentFolderItems = computed(() => {
   const items = new Set<string>()
@@ -107,90 +103,14 @@ const disabledItemTitle = (name: string, folder = false) =>
     ? (folder ? '选择文件夹' : '选择文件，双击预览')
     : (folder ? '当前 AI 不能附加此文件夹' : '当前 AI 不能附加此文件；可双击预览')
 
-const fileExt = (path: string) => {
-  const name = String(path || '').split('/').pop() || ''
-  const idx = name.lastIndexOf('.')
-  return idx >= 0 ? name.slice(idx).toLowerCase() : ''
-}
-
-const looksLikeImage = (path: string) => IMAGE_EXTS.has(fileExt(path))
-const looksLikeVideo = (path: string) => VIDEO_EXTS.has(fileExt(path))
-
-const fmtSize = (bytes: number) => {
-  const n = Number(bytes || 0)
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
-
-const clearPreviewMedia = () => {
-  if (previewMediaUrl.value) {
-    URL.revokeObjectURL(previewMediaUrl.value)
-    previewMediaUrl.value = ''
-  }
-}
-
 const closePreview = () => {
   previewPath.value = ''
-  previewContent.value = ''
-  previewKind.value = 'text'
-  previewSize.value = 0
-  previewBinary.value = false
-  previewTooLarge.value = false
-  previewError.value = ''
-  clearPreviewMedia()
 }
 
-const openPreview = async (path: string) => {
+const openPreview = (path: string) => {
   const normalized = String(path || '').replace(/\\/g, '/').replace(/^\/+/, '')
   if (!normalized || normalized.endsWith('/')) return
-  closePreview()
   previewPath.value = normalized
-  previewLoading.value = true
-  try {
-    if (looksLikeImage(normalized)) {
-      previewKind.value = 'image'
-      const blob = await fetchWorkspaceFileBlob(normalized)
-      previewSize.value = blob.size
-      previewMediaUrl.value = URL.createObjectURL(blob)
-      return
-    }
-    if (looksLikeVideo(normalized)) {
-      previewKind.value = 'video'
-      const blob = await fetchWorkspaceFileBlob(normalized)
-      previewSize.value = blob.size
-      previewMediaUrl.value = URL.createObjectURL(blob)
-      return
-    }
-    const res = await readWorkspaceFile(normalized)
-    previewContent.value = res.content || ''
-    previewKind.value = res.binary ? 'binary' : (res.kind === 'image' || res.kind === 'video' ? res.kind : 'text')
-    previewSize.value = Number(res.size || 0)
-    previewBinary.value = !!res.binary
-    previewTooLarge.value = !!res.too_large
-  } catch (error: any) {
-    previewError.value = String(error?.message || '读取文件失败')
-  } finally {
-    previewLoading.value = false
-  }
-}
-
-const downloadPreview = async () => {
-  if (!previewPath.value) return
-  previewDownloading.value = true
-  try {
-    const blob = await fetchWorkspaceFileBlob(previewPath.value)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = previewPath.value.split('/').pop() || 'file'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  } finally {
-    previewDownloading.value = false
-  }
 }
 
 const clearFileClickTimer = () => {
@@ -218,67 +138,88 @@ const handleFileClick = (event: MouseEvent, path: string) => {
 
 const handleFileDblClick = (path: string) => {
   clearFileClickTimer()
-  void openPreview(path)
+  openPreview(path)
 }
 
 onBeforeUnmount(() => {
   clearFileClickTimer()
-  clearPreviewMedia()
+})
+
+const pathBreadcrumbs = computed(() => {
+  let path = ''
+  return String(props.currentPath || '').split('/').filter(Boolean).map(label => {
+    path = path ? `${path}/${label}` : label
+    return { label, path }
+  })
 })
 
 const toolGroupList = computed(() =>
   (props.toolGroups || []).filter(group => group.groupKey && group.tools.length > 0))
 
 const isGroupChecked = (group: McpCatalogToolGroup) =>
-  !group.disabled && (props.selectedToolGroups || []).includes(group.groupKey)
+  !group.disabled && group.tools.length > 0
+    && group.tools.every(tool => (props.selectedToolNames || []).includes(tool.name))
+
+const isGroupPartiallyChecked = (group: McpCatalogToolGroup) => {
+  if (group.disabled || !group.tools.length) return false
+  const selected = group.tools.filter(tool => (props.selectedToolNames || []).includes(tool.name)).length
+  return selected > 0 && selected < group.tools.length
+}
+
+const isToolChecked = (name: string) => (props.selectedToolNames || []).includes(name)
+
+const toggleToolGroupExpanded = (groupKey: string) => {
+  const next = [...expandedToolGroups.value]
+  const index = next.indexOf(groupKey)
+  if (index >= 0) next.splice(index, 1)
+  else next.push(groupKey)
+  expandedToolGroups.value = next
+}
 
 const groupKindLabel = (group: McpCatalogToolGroup) =>
   group.groupKind === 'device' ? '端侧' : '工作区'
 
 const groupTitle = (group: McpCatalogToolGroup) =>
   group.disabled ? (group.disabledReason || '当前不可勾选该组工具') : ''
+
+const handleModelChange = (event: Event) => {
+  const modelId = (event.target as HTMLSelectElement).value
+  if (modelId && modelId !== props.selectedModelId) emit('selectModel', modelId)
+}
 </script>
 
 <template>
   <div
     v-if="isOpen"
-    class="absolute bottom-full left-0 z-[100] mb-2 flex max-h-[460px] flex-col overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-zinc-900/10 dark:shadow-black/40"
-    :class="previewPath ? 'w-[min(42rem,calc(100vw-2rem))]' : 'w-80'"
+    class="absolute bottom-full left-0 z-[100] mb-2 flex max-h-[460px] w-80 flex-col overflow-hidden rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-zinc-900/10 dark:shadow-black/40"
   >
-    <!-- 头部：路径导航 -->
-    <div class="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
-      <div class="flex min-w-0 items-center gap-1.5">
-        <button
-          v-if="currentPath"
-          @click="emit('navigateBack')"
-          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-          title="返回上级"
+    <!-- 模型切换固定在加号面板顶部，位于工作区根目录导航上方。 -->
+    <div
+      v-if="(modelOptions?.length || 0) > 0"
+      class="shrink-0 border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800"
+    >
+      <label class="flex items-center gap-2">
+        <span class="shrink-0 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">当前模型</span>
+        <select
+          class="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-[11px] font-medium text-zinc-700 outline-none transition-colors focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15 disabled:cursor-wait disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
+          :value="selectedModelId"
+          :disabled="modelSwitching"
+          :title="modelSwitching ? '正在切换模型' : '切换当前会话使用的模型'"
+          @change="handleModelChange"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-        </svg>
-        <span class="truncate text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">{{ currentPath || '工作区根目录' }}</span>
-      </div>
-      <button
-        @click="emit('close')"
-        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-        title="关闭"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+          <option v-for="option in modelOptions" :key="option.id" :value="option.id">
+            {{ option.name || option.model }}
+          </option>
+        </select>
+        <span v-if="modelSwitching" class="shrink-0 text-[10px] text-indigo-500">切换中…</span>
+      </label>
     </div>
 
-    <div v-if="!previewPath && !currentPath" class="shrink-0 border-b border-zinc-100 p-1.5 dark:border-zinc-800">
+    <div class="shrink-0 border-b border-zinc-100 p-1.5 dark:border-zinc-800">
       <button
         type="button"
         class="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left transition-colors hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20"
-        title="从本机选择图片或文件，也可以直接拖放或粘贴到输入框"
+        title="从本机上传图片或文件，也可以直接拖放或粘贴到输入框"
         @click="emit('pickLocalFiles')"
       >
         <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">
@@ -286,77 +227,53 @@ const groupTitle = (group: McpCatalogToolGroup) =>
             <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.125 4.125 0 0 1-5.834-5.834l9.04-9.04a2.625 2.625 0 0 1 3.713 3.713l-9.04 9.04a1.125 1.125 0 0 1-1.591-1.591l8.293-8.293" />
           </svg>
         </span>
-        <span class="min-w-0 flex-1">
-          <span class="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">链接本机文件</span>
-          <span class="block truncate text-[10px] text-zinc-400">选择图片或文件作为本轮附件</span>
-        </span>
+        <span class="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">上传文件</span>
       </button>
     </div>
 
-    <!-- 文件预览：双击文件打开，行为与管理员文件查看保持一致（图片预览 / 文本查看 / 二进制下载） -->
-    <div v-if="previewPath" class="flex min-h-0 flex-1 flex-col">
-      <div class="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
-        <div class="flex min-w-0 items-center gap-2">
-          <button
-            class="rounded-lg border border-zinc-200 px-2 py-1 text-[11px] font-medium text-zinc-500 hover:border-indigo-200 hover:text-indigo-600 dark:border-zinc-700 dark:text-zinc-400"
-            @click="closePreview"
-          >
-            返回
-          </button>
-          <span class="min-w-0 truncate font-mono text-[11px] text-zinc-600 dark:text-zinc-300" :title="previewPath">{{ previewPath }}</span>
-          <span v-if="previewSize" class="shrink-0 text-[10px] text-zinc-400">{{ fmtSize(previewSize) }}</span>
-        </div>
+    <!-- 固定标题：进入子目录时也不被路径导航替换。 -->
+    <div class="flex shrink-0 items-center gap-1.5 border-b border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+        </svg>
         <button
-          class="shrink-0 rounded-lg px-2 py-1 text-[10px] font-medium text-indigo-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50 dark:hover:bg-indigo-900/20"
-          :disabled="previewDownloading"
-          @click="downloadPreview"
-        >
-          {{ previewDownloading ? '下载中…' : '下载' }}
-        </button>
-      </div>
+          type="button"
+          class="truncate text-[12px] font-semibold text-zinc-600 dark:text-zinc-300"
+          :class="currentPath ? 'hover:text-indigo-600 dark:hover:text-indigo-300' : 'cursor-default'"
+          @click="currentPath && emit('navigatePath', '')"
+        >工作区根目录</button>
+    </div>
 
-      <div class="custom-scrollbar min-h-0 flex-1 overflow-auto p-2">
-        <div v-if="previewLoading" class="p-8 text-center text-[12px] text-zinc-400">加载中…</div>
-        <div v-else-if="previewError" class="p-8 text-center text-[12px] text-rose-500">{{ previewError }}</div>
-        <div v-else-if="previewKind === 'image'" class="flex min-h-[320px] items-center justify-center rounded-xl bg-zinc-100/60 p-3 dark:bg-zinc-950/60">
-          <img v-if="previewMediaUrl" :src="previewMediaUrl" :alt="previewPath" class="max-h-[360px] max-w-full object-contain" />
-          <span v-else class="text-[12px] text-zinc-400">无法预览此图片</span>
-        </div>
-        <div v-else-if="previewKind === 'video'" class="flex min-h-[320px] items-center justify-center rounded-xl bg-zinc-950 p-3">
-          <video
-            v-if="previewMediaUrl"
-            :src="previewMediaUrl"
-            controls
-            preload="metadata"
-            class="max-h-[360px] max-w-full rounded-lg"
-          />
-          <span v-else class="text-[12px] text-zinc-400">无法预览此视频</span>
-        </div>
-        <div v-else-if="previewBinary || previewTooLarge || previewKind === 'binary'" class="p-8 text-center text-[12px] text-zinc-400">
-          {{ previewTooLarge ? '文件过大（> 1 MB），无法在线查看。' : '这是二进制文件，无法在线查看。' }}
-          <div class="mt-3">
-            <button
-              class="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              :disabled="previewDownloading"
-              @click="downloadPreview"
-            >
-              下载文件
-            </button>
-          </div>
-        </div>
-        <pre
-          v-else
-          class="min-h-[320px] whitespace-pre-wrap break-words rounded-xl bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed text-zinc-100"
-        >{{ previewContent }}</pre>
-      </div>
+    <!-- 子目录导航单独占一行，不覆盖固定标题和上传入口。 -->
+    <div
+      v-if="currentPath"
+      class="flex shrink-0 items-center gap-1.5 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800"
+    >
+      <button
+        @click="emit('navigateBack')"
+        class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+        title="返回上级"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <nav class="flex min-w-0 items-center gap-1 overflow-hidden text-[12px] text-zinc-500 dark:text-zinc-400" :title="currentPath">
+        <template v-for="(crumb, index) in pathBreadcrumbs" :key="crumb.path">
+          <span v-if="index > 0" class="shrink-0 text-zinc-300 dark:text-zinc-600">/</span>
+          <button
+            v-if="index < pathBreadcrumbs.length - 1"
+            type="button"
+            class="min-w-0 truncate font-mono hover:text-indigo-600 dark:hover:text-indigo-300"
+            @click="emit('navigatePath', crumb.path)"
+          >{{ crumb.label }}</button>
+          <span v-else class="min-w-0 truncate font-mono text-zinc-700 dark:text-zinc-200">{{ crumb.label }}</span>
+        </template>
+      </nav>
     </div>
 
     <!-- 文件目录 -->
-    <div v-else class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1.5">
-      <!-- 工作区目录 标题，与“工具调用”字体统一 -->
-      <div class="px-2 pb-1">
-        <span class="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">工作区目录</span>
-      </div>
+    <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1.5">
       <div
         v-if="currentFolderItems.folders.length === 0 && currentFolderItems.files.length === 0"
         class="p-5 text-center text-[11px] text-zinc-400"
@@ -433,36 +350,48 @@ const groupTitle = (group: McpCatalogToolGroup) =>
         <span class="truncate text-[10px] text-zinc-400 dark:text-zinc-500">勾选后本轮消息附带该组 MCP 说明</span>
       </div>
       <div class="custom-scrollbar max-h-36 overflow-y-auto px-1.5 pb-1.5">
-        <label
+        <div
           v-for="group in toolGroupList"
           :key="group.groupKey"
-          class="flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors"
+          class="rounded-xl transition-colors"
           :class="group.disabled
             ? 'cursor-not-allowed opacity-50'
-            : 'cursor-pointer hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20'"
+            : 'hover:bg-indigo-50/70 dark:hover:bg-indigo-900/20'"
           :title="groupTitle(group)"
         >
-          <input
-            type="checkbox"
-            :checked="isGroupChecked(group)"
-            :disabled="group.disabled"
-            @change="!group.disabled && emit('toggleToolGroup', group.groupKey)"
-            class="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800/60"
-            :class="group.disabled ? 'cursor-not-allowed' : 'cursor-pointer'"
-          >
-          <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-200">{{ group.groupLabel }}</span>
-          <span
-            v-if="group.disabled"
-            class="shrink-0 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500"
-          >不可用</span>
-          <span
-            class="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none"
-            :class="group.groupKind === 'device'
-              ? 'bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300'
-              : 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300'"
-          >{{ groupKindLabel(group) }}</span>
-          <span class="shrink-0 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">{{ group.tools.length }} 个工具</span>
-        </label>
+          <div class="flex items-center gap-2 px-2 py-1.5">
+            <input
+              type="checkbox"
+              :checked="isGroupChecked(group)"
+              :indeterminate="isGroupPartiallyChecked(group)"
+              :disabled="group.disabled"
+              @change="!group.disabled && emit('toggleToolGroup', group.groupKey)"
+              class="h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800/60"
+              :class="group.disabled ? 'cursor-not-allowed' : 'cursor-pointer'"
+            >
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              :disabled="group.disabled"
+              @click="!group.disabled && toggleToolGroupExpanded(group.groupKey)"
+            >
+              <svg class="h-3 w-3 shrink-0 text-zinc-400 transition-transform" :class="expandedToolGroups.includes(group.groupKey) ? 'rotate-90' : ''" viewBox="0 0 20 20" fill="currentColor"><path d="m7 5 5 5-5 5V5Z" /></svg>
+              <span class="min-w-0 flex-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-200">{{ group.groupLabel }}</span>
+            </button>
+            <span v-if="group.disabled" class="shrink-0 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500">不可用</span>
+            <span class="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none" :class="group.groupKind === 'device' ? 'bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300' : 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300'">{{ groupKindLabel(group) }}</span>
+            <span class="shrink-0 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">{{ group.tools.filter(tool => isToolChecked(tool.name)).length }}/{{ group.tools.length }}</span>
+          </div>
+          <div v-if="expandedToolGroups.includes(group.groupKey) && !group.disabled" class="space-y-0.5 px-2 pb-1.5 pl-7">
+            <label v-for="tool in group.tools" :key="tool.name" class="flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 hover:bg-white/70 dark:hover:bg-zinc-900/50" :title="tool.description || tool.name">
+              <input type="checkbox" :checked="isToolChecked(tool.name)" class="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500 dark:border-zinc-600 dark:bg-zinc-800/60" @change="emit('toggleTool', tool.name)">
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-mono text-[10px] font-medium text-zinc-700 dark:text-zinc-200">{{ tool.name }}</span>
+                <span v-if="tool.description" class="block truncate text-[9px] text-zinc-400 dark:text-zinc-500">{{ tool.description }}</span>
+              </span>
+            </label>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -487,4 +416,9 @@ const groupTitle = (group: McpCatalogToolGroup) =>
       </div>
     </div>
   </div>
+  <WorkspaceFilePreviewDialog
+    :open="!!previewPath"
+    :path="previewPath"
+    @close="closePreview"
+  />
 </template>

@@ -32,12 +32,14 @@ const props = defineProps<{
   isTyping: boolean
   thinkingText?: string
   statusText?: string
+  statusDetails?: string
   collapseThinking?: boolean
   stripMarkdownSymbols?: boolean
   isEmpty: boolean
   readonly?: boolean
   mcpIcon?: string
   nowTimestamp?: number
+  activeLiveThinking?: boolean
 }>()
 
 const renderItems = computed(() => buildChatRenderItems(props.messages))
@@ -66,7 +68,7 @@ const messageTimeLabels = computed<Record<number, string>>(() => {
     const ts = getMessageTimeMs(current)
     if (ts == null) continue
 
-    if (current.id === -1) {
+    if (Number(current.id) < 0) {
       // Live streaming bubble: created_at is the current segment's start.
       if (now != null && now > ts) labels[idx] = formatDurationMs(now - ts)
       continue
@@ -187,6 +189,7 @@ const emit = defineEmits<{
           :plain-text-mode="stripMarkdownSymbols"
           :mcp-icon="mcpIcon"
           :member-time-labels="item.kind === 'activity-group' ? item.members.map((member) => messageTimeLabels[member.index] || '') : undefined"
+          :active-live-thinking="activeLiveThinking"
           @delete="(i) => emit('delete', i)"
           @recall="(i) => emit('recall', i)"
           @apply="(msgIdx, blockIdx) => emit('apply', msgIdx, blockIdx)"
@@ -218,6 +221,7 @@ const emit = defineEmits<{
           :time-label="String(messages[item.index]?.display_text || messages[item.index]?.content || '').startsWith('[前置 Prompt]') ? '' : (messageTimeLabels[item.index] || '')"
           :task-duration-label="taskDurationLabels[item.index] || ''"
           :hide-think="item.hideThink"
+          :expand-think-by-default="activeLiveThinking && messages[item.index]?.id === -3"
           @delete="(i) => emit('delete', i)"
           @recall="(i) => emit('recall', i)"
           @apply="(msgIdx, blockIdx) => emit('apply', msgIdx, blockIdx)"
@@ -230,6 +234,7 @@ const emit = defineEmits<{
       :isTyping="isTyping"
       :thinkingText="thinkingText"
       :statusText="statusText"
+      :statusDetails="statusDetails"
       :plainTextMode="stripMarkdownSymbols"
       :collapsed="collapseThinking"
     />

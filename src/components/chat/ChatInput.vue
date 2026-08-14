@@ -3,6 +3,9 @@ import FileSelector from './FileSelector.vue'
 import type { McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
+import { activeChatMentions, mentionToken, type ChatMention } from '@/utils/chatMentions'
+import ChatMentionTooltip from './ChatMentionTooltip.vue'
+import { useChatMentionTooltip } from '@/composables/useChatMentionTooltip'
 
 interface UploadAttachmentItem {
   client_id: string
@@ -31,6 +34,8 @@ const props = defineProps<{
   selectableFileRoot?: string
   toolGroups?: McpCatalogToolGroup[]
   selectedToolGroups?: string[]
+  selectedToolNames?: string[]
+  mentions?: ChatMention[]
   uploadedAttachments?: UploadAttachmentItem[]
   uploadingCount?: number
   modelOptions?: ChatModelOption[]
@@ -45,14 +50,17 @@ const emit = defineEmits<{
   (e: 'toggleFileSelector'): void
   (e: 'closeFileSelector'): void
   (e: 'navigateTo', path: string): void
+  (e: 'navigatePath', path: string): void
   (e: 'navigateBack'): void
   (e: 'toggleFile', file: string): void
   (e: 'clearFiles'): void
   (e: 'refreshFiles'): void
   (e: 'toggleToolGroup', groupKey: string): void
+  (e: 'toggleTool', toolName: string): void
   (e: 'uploadFiles', files: File[]): void
   (e: 'removeUpload', clientId: string): void
   (e: 'selectModel', modelId: string): void
+  (e: 'addMention', mention: ChatMention): void
 }>()
 
 const inputValue = computed({
@@ -71,23 +79,225 @@ const hasReadyUpload = computed(() => (props.uploadedAttachments || []).some(ite
 // 才切换成「停止」。空闲无内容时禁用。
 const showStop = computed(() => props.isTyping && !hasContent.value && !hasReadyUpload.value)
 const canSend = computed(() => (hasContent.value || hasReadyUpload.value) && !props.uploadingCount)
-const selectedModel = computed(() =>
-  (props.modelOptions || []).find(item => item.id === props.selectedModelId) || null)
-const showModelSwitcher = computed(() => (props.modelOptions || []).length > 0)
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const editorRef = ref<HTMLDivElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
-const modelSwitcherRef = ref<HTMLElement | null>(null)
-const modelMenuOpen = ref(false)
 const isDraggingFiles = ref(false)
+const activeMentionIndex = ref(0)
+const mentionDismissed = ref(false)
+const mentionQuery = ref('')
+const mentionDomRange = ref<Range | null>(null)
 const TEXTAREA_MIN_HEIGHT = 36
 const TEXTAREA_MAX_HEIGHT = 256
+const { mentionTooltip, showMentionTooltip, hideMentionTooltip, keepMentionTooltip } = useChatMentionTooltip()
+
+const createMentionElement = (document: Document, mention: ChatMention) => {
+  const element = document.createElement('span')
+  element.contentEditable = 'false'
+  element.dataset.mentionToken = mentionToken(mention)
+  element.dataset.mentionLabel = mention.label
+  element.dataset.mentionType = mention.type
+  element.dataset.mentionDetail = mention.type === 'mcp'
+    ? `${mention.reference}\n${mention.detail}`
+    : mention.detail
+  element.className = mention.type === 'mcp'
+    ? 'chat-input-mention chat-input-mention-mcp'
+    : 'chat-input-mention chat-input-mention-file'
+  element.textContent = mention.label
+  return element
+}
+
+const renderEditorValue = (value: string) => {
+  const editor = editorRef.value
+  if (!editor) return
+  const document = editor.ownerDocument
+  const mentions = activeChatMentions(value, props.mentions || [])
+  const occurrences = mentions
+    .map(mention => ({ mention, index: value.indexOf(mentionToken(mention)) }))
+    .filter(item => item.index >= 0)
+    .sort((left, right) => left.index - right.index)
+  editor.replaceChildren()
+  let offset = 0
+  for (const item of occurrences) {
+    if (item.index > offset) editor.append(document.createTextNode(value.slice(offset, item.index)))
+    editor.append(createMentionElement(document, item.mention))
+    offset = item.index + mentionToken(item.mention).length
+  }
+  if (offset < value.length) editor.append(document.createTextNode(value.slice(offset)))
+}
+
+interface MentionCandidate {
+  key: string
+  type: 'tool' | 'file'
+  label: string
+  detail: string
+  groupKey?: string
+}
+
+const mentionCandidates = computed<MentionCandidate[]>(() => {
+  if (!mentionDomRange.value || mentionDismissed.value) return []
+  const query = mentionQuery.value
+  const seenTools = new Set<string>()
+  const tools: MentionCandidate[] = []
+  for (const group of props.toolGroups || []) {
+    if (group.disabled) continue
+    for (const tool of group.tools || []) {
+      const name = String(tool.name || '').trim()
+      if (!name || seenTools.has(name)) continue
+      const searchable = `${name} ${tool.description || ''} ${group.groupLabel || ''}`.toLowerCase()
+      if (query && !searchable.includes(query)) continue
+      seenTools.add(name)
+      tools.push({
+        key: `tool:${name}`,
+        type: 'tool',
+        label: name,
+        detail: [group.groupDescription, tool.description || group.groupLabel || 'MCP 工具']
+          .map(item => String(item || '').trim())
+          .filter(Boolean)
+          .join('；'),
+        groupKey: group.groupKey,
+      })
+    }
+  }
+
+  const selectableRoot = String(props.selectableFileRoot || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+  const files = props.allFiles
+    .map(path => String(path || '').replace(/\\/g, '/'))
+    .filter(path => path && !path.endsWith('/'))
+    .filter(path => !selectableRoot || path === selectableRoot || path.startsWith(`${selectableRoot}/`))
+    .filter(path => !query || path.toLowerCase().includes(query))
+    .map<MentionCandidate>(path => ({
+      key: `file:${path}`,
+      type: 'file',
+      label: path.split('/').pop() || path,
+      detail: path,
+    }))
+
+  return [...tools, ...files].slice(0, 10)
+})
+
+const mentionOpen = computed(() => !!mentionDomRange.value && mentionCandidates.value.length > 0)
+
+const findTypedMentionRange = () => {
+  const root = editorRef.value
+  if (!root) return null
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let node: Node | null = walker.nextNode()
+  let resolved: Range | null = null
+  while (node) {
+    const text = String(node.textContent || '')
+    const match = text.match(/(^|\s)@([^\s@]*)$/)
+    if (match) {
+      const queryLength = String(match[2] || '').length
+      const range = root.ownerDocument.createRange()
+      range.setStart(node, text.length - queryLength - 1)
+      range.setEnd(node, text.length)
+      resolved = range
+    }
+    node = walker.nextNode()
+  }
+  return resolved
+}
+
+const serializeEditor = () => {
+  const root = editorRef.value
+  if (!root) return ''
+  const serialize = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent || ''
+    if (!(node instanceof HTMLElement)) return ''
+    const mention = node.dataset.mentionToken
+    if (mention) return mention
+    if (node.tagName === 'BR') return '\n'
+    const body = Array.from(node.childNodes).map(serialize).join('')
+    return ['DIV', 'P'].includes(node.tagName) ? `${body}\n` : body
+  }
+  return Array.from(root.childNodes).map(serialize).join('').replace(/\n$/, '')
+}
+
+const updateMentionState = () => {
+  if (mentionDismissed.value) return
+  const root = editorRef.value
+  const selection = root?.ownerDocument.getSelection()
+  if (!root || !selection?.rangeCount || !selection.isCollapsed) {
+    mentionDomRange.value = null
+    return
+  }
+  const range = selection.getRangeAt(0)
+  let node = range.startContainer
+  let offset = range.startOffset
+  // Some browsers expose a caret after the last text child as
+  // (contenteditable root, child index) instead of (text node, text offset).
+  if (node.nodeType === Node.ELEMENT_NODE && offset > 0) {
+    const previous = node.childNodes[offset - 1]
+    if (previous?.nodeType === Node.TEXT_NODE) {
+      node = previous
+      offset = String(previous.textContent || '').length
+    }
+  }
+  if (node.nodeType !== Node.TEXT_NODE || !root.contains(node)) {
+    mentionDomRange.value = null
+    return
+  }
+  const before = String(node.textContent || '').slice(0, offset)
+  const match = before.match(/(^|\s)@([^\s@]*)$/)
+  if (!match) {
+    mentionDomRange.value = null
+    return
+  }
+  const query = String(match[2] || '')
+  const tokenRange = root.ownerDocument.createRange()
+  tokenRange.setStart(node, offset - query.length - 1)
+  tokenRange.setEnd(node, offset)
+  mentionQuery.value = query.toLowerCase()
+  mentionDomRange.value = tokenRange
+}
+
+const selectMention = async (candidate = mentionCandidates.value[activeMentionIndex.value]) => {
+  const range = findTypedMentionRange() || mentionDomRange.value
+  if (!candidate || !range) return
+  const document = editorRef.value?.ownerDocument
+  if (!document) return
+  const mention = createMentionElement(document, {
+    type: candidate.type === 'tool' ? 'mcp' : 'file',
+    label: candidate.label,
+    reference: candidate.type === 'tool' ? candidate.label : candidate.detail,
+    detail: candidate.detail,
+  })
+  const spacer = document.createTextNode(' ')
+  range.deleteContents()
+  range.insertNode(spacer)
+  range.insertNode(mention)
+  const selection = document.getSelection()
+  const caret = document.createRange()
+  caret.setStartAfter(spacer)
+  caret.collapse(true)
+  selection?.removeAllRanges()
+  selection?.addRange(caret)
+  emit('addMention', {
+    type: candidate.type === 'tool' ? 'mcp' : 'file',
+    label: candidate.label,
+    reference: candidate.type === 'tool' ? candidate.label : candidate.detail,
+    detail: candidate.detail,
+  })
+  if (candidate.type === 'tool' && !(props.selectedToolNames || []).includes(candidate.label)) {
+    emit('toggleTool', candidate.label)
+  }
+  if (candidate.type === 'file' && !props.selectedFiles.includes(candidate.detail)) {
+    emit('toggleFile', candidate.detail)
+  }
+  mentionDismissed.value = true
+  mentionDomRange.value = null
+  emit('update:modelValue', serializeEditor())
+  await nextTick()
+  editorRef.value?.focus()
+  resizeTextarea()
+}
 
 // 触屏设备（手机/平板）上回车应换行，由发送按钮触发发送，避免软键盘回车误发
 const isCoarsePointer = typeof window !== 'undefined' && !!window.matchMedia
   && window.matchMedia('(pointer: coarse)').matches
 
-const resizeTextarea = (target = textareaRef.value) => {
+const resizeTextarea = (target = editorRef.value) => {
   if (!target) return
   const currentHeight = target.offsetHeight || TEXTAREA_MIN_HEIGHT
   target.style.height = `${currentHeight}px`
@@ -102,6 +312,25 @@ const resizeTextarea = (target = textareaRef.value) => {
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
+  if (mentionOpen.value) {
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      e.preventDefault()
+      void selectMention()
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const direction = e.key === 'ArrowDown' ? 1 : -1
+      const count = mentionCandidates.value.length
+      activeMentionIndex.value = (activeMentionIndex.value + direction + count) % count
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      mentionDismissed.value = true
+      return
+    }
+  }
   if (isCoarsePointer) return
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
@@ -120,8 +349,11 @@ const handlePrimaryAction = () => {
 }
 
 const handleInput = (e: Event) => {
-  const target = e.target as HTMLTextAreaElement
-  emit('update:modelValue', target.value)
+  const target = e.target as HTMLDivElement
+  mentionDismissed.value = false
+  activeMentionIndex.value = 0
+  emit('update:modelValue', serializeEditor())
+  updateMentionState()
   resizeTextarea(target)
 }
 
@@ -143,9 +375,27 @@ const handleDrop = (event: DragEvent) => {
 
 const handlePaste = (event: ClipboardEvent) => {
   const files = Array.from(event.clipboardData?.files || [])
-  if (!files.length) return
+  if (files.length) {
+    event.preventDefault()
+    emitFiles(files)
+    return
+  }
+  const text = event.clipboardData?.getData('text/plain') || ''
+  if (!text) return
   event.preventDefault()
-  emitFiles(files)
+  const selection = editorRef.value?.ownerDocument.getSelection()
+  if (!selection?.rangeCount) return
+  const range = selection.getRangeAt(0)
+  range.deleteContents()
+  const node = editorRef.value?.ownerDocument.createTextNode(text)
+  if (!node) return
+  range.insertNode(node)
+  range.setStartAfter(node)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  emit('update:modelValue', serializeEditor())
+  updateMentionState()
 }
 
 const formatBytes = (bytes: number) => {
@@ -154,7 +404,10 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-onMounted(() => resizeTextarea())
+onMounted(() => {
+  renderEditorValue(props.modelValue)
+  resizeTextarea()
+})
 
 useDismissibleLayer({
   open: () => props.isFileSelectorOpen,
@@ -162,21 +415,16 @@ useDismissibleLayer({
   onDismiss: () => emit('closeFileSelector'),
 })
 
-useDismissibleLayer({
-  open: () => modelMenuOpen.value,
-  roots: [modelSwitcherRef],
-  onDismiss: () => { modelMenuOpen.value = false },
-})
-
-const selectModel = (modelId: string) => {
-  modelMenuOpen.value = false
-  if (modelId && modelId !== props.selectedModelId) emit('selectModel', modelId)
-}
-
-watch(() => props.modelValue, async () => {
+watch(() => [props.modelValue, props.mentions] as const, async ([value]) => {
   await nextTick()
+  const expectedTokens = activeChatMentions(value, props.mentions || []).map(mentionToken)
+  const renderedTokens = Array.from(editorRef.value?.querySelectorAll<HTMLElement>('[data-mention-token]') || [])
+    .map(element => String(element.dataset.mentionToken || ''))
+  if (editorRef.value && (serializeEditor() !== value || expectedTokens.join('\n') !== renderedTokens.join('\n'))) {
+    renderEditorValue(value)
+  }
   resizeTextarea()
-})
+}, { deep: true })
 </script>
 
 <template>
@@ -228,6 +476,35 @@ watch(() => props.modelValue, async () => {
       class="relative flex items-end gap-1.5 rounded-2xl acrylic-input px-1.5 py-1.5 shadow-sm transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900/60"
       :class="isDraggingFiles ? 'ring-2 ring-indigo-500 border-indigo-400' : ''"
     >
+      <div
+        v-if="mentionOpen"
+        class="absolute bottom-full left-10 right-10 z-[110] mb-2 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900"
+      >
+        <div class="flex items-center justify-between px-2 py-1 text-[10px] text-zinc-400">
+          <span>@ 引用 MCP 或文件</span>
+          <span class="hidden sm:inline">Tab 选择首项 · ↑↓ 切换</span>
+        </div>
+        <button
+          v-for="(candidate, index) in mentionCandidates"
+          :key="candidate.key"
+          type="button"
+          class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors"
+          :class="index === activeMentionIndex ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200' : 'text-zinc-600 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800'"
+          @mouseenter="activeMentionIndex = index"
+          @mousedown.prevent
+          @click.prevent.stop="selectMention(candidate)"
+        >
+          <span
+            class="flex h-5 min-w-9 shrink-0 items-center justify-center rounded-md px-1 text-[9px] font-medium"
+            :class="candidate.type === 'tool' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'"
+          >{{ candidate.type === 'tool' ? 'MCP' : '文件' }}</span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate font-mono text-[11px]">{{ candidate.label }}</span>
+            <span class="block truncate text-[10px] font-normal text-zinc-400">{{ candidate.detail }}</span>
+          </span>
+        </button>
+      </div>
+
       <!-- 加号：附加文件 / 动态 MCP 范围 -->
       <button
         @click="emit('toggleFileSelector')"
@@ -256,60 +533,38 @@ watch(() => props.modelValue, async () => {
         :selectable-file-root="selectableFileRoot"
         :toolGroups="toolGroups"
         :selectedToolGroups="selectedToolGroups"
+        :selectedToolNames="selectedToolNames"
+        :modelOptions="modelOptions"
+        :selectedModelId="selectedModelId"
+        :modelSwitching="modelSwitching"
         @close="emit('closeFileSelector')"
         @navigate="emit('navigateTo', $event)"
+        @navigatePath="emit('navigatePath', $event)"
         @navigateBack="emit('navigateBack')"
         @toggle="emit('toggleFile', $event)"
         @clear="emit('clearFiles')"
         @refresh="emit('refreshFiles')"
         @pickLocalFiles="fileInputRef?.click()"
         @toggleToolGroup="emit('toggleToolGroup', $event)"
+        @toggleTool="emit('toggleTool', $event)"
+        @selectModel="emit('selectModel', $event)"
       />
 
-      <textarea
-        ref="textareaRef"
-        v-model="inputValue"
-        rows="1"
-        class="chat-input-textarea box-border h-9 max-h-64 min-h-[36px] flex-1 resize-none overflow-hidden border-0 bg-transparent px-1.5 py-[7px] text-sm leading-[22px] text-zinc-800 placeholder:text-zinc-400 transition-[height] duration-300 ease-linear focus:outline-none focus:ring-0 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-        placeholder="给主脑发送指令..."
+      <div
+        ref="editorRef"
+        contenteditable="true"
+        role="textbox"
+        aria-multiline="true"
+        data-placeholder="给主脑发送指令..."
+        class="chat-input-textarea box-border h-9 max-h-64 min-h-[36px] flex-1 overflow-hidden border-0 bg-transparent px-1.5 py-[7px] text-sm leading-[22px] text-zinc-800 transition-[height] duration-300 ease-linear focus:outline-none focus:ring-0 dark:text-zinc-100"
         @keydown="handleKeydown"
         @input="handleInput"
+        @click="updateMentionState"
+        @keyup="updateMentionState"
         @paste="handlePaste"
-      ></textarea>
-
-      <div v-if="showModelSwitcher" ref="modelSwitcherRef" class="relative shrink-0">
-        <button
-          type="button"
-          class="flex h-9 max-w-[7.5rem] items-center gap-1 rounded-full border border-zinc-200 bg-white/70 px-2 text-[11px] text-zinc-600 transition-colors hover:border-indigo-300 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:border-indigo-600 dark:hover:text-indigo-300"
-          :disabled="modelSwitching"
-          :title="modelSwitching ? '正在切换模型' : `当前模型：${selectedModel?.name || '请选择'}`"
-          :aria-expanded="modelMenuOpen"
-          @click="modelMenuOpen = !modelMenuOpen"
-        >
-          <span class="truncate">{{ modelSwitching ? '切换中…' : (selectedModel?.name || '选择模型') }}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0 transition-transform" :class="modelMenuOpen ? '' : 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19 15l-7-7-7 7" />
-          </svg>
-        </button>
-        <div
-          v-if="modelMenuOpen"
-          class="absolute bottom-full right-0 z-50 mb-2 w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-zinc-200 bg-white/95 p-1 shadow-2xl backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95"
-        >
-          <div class="max-h-60 overflow-y-auto">
-            <button
-              v-for="option in modelOptions"
-              :key="option.id"
-              type="button"
-              class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              :class="option.id === selectedModelId ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300' : 'text-zinc-700 dark:text-zinc-200'"
-              @click="selectModel(option.id)"
-            >
-              <span class="min-w-0 flex-1 truncate text-xs font-medium">{{ option.name }}</span>
-              <span v-if="option.id === selectedModelId" class="shrink-0 text-xs">✓</span>
-            </button>
-          </div>
-        </div>
-      </div>
+        @pointerover="showMentionTooltip"
+        @pointerout="hideMentionTooltip"
+      ></div>
 
       <button
         class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all duration-200"
@@ -330,6 +585,7 @@ watch(() => props.modelValue, async () => {
         </svg>
       </button>
     </div>
+    <ChatMentionTooltip :state="mentionTooltip" @keep="keepMentionTooltip" @hide="hideMentionTooltip" />
   </div>
 </template>
 
@@ -342,5 +598,33 @@ watch(() => props.modelValue, async () => {
 .chat-input-textarea::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+.chat-input-textarea:empty::before {
+  color: rgb(161 161 170);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.chat-input-textarea :deep(.chat-input-mention) {
+  display: inline;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.chat-input-textarea :deep(.chat-input-mention-mcp) {
+  color: rgb(5 150 105);
+}
+
+.chat-input-textarea :deep(.chat-input-mention-file) {
+  color: rgb(2 132 199);
+}
+
+.dark .chat-input-textarea :deep(.chat-input-mention-mcp) {
+  color: rgb(110 231 183);
+}
+
+.dark .chat-input-textarea :deep(.chat-input-mention-file) {
+  color: rgb(125 211 252);
 }
 </style>

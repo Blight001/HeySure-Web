@@ -76,7 +76,7 @@ export const buildChatRenderItems = (messages: GroupableChatMessage[]): ChatRend
           index += 1
           break
         }
-        members.push({ kind: 'full', index })
+        members.push({ kind: 'think', index })
         thinkCount += 1
         index += 1
         continue

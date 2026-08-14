@@ -34,7 +34,6 @@ export interface User {
   mcp_namespace_hints?: string
   mcp_dynamic_rule?: string
   mcp_format_error_hint?: string
-  role_mcp_permissions?: string
   prompt_ai_message_notify?: string
   prompt_ai_message_inquiry?: string
   ai_message_inquiry_reminder_seconds?: number

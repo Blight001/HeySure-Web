@@ -6,8 +6,14 @@ import { computed, nextTick, ref } from 'vue'
 import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
 import { copyTextToClipboard } from '@/utils/clipboard'
 import { parseMcpToolBubbleDetails } from '@/utils/mcpFormat'
+import { estimateTokenCount, formatTokenCount } from '@/utils/formatTokenCount'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { ChatAttachment } from '@/api/chat'
+import WorkspaceFilePreviewDialog from './WorkspaceFilePreviewDialog.vue'
+import ZoomableImage from './ZoomableImage.vue'
+import { CHAT_MENTIONS_PREFIX, mentionToken, type ChatMention } from '@/utils/chatMentions'
+import ChatMentionTooltip from './ChatMentionTooltip.vue'
+import { useChatMentionTooltip } from '@/composables/useChatMentionTooltip'
 
 const emit = defineEmits<{
   (e: 'delete', idx: number): void
@@ -15,6 +21,8 @@ const emit = defineEmits<{
   (e: 'apply', msgIdx: number, blockIdx: number): void
   (e: 'revert', msgIdx: number, blockIdx: number): void
 }>()
+
+const { mentionTooltip, showMentionTooltip, hideMentionTooltip, keepMentionTooltip } = useChatMentionTooltip()
 
 const props = defineProps<{
   message: {
@@ -40,6 +48,7 @@ const props = defineProps<{
   embedded?: boolean
   thinkOnly?: boolean
   hideThink?: boolean
+  expandThinkByDefault?: boolean
   timeLabel?: string
   taskDurationLabel?: string
 }>()
@@ -201,6 +210,20 @@ const imagePreviewDialog = ref<HTMLElement | null>(null)
 const imagePreviewZIndex = usePopupZIndex(imagePreviewOpen)
 let imagePreviewTrigger: HTMLElement | null = null
 
+const attachmentPreview = ref<ChatAttachment | null>(null)
+let attachmentPreviewTrigger: HTMLElement | null = null
+
+const openAttachmentPreview = (attachment: ChatAttachment, event: MouseEvent) => {
+  attachmentPreviewTrigger = event.currentTarget as HTMLElement | null
+  attachmentPreview.value = attachment
+}
+
+const closeAttachmentPreview = async () => {
+  attachmentPreview.value = null
+  await nextTick()
+  attachmentPreviewTrigger?.focus()
+}
+
 const openImagePreview = async (event: MouseEvent) => {
   imagePreviewTrigger = event.currentTarget as HTMLElement | null
   imagePreviewOpen.value = true
@@ -256,6 +279,18 @@ const renderedThinkText = computed(() => {
 })
 
 const segmentTimeLabel = computed(() => String(props.timeLabel || '').trim())
+const toolEstimatedTokens = computed(() => estimateTokenCount([
+  mcpToolSections.value.tool,
+  mcpToolSections.value.copyText,
+].filter(Boolean).join('\n')))
+const thinkingEstimatedTokens = computed(() => estimateTokenCount(renderedThinkText.value))
+const segmentTokenLabel = computed(() => `Token ${formatTokenCount(
+  isMcpToolMessage.value ? toolEstimatedTokens.value : thinkingEstimatedTokens.value,
+)}`)
+const segmentTokenTitle = computed(() => {
+  if (isMcpToolMessage.value) return '工具名称、参数与结果的上下文 Token 估算值'
+  return '本段深度思考文本的 Token 估算值'
+})
 
 const ATTACHMENTS_PREFIX = '__HS_ATTACHMENTS__='
 
@@ -279,6 +314,35 @@ const attachedFiles = computed(() => {
     : []
 })
 
+const chatMentions = computed<ChatMention[]>(() => {
+  const parsed = decodeTagSegment(CHAT_MENTIONS_PREFIX)
+  if (!Array.isArray(parsed)) return []
+  return parsed.flatMap((item): ChatMention[] => {
+    if (!item || typeof item !== 'object') return []
+    const type = item.type === 'mcp' || item.type === 'file' ? item.type : null
+    const label = String(item.label || '').trim()
+    const reference = String(item.reference || '').trim()
+    if (!type || !label || !reference) return []
+    return [{ type, label, reference, detail: String(item.detail || '').trim() }]
+  })
+})
+
+const mentionTokens = computed(() => chatMentions.value.map(mention => ({
+  token: mentionToken(mention),
+  type: mention.type,
+  detail: mention.type === 'mcp'
+    ? `${mention.reference}\n${mention.detail}`
+    : mention.detail,
+})))
+
+const mentionedFileReferences = computed(() => new Set(
+  chatMentions.value.filter(item => item.type === 'file').map(item => item.reference),
+))
+
+const visibleAttachedFiles = computed(() => attachedFiles.value.filter(
+  path => !mentionedFileReferences.value.has(path),
+))
+
 const attachedPathLabel = (path: string) =>
   String(path || '').trim().endsWith('/') ? `${String(path || '').trim()}（文件夹）` : String(path || '').trim()
 
@@ -297,9 +361,11 @@ const formatAttachmentBytes = (bytes: number) => {
 <template>
   <div
     class="flex w-full flex-col gap-1.5"
+    @pointerover="showMentionTooltip"
+    @pointerout="hideMentionTooltip"
     :class="[
       (isFrontPromptMessage || isTaskCompleteNotice) ? 'items-center' : ((props.message.role === 'user' && !isSystemNoticeMessage) ? 'items-end' : 'items-start'),
-      isMcpToolMessage ? '!mt-0.5' : '',
+      isMcpToolMessage ? (props.embedded ? '!mt-0' : '!mt-0.5') : '',
       props.embedded ? '!gap-1' : ''
     ]"
   >
@@ -311,16 +377,27 @@ const formatAttachmentBytes = (bytes: number) => {
       ]"
     >
       <!-- Think Block — Codex-style: dim/italic body on a quiet left rail -->
-      <div v-if="renderedThinkText && !props.hideThink" class="mb-1">
+      <div
+        v-if="renderedThinkText && !props.hideThink"
+        :class="props.embedded && props.thinkOnly ? 'mb-0' : 'mb-1'"
+      >
         <ChatCollapsible
+          :key="props.expandThinkByDefault ? 'active-think' : 'settled-think'"
           details-class="group/think"
-          summary-class="flex items-center gap-1 py-0.5 text-[11px] leading-4 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-pointer select-none transition-colors"
+          summary-class="flex w-full items-center gap-1 py-0.5 text-[11px] leading-4 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-pointer select-none transition-colors"
           body-class="mt-1 ml-1 pl-2.5 border-l border-zinc-200 dark:border-zinc-700/80 text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed italic whitespace-pre-wrap"
+          :default-open="props.expandThinkByDefault"
         >
-          <template #summary>
-            <span class="chat-collapsible-arrow text-[10px] leading-none">➣</span>
+          <template #summary="{ open }">
+            <span
+              class="chat-collapsible-arrow text-[10px] leading-none"
+              :style="{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }"
+            >➣</span>
             <span class="font-medium tracking-wide">深度思考</span>
-            <span v-if="segmentTimeLabel" class="segment-time-badge">{{ segmentTimeLabel }}</span>
+            <span class="segment-metrics ml-auto">
+              <span class="segment-token-badge" :title="segmentTokenTitle">{{ segmentTokenLabel }}</span>
+              <span v-if="segmentTimeLabel" class="segment-time-badge">{{ segmentTimeLabel }}</span>
+            </span>
           </template>
           {{ renderedThinkText }}
         </ChatCollapsible>
@@ -415,8 +492,11 @@ const formatAttachmentBytes = (bytes: number) => {
           summary-class="flex items-center gap-2 cursor-pointer select-none text-[12px] font-medium leading-5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
           body-class="mt-2 border-t border-slate-300/70 pt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600 dark:border-slate-600/70 dark:text-slate-400"
         >
-          <template #summary>
-            <span class="chat-collapsible-arrow text-[10px] leading-none">➣</span>
+          <template #summary="{ open }">
+            <span
+              class="chat-collapsible-arrow text-[10px] leading-none"
+              :style="{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }"
+            >➣</span>
             <span class="shrink-0">系统提示</span>
             <span class="text-slate-300 dark:text-slate-600">·</span>
             <span class="min-w-0 truncate font-normal text-slate-500 dark:text-slate-400" :title="systemNoticeTitle">{{ systemNoticeTitle }}</span>
@@ -441,7 +521,7 @@ const formatAttachmentBytes = (bytes: number) => {
           </button>
           <ChatCollapsible
             details-class="mcp-details group/mcp"
-            summary-class="flex items-center gap-2 whitespace-nowrap cursor-pointer select-none leading-5 py-0.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
+            summary-class="flex w-full items-center gap-2 whitespace-nowrap cursor-pointer select-none leading-5 py-0.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
             body-class="relative mt-1 ml-0.5 pl-2.5 border-l border-zinc-200 dark:border-zinc-700/80"
           >
             <template #summary>
@@ -455,7 +535,10 @@ const formatAttachmentBytes = (bytes: number) => {
                 :title="mcpToolSummary.deviceId ? `${mcpToolSummary.provider} · 设备号 ${mcpToolSummary.deviceId}` : mcpToolSummary.provider"
               >{{ mcpToolSummary.provider }}</span>
               <span class="min-w-0 truncate font-mono text-[11px] text-inherit">{{ mcpToolSummary.tool }}</span>
-              <span v-if="segmentTimeLabel" class="segment-time-badge ml-auto">{{ segmentTimeLabel }}</span>
+              <span class="segment-metrics ml-auto">
+                <span class="segment-token-badge" :title="segmentTokenTitle">{{ segmentTokenLabel }}</span>
+                <span v-if="segmentTimeLabel" class="segment-time-badge">{{ segmentTimeLabel }}</span>
+              </span>
               </template>
               <button
                 class="absolute right-0 top-0 w-6 h-6 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 flex items-center justify-center transition-colors"
@@ -555,6 +638,7 @@ const formatAttachmentBytes = (bytes: number) => {
               :actionResults="props.actionResults"
               :actionResultsBySignature="props.actionResultsBySignature"
               :plainTextMode="props.plainTextMode"
+              :mentionTokens="mentionTokens"
               @apply="(blockIdx) => emit('apply', props.idx, blockIdx)"
               @revert="(blockIdx) => emit('revert', props.idx, blockIdx)"
             />
@@ -586,16 +670,15 @@ const formatAttachmentBytes = (bytes: number) => {
 
       <div
         v-if="props.message.role === 'user' && !isSystemNoticeMessage && uploadedMessageAttachments.length > 0"
-        class="mt-2 grid max-w-full grid-cols-1 gap-2 sm:grid-cols-2"
+        class="mt-2 flex max-w-full flex-wrap justify-end gap-2"
       >
-        <a
+        <button
           v-for="attachment in uploadedMessageAttachments"
           :key="attachment.id || attachment.file_ref"
-          :href="attachment.url"
-          target="_blank"
-          rel="noopener"
-          class="group/attachment flex min-w-0 items-center gap-2 overflow-hidden rounded-xl border border-indigo-200/80 bg-indigo-50/60 p-2 text-left transition-colors hover:border-indigo-300 hover:bg-indigo-50 dark:border-indigo-700/60 dark:bg-indigo-950/25 dark:hover:border-indigo-600"
-          :title="`${attachment.file_name}\n${attachment.workspace_path}`"
+          type="button"
+          class="group/attachment relative flex shrink-0 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50/60 p-1.5 text-left transition-colors hover:border-indigo-300 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 dark:border-indigo-700/60 dark:bg-indigo-950/25 dark:hover:border-indigo-600"
+          :aria-label="`查看附件 ${attachment.file_name}`"
+          @click="openAttachmentPreview(attachment, $event)"
         >
           <img
             v-if="attachment.is_image && attachment.url"
@@ -610,19 +693,20 @@ const formatAttachmentBytes = (bytes: number) => {
               <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 2.25V6.75H20.25" />
             </svg>
           </span>
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-xs font-medium text-indigo-700 dark:text-indigo-200">{{ attachment.file_name }}</span>
-            <span class="mt-0.5 block truncate text-[10px] text-indigo-400 dark:text-indigo-400">{{ formatAttachmentBytes(attachment.bytes) }} · {{ attachment.workspace_path }}</span>
+          <span class="attachment-hover-info" aria-hidden="true">
+            <strong>{{ attachment.file_name }}</strong>
+            <span>{{ formatAttachmentBytes(attachment.bytes) }}</span>
+            <span>{{ attachment.workspace_path }}</span>
           </span>
-        </a>
+        </button>
       </div>
 
       <div
-        v-if="props.message.role === 'user' && !isSystemNoticeMessage && attachedFiles.length > 0"
+        v-if="props.message.role === 'user' && !isSystemNoticeMessage && visibleAttachedFiles.length > 0"
         class="mt-1.5 flex max-w-full flex-wrap justify-end gap-1"
       >
         <span
-          v-for="file in attachedFiles"
+          v-for="file in visibleAttachedFiles"
           :key="file"
           class="user-attachment-pill"
           :title="file"
@@ -632,6 +716,16 @@ const formatAttachmentBytes = (bytes: number) => {
       </div>
 
     </div>
+
+    <WorkspaceFilePreviewDialog
+      :open="!!attachmentPreview"
+      :path="attachmentPreview?.workspace_path || ''"
+      :display-name="attachmentPreview?.file_name || ''"
+      :size="attachmentPreview?.bytes || 0"
+      :source-url="attachmentPreview?.url || ''"
+      @close="closeAttachmentPreview"
+    />
+    <ChatMentionTooltip :state="mentionTooltip" @keep="keepMentionTooltip" @hide="hideMentionTooltip" />
 
     <div
       v-if="isFrontPromptMessage && frontPromptDetailsOpen"
@@ -675,7 +769,7 @@ const formatAttachmentBytes = (bytes: number) => {
         tabindex="-1"
         @keydown.esc.stop.prevent="closeImagePreview"
       >
-        <img :src="mcpImageUrl" alt="截图大图预览" class="image-preview-full" draggable="false" />
+        <ZoomableImage :src="mcpImageUrl" alt="截图大图预览" />
         <button
           type="button"
           class="image-preview-close"
@@ -707,6 +801,18 @@ const formatAttachmentBytes = (bytes: number) => {
   flex: none;
   font-weight: 700;
   color: rgb(63 63 70);
+}
+
+.segment-metrics {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.segment-token-badge,
+.segment-time-badge {
+  font-variant-numeric: tabular-nums;
 }
 
 
@@ -1032,8 +1138,8 @@ const formatAttachmentBytes = (bytes: number) => {
 .image-preview-dialog {
   position: relative;
   display: flex;
-  max-width: calc(100vw - 1.5rem);
-  max-height: calc(100dvh - 1.5rem);
+  width: min(72rem, calc(100vw - 1.5rem));
+  height: min(52rem, calc(100dvh - 1.5rem));
   align-items: center;
   justify-content: center;
   border-radius: 14px;
@@ -1041,16 +1147,6 @@ const formatAttachmentBytes = (bytes: number) => {
   box-shadow: 0 24px 80px rgb(0 0 0 / 0.45);
   outline: none;
   overflow: hidden;
-}
-
-.image-preview-full {
-  display: block;
-  max-width: calc(100vw - 1.5rem);
-  max-height: calc(100dvh - 1.5rem);
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  user-select: none;
 }
 
 .image-preview-close {
@@ -1080,21 +1176,22 @@ const formatAttachmentBytes = (bytes: number) => {
   outline-offset: 2px;
 }
 
+.segment-token-badge,
 .segment-time-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  padding: 0 0.45rem;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(255, 255, 255, 0.8);
   color: rgb(100 116 139);
   font-size: 10px;
   line-height: 1.3;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.01em;
   white-space: nowrap;
+}
+
+.segment-token-badge {
+  color: rgb(99 102 241);
 }
 
 .user-attachment-pill {
@@ -1131,10 +1228,68 @@ const formatAttachmentBytes = (bytes: number) => {
   background: rgba(79, 70, 229, 0.1);
 }
 
+.dark .segment-token-badge,
 .dark .segment-time-badge {
-  border-color: rgba(71, 85, 105, 0.65);
-  background: rgba(24, 24, 27, 0.85);
   color: rgb(148 163 184);
+}
+
+.attachment-hover-info {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.45rem);
+  z-index: 20;
+  display: flex;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 2rem));
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgb(212 212 216);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.97);
+  color: rgb(82 82 91);
+  box-shadow: 0 10px 28px rgba(24, 24, 27, 0.16);
+  font-size: 10px;
+  line-height: 1.35;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(0.2rem);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease;
+}
+
+.attachment-hover-info strong,
+.attachment-hover-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-hover-info strong {
+  color: rgb(63 63 70);
+  font-weight: 500;
+}
+
+.group\/attachment:hover .attachment-hover-info,
+.group\/attachment:focus-visible .attachment-hover-info {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.dark .attachment-hover-info {
+  border-color: rgb(63 63 70);
+  background: rgba(24, 24, 27, 0.97);
+  color: rgb(161 161 170);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.dark .attachment-hover-info strong {
+  color: rgb(228 228 231);
+}
+
+.dark .segment-token-badge {
+  color: rgb(165 180 252);
 }
 
 .front-prompt-detail-button {

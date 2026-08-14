@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, reactive, ref, watch } from 'vue'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
-import type { McpRoleMeta } from '@/types'
 import { deleteDeviceRecord, setBuiltinDeviceBinding, setDeviceMemberBinding, updateDeviceDisplay } from '@/api/devices'
 import DeviceMcpScopeEditor from '../modals/DeviceMcpScopeEditor.vue'
-import LibraryMcpUnifiedPanel from '@/components/dashboard/panels/LibraryMcpUnifiedPanel.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 
 // 远程画面弹窗懒加载，避免拖进设备面板首屏
@@ -33,8 +31,6 @@ interface Agent {
 interface Props {
   devices: ConnectedDevice[]
   agents: Agent[]
-  mcpRoleMeta: McpRoleMeta
-  roleMcpPermissions: Record<string, string[]>
   focusedDeviceId?: string
   focusSignal?: number
 }
@@ -59,8 +55,6 @@ watch(() => props.focusSignal, async () => {
 })
 
 const emit = defineEmits<{
-  (e: 'toggle-role-tool', payload: { role: string; tool: string; checked: boolean }): void
-  (e: 'save-role-mcp-permissions'): void
   (e: 'open-device-doc'): void
 }>()
 
@@ -95,7 +89,6 @@ const closeAssignMember = () => {
 const busy = reactive<Record<string, boolean>>({})
 const errors = reactive<Record<string, string>>({})
 const bindingOverrides = reactive<Record<string, number[]>>({})
-const governanceToolsOverride = reactive<Record<number, string[]>>({})
 const displayRemarkOverride = reactive<Record<string, string>>({})
 const displayIconOverride = reactive<Record<string, string>>({})
 const displayIconSettingOverride = reactive<Record<string, string>>({})
@@ -108,26 +101,6 @@ const DEVICE_ICON_CACHE_BUST = Date.now().toString(36)
 const deviceIconUrl = (url: string) => {
   if (!url.startsWith('/device_png/')) return url
   return `${url}${url.includes('?') ? '&' : '?'}v=${DEVICE_ICON_CACHE_BUST}`
-}
-
-const parseMcpTools = (raw?: string): string[] => {
-  try {
-    const parsed = JSON.parse(raw || '[]')
-    return Array.isArray(parsed)
-      ? parsed.map(item => String(item || '').trim()).filter(Boolean)
-      : []
-  } catch {
-    return []
-  }
-}
-
-const governanceToolsForMember = (cfgId: number): string[] => {
-  if (Array.isArray(governanceToolsOverride[cfgId])) return governanceToolsOverride[cfgId]
-  return parseMcpTools(memberByConfigId.value.get(cfgId)?.mcpTools)
-}
-
-const onGovernanceSaved = (cfgId: number, tools: string[]) => {
-  governanceToolsOverride[cfgId] = [...tools]
 }
 
 const linkedConfigId = (device: ConnectedDevice): number | null => {
@@ -570,18 +543,8 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
               <span v-if="memberByConfigId.get(mid)?.status === 'learning'" class="ml-1 text-emerald-600 dark:text-emerald-300">学习中</span>
             </span>
             <span class="flex shrink-0 items-center gap-1">
-              <LibraryMcpUnifiedPanel
-                v-if="isLibraryDevice(device) && device.libraryMcpCatalog"
-                :catalog="device.libraryMcpCatalog"
-                mode="device"
-                :builtin-device-id="device.id"
-                :bound-ai-config-id="mid"
-                :bound-ai-name="memberByConfigId.get(mid)?.name || ''"
-                :governance-mcp-tools="governanceToolsForMember(mid)"
-                @governance-saved="tools => onGovernanceSaved(mid, tools)"
-              />
               <DeviceMcpScopeEditor
-                v-else-if="!isOffline(device)"
+                v-if="!isOffline(device)"
                 :device-id="device.id"
                 :ai-config-id="mid"
                 :refresh-key="`${mid}-${device.lifecycle ?? ''}`"
@@ -609,7 +572,7 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
           {{ busy[device.id] ? '...' : '分配 AI 成员' }}
         </button>
       </div>
-      <div v-else-if="device.capabilities.length && !(isLibraryDevice(device) && device.libraryMcpCatalog)" class="mt-2 flex flex-wrap gap-1">
+      <div v-else-if="device.capabilities.length" class="mt-2 flex flex-wrap gap-1">
         <span
           v-for="cap in device.capabilities"
           :key="cap"

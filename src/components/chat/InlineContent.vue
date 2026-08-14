@@ -12,10 +12,12 @@ const props = withDefaults(defineProps<{
   enableMcpTextBubble?: boolean;
   plainTextMode?: boolean;
   mcpIcon?: string;
+  mentionTokens?: Array<{ token: string; type: 'mcp' | 'file'; detail?: string }>;
 }>(), {
   enableMcpTextBubble: true,
   plainTextMode: false,
   mcpIcon: '',
+  mentionTokens: () => [],
 });
 
 interface TextChunk {
@@ -148,7 +150,7 @@ const isApplied = (block: any) => {
     <template v-for="(item, idx) in content" :key="idx">
       <template v-if="item.type === 'text'">
         <template v-for="(chunk, chunkIdx) in splitTextChunks(item.content || '')" :key="`txt-${idx}-${chunkIdx}`">
-          <MarkdownText v-if="chunk.kind === 'plain'" :text="chunk.content" :plainTextMode="props.plainTextMode" />
+          <MarkdownText v-if="chunk.kind === 'plain'" :text="chunk.content" :plainTextMode="props.plainTextMode" :mentionTokens="props.mentionTokens" />
           <div v-else class="mcp-text-bubble">
             <div class="mcp-text-header">MCP 操作</div>
             <div class="mcp-text-content font-mono text-[11px] leading-4">

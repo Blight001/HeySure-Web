@@ -1,7 +1,7 @@
 import { del, get, patch, post } from './http'
 
 export type WorkflowCardStatus = 'active' | 'deprecated' | 'draft' | 'validated' | 'published'
-export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'confirm' | 'ai' | 'end'
+export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'ai' | 'end'
 
 export interface WorkflowDefinition {
   schemaVersion: 1

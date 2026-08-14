@@ -35,8 +35,6 @@ interface Props {
   modelPresets: ModelPreset[]
   onClose: () => void
   onToggleSettingsSection: (section: SettingsSection) => void
-  // onToolCheckboxChange kept in signature for compatibility (Task modal / callers still use the composable)
-  onToolCheckboxChange?: (tool: string, event: Event) => void
   onToggleDeleteConfirm: () => void
   onSave: () => void
   onDelete: () => void

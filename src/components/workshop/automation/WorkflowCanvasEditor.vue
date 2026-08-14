@@ -71,15 +71,14 @@ type TouchGesture =
 let touchGesture: TouchGesture | null = null
 
 const typeLabels: Record<WorkflowStepType, string> = {
-  mcp: '设备 MCP', condition: '判断分支', delay: '等待', confirm: '用户确认', ai: 'AI 介入', end: '结束',
+  mcp: '设备 MCP', condition: '判断分支', delay: '等待', ai: 'AI 审核', end: '结束',
 }
 
 const palette: Array<{ type: WorkflowStepType; label: string }> = [
   { type: 'mcp', label: '设备 MCP' },
   { type: 'condition', label: '判断分支' },
   { type: 'delay', label: '等待' },
-  { type: 'confirm', label: '人工确认' },
-  { type: 'ai', label: 'AI 介入' },
+  { type: 'ai', label: 'AI 审核' },
   { type: 'end', label: '结束' },
 ]
 
@@ -102,7 +101,7 @@ const outputPorts = (step: CanvasStep): OutputPort[] => {
     { branch: 'next', label: '完成', tone: 'normal', placement: 'right' },
     { branch: 'error', label: '失败', tone: 'danger', placement: 'bottom' },
   ]
-  if (step.type === 'confirm' || step.type === 'ai') return [
+  if (step.type === 'ai') return [
     { branch: 'next', label: '批准', tone: 'success', placement: 'right' },
     { branch: 'denied', label: '拒绝', tone: 'danger', placement: 'right' },
   ]
@@ -184,8 +183,7 @@ const nodeMeta = (step: CanvasStep) => {
   if (step.type === 'mcp') return step.tool || '请选择设备工具'
   if (step.type === 'condition') return 'true / false 双分支'
   if (step.type === 'delay') return `${Number(step.delaySeconds || 0)} 秒`
-  if (step.type === 'confirm') return step.message || '等待用户批准'
-  if (step.type === 'ai') return step.message || '等待 AI 审核与回调'
+  if (step.type === 'ai') return step.message || '暂停并等待 AI 完成节点任务'
   return '生成输出并结束'
 }
 

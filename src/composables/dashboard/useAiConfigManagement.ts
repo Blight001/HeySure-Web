@@ -1,5 +1,5 @@
-import { computed, ref, watch, type Ref } from 'vue'
-import type { Agent, McpRoleMeta, McpToolDefinition, ModelPreset } from '@/types'
+import { ref, watch, type Ref } from 'vue'
+import type { Agent, McpToolDefinition, ModelPreset } from '@/types'
 import { getAuthToken } from '@/api/http'
 import { listMcpTools } from '@/api/mcp'
 import {
@@ -17,16 +17,11 @@ type SettingsSection = 'mcp' | 'bot' | 'appearance'
 interface UseAiConfigManagementOptions {
   defaultMcpTools: string[]
   mcpToolMetaByName: Ref<Record<string, McpToolDefinition>>
-  mcpRoleMeta: Ref<McpRoleMeta>
   modelPresets: Ref<ModelPreset[]>
   normalizeSystemAutoControl: (raw: unknown) => any
   alert?: (options: { title?: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' }) => Promise<void>
   onReloadAgents: () => Promise<void>
 }
-
-const ROLE_MEMBER = 'digital_member_member'
-const ROLE_MANAGER = 'digital_member_manager'
-const ROLE_ASSISTANT_ADMIN = 'assistant_admin'
 
 // Server-side schema mirrors (see ``api/bots/<name>/_config.py``).
 // Anything outside these keys is dropped by the adapters; keep them in
@@ -105,7 +100,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
   const {
     defaultMcpTools,
     mcpToolMetaByName,
-    mcpRoleMeta,
     modelPresets,
     normalizeSystemAutoControl,
     alert,
@@ -132,33 +126,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     return value === 'manager' ? 'manager' : 'member'
   }
 
-  const tierFromForm = (): string => {
-    const group = aiConfigForm.value?.ai_role_group
-    if (group === 'assistant_admin') return ROLE_ASSISTANT_ADMIN
-    return aiConfigForm.value?.digital_member_role === 'manager' ? ROLE_MANAGER : ROLE_MEMBER
-  }
-
-  // Tools the current form's role tier is permitted to configure: the admin's
-  // per-role allow-list (or the role default) intersected with the role ceiling.
-  const configAvailableMcpTools = computed<string[]>(() => {
-    const meta = mcpRoleMeta.value
-    const tier = tierFromForm()
-    const optionsForRole = meta.options?.[tier] || meta.defaults?.[tier]
-    if (!optionsForRole || optionsForRole.length === 0) {
-      return availableMcpTools.value
-    }
-    const optionSet = new Set(optionsForRole)
-    const configured = meta.permissions?.[tier]
-    // With no explicit admin role policy, expose the full configurable set
-    // (the role ceiling = every known tool) so each AI can be granted any MCP
-    // tool directly. ``meta.defaults`` only seeds the initial checked state on
-    // a new config, it no longer caps what is selectable here.
-    const allowed = Array.isArray(configured) && configured.length > 0
-      ? configured.filter(tool => optionSet.has(tool))
-      : optionsForRole
-    return [...allowed].sort((a, b) => a.localeCompare(b))
-  })
-
   // 角色扁平化：新建 AI 一律是数字生命成员；辅助管理员由系统默认创建。
   const buildAiForm = (role: 'assistant_admin' | 'worker' = 'worker') => ({
     id: undefined as number | undefined,
@@ -173,8 +140,8 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     model: modelPresets.value[0]?.model || '',
     execution_mode: 'internal_model' as 'internal_model' | 'external_mcp',
     prompt: '',
-    // 新建 AI 默认勾选全部可用 MCP 工具（工具列表已加载时用全量，否则回退到基础默认集）。
-    mcp_tools: availableMcpTools.value.length ? [...availableMcpTools.value] : [...defaultMcpTools],
+    // 工具授权只在设备栏目按成员配置；该兼容字段固定为空。
+    mcp_tools: [],
     bot_channel: 'feishu' as 'feishu' | 'qq' | 'wechat',
     bot_configs: {
       feishu: {
@@ -231,9 +198,8 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
         }))
         .filter((item: McpToolDefinition) => !!item.name)
       : []
-    // Server system MCP tools (knowledge.search etc.) are now direct-callable by AI
-    // (no longer gated like device MCPs or requiring toolbox selection to "display").
-    // This load populates role meta + full list for other UIs (Task override, catalog).
+    // Full catalog is still used by task overrides and catalog views. Runtime
+    // authorization comes from bound-device member scopes.
     // Toolbox / library bindings still affect governance + UI grouping.
     const map: Record<string, McpToolDefinition> = {}
     for (const row of rows) {
@@ -243,27 +209,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     const tools = Array.from(new Set(rows.map(item => item.name)))
     availableMcpTools.value = tools.length > 0 ? tools : [...defaultMcpTools]
 
-    const asStringArrayMap = (raw: unknown): Record<string, string[]> => {
-      const out: Record<string, string[]> = {}
-      if (raw && typeof raw === 'object') {
-        for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-          if (Array.isArray(value)) {
-            out[key] = value.map(item => String(item || '').trim()).filter(Boolean)
-          }
-        }
-      }
-      return out
-    }
-    const roleOptions = asStringArrayMap(data.roleOptions)
-    const roleDefaults = asStringArrayMap(data.roleDefaults)
-    const roleOrder = Array.isArray(data.roleOrder) ? data.roleOrder.map((item: unknown) => String(item || '').trim()).filter(Boolean) : []
-    mcpRoleMeta.value = {
-      order: roleOrder,
-      labels: (data.roleLabels && typeof data.roleLabels === 'object') ? data.roleLabels as Record<string, string> : {},
-      defaults: roleDefaults,
-      options: roleOptions,
-      permissions: asStringArrayMap(data.rolePermissions),
-    }
   }
 
   const toggleAiConfigSettingsSection = (section: SettingsSection) => {
@@ -294,13 +239,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     }
     const cfg = rows.find((r: any) => r.id === id)
     if (!cfg || !aiConfigForm.value) return
-    let parsedTools: string[] = [...defaultMcpTools]
-    try {
-      const parsed = JSON.parse(cfg.mcp_tools || '[]')
-      if (Array.isArray(parsed)) parsedTools = parsed
-    } catch {
-      // ignore
-    }
     aiConfigForm.value = {
       ...aiConfigForm.value,
       description: cfg.description || '',
@@ -313,7 +251,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       model: cfg.model ?? aiConfigForm.value.model,
       execution_mode: cfg.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: cfg.prompt || '',
-      mcp_tools: parsedTools,
+      mcp_tools: [],
       bot_channel: cfg.bot_channel === 'wechat' ? 'wechat' : (cfg.bot_channel === 'qq' ? 'qq' : 'feishu'),
       // Hydrate ``bot_configs`` from the server (default fills in any
       // missing keys so the form bindings always have a value).
@@ -328,13 +266,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigMode.value = 'edit'
     aiConfigDeleteConfirm.value = false
     aiConfigSettingsSection.value = ''
-    let parsedTools: string[] = [...defaultMcpTools]
-    try {
-      const parsed = JSON.parse(agent.mcpTools || '[]')
-      if (Array.isArray(parsed)) parsedTools = parsed
-    } catch {
-      // keep defaults
-    }
     aiConfigForm.value = {
       id: agent.aiConfigId,
       name: agent.name,
@@ -348,7 +279,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       model: agent.model || '',
       execution_mode: agent.executionMode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: '',
-      mcp_tools: parsedTools,
+      mcp_tools: [],
       bot_channel: agent.botChannel === 'wechat' ? 'wechat' : (agent.botChannel === 'qq' ? 'qq' : 'feishu'),
       bot_configs: hydrateBotConfigs(null),
       system_auto_control: normalizeSystemAutoControl({}),
@@ -390,7 +321,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       model: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.model : '',
       model_preset_id: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.id : '',
       prompt: aiConfigForm.value.prompt,
-      mcp_tools: JSON.stringify(aiConfigForm.value.mcp_tools || []),
+      mcp_tools: '[]',
       bot_channel: selectedBotChannel,
       bot_configs: buildBotConfigsPayload(aiConfigForm.value.bot_configs, selectedBotChannel),
       system_auto_control: JSON.stringify(
@@ -440,52 +371,6 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     await onReloadAgents()
   }
 
-  const toggleToolPermission = (tool: string, checked: boolean) => {
-    if (!aiConfigForm.value) return
-    const next = new Set(aiConfigForm.value.mcp_tools as string[])
-    if (checked) next.add(tool)
-    else next.delete(tool)
-    aiConfigForm.value.mcp_tools = Array.from(next)
-  }
-
-  const onToolCheckboxChange = (tool: string, event: Event) => {
-    const target = event.target as HTMLInputElement | null
-    toggleToolPermission(tool, !!target?.checked)
-  }
-
-  // Whenever the role tier changes, narrow the selected tools to what the new
-  // tier is permitted to configure.
-  const clampFormToolsToRole = () => {
-    if (!aiConfigForm.value) return
-    const allowedSet = new Set(configAvailableMcpTools.value)
-    const current: string[] = Array.isArray(aiConfigForm.value.mcp_tools) ? aiConfigForm.value.mcp_tools : []
-    aiConfigForm.value.mcp_tools = current.filter(tool => allowedSet.has(tool))
-  }
-
-  watch(
-    () => aiConfigForm.value?.ai_role_group,
-    (role, prevRole) => {
-      if (!aiConfigForm.value || !role || role === prevRole) return
-      if (role === 'assistant_admin') {
-        aiConfigForm.value.token_limit = 0
-        aiConfigForm.value.mcp_tools = [...configAvailableMcpTools.value]
-      } else {
-        if (!aiConfigForm.value.digital_member_role) {
-          aiConfigForm.value.digital_member_role = 'member'
-        }
-        clampFormToolsToRole()
-      }
-    }
-  )
-
-  watch(
-    () => aiConfigForm.value?.digital_member_role,
-    (role, prevRole) => {
-      if (!aiConfigForm.value || role === prevRole) return
-      if (aiConfigForm.value.ai_role_group === 'digital_member') clampFormToolsToRole()
-    }
-  )
-
   watch(
     modelPresets,
     presets => {
@@ -503,13 +388,11 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigMode,
     aiConfigForm,
     availableMcpTools,
-    configAvailableMcpTools,
     loadMcpTools,
     toggleAiConfigSettingsSection,
     openCreateAiConfig,
     openAgentSettings,
     saveAiConfig,
     deleteAiConfig,
-    onToolCheckboxChange,
   }
 }

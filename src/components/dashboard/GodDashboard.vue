@@ -19,7 +19,7 @@ import {
   UNASSIGNED_PROJECT_ID,
 } from '@/constants/dashboard'
 import { DEFAULT_MCP_TOOLS } from '@/constants/mcp'
-import type { Agent, McpRoleMeta, McpToolDefinition, User } from '@/types'
+import type { Agent, McpToolDefinition, User } from '@/types'
 
 import logoUrl from '@/assets/logo/HeySure.png'
 import AppIcon from '@/components/common/AppIcon.vue'
@@ -106,7 +106,6 @@ let dashboardRefreshTimer: number | null = null
 let dashboardRefreshLoopActive = false
 
 const mcpToolMetaByName = ref<Record<string, McpToolDefinition>>({})
-const mcpRoleMeta = ref<McpRoleMeta>({ order: [], labels: {}, defaults: {}, options: {}, permissions: {} })
 
 const {
   themeMode,
@@ -137,14 +136,10 @@ const {
   normalizeSystemAutoControl,
   saveSystemSettings,
   saveBrainViewMode,
-  roleMcpPermissions,
-  toggleRoleTool,
-  saveRoleMcpPermissions,
 } = useDashboardSystemSettings({
   getCurrentUser: () => props.currentUser,
   alert,
   onRefreshUser: user => emit('refreshUser', user),
-  mcpRoleMeta,
 })
 
 const {
@@ -212,18 +207,15 @@ const {
   aiConfigMode,
   aiConfigForm,
   availableMcpTools,
-  configAvailableMcpTools,
   loadMcpTools,
   toggleAiConfigSettingsSection,
   openCreateAiConfig,
   openAgentSettings,
   saveAiConfig,
   deleteAiConfig,
-  onToolCheckboxChange,
 } = useAiConfigManagement({
   defaultMcpTools,
   mcpToolMetaByName,
-  mcpRoleMeta,
   modelPresets,
   normalizeSystemAutoControl,
   alert,
@@ -1050,11 +1042,7 @@ onUnmounted(() => {
             :knowledge-focus-signal="knowledgeFocusSignal"
             :focused-device-id="focusedDeviceId"
             :device-focus-signal="deviceFocusSignal"
-            :mcp-role-meta="mcpRoleMeta"
-            :role-mcp-permissions="roleMcpPermissions"
             @update:brain-view-mode="saveBrainViewMode"
-            @toggle-role-tool="payload => toggleRoleTool(payload.role, payload.tool, payload.checked)"
-            @save-role-mcp-permissions="saveRoleMcpPermissions"
             @show-tasks="openAgentTaskList"
             @show-task-detail="openAgentTaskDetailFromCard"
             @chat="openAgentChat"
@@ -1349,12 +1337,11 @@ onUnmounted(() => {
       :form="aiConfigForm"
       :delete-confirm="aiConfigDeleteConfirm"
       :settings-section="aiConfigSettingsSection"
-      :available-mcp-tools="configAvailableMcpTools"
+      :available-mcp-tools="availableMcpTools"
       :connected-devices="connectedDevices"
       :model-presets="modelPresets"
       :on-close="() => aiConfigModalOpen = false"
       :on-toggle-settings-section="toggleAiConfigSettingsSection"
-      :on-tool-checkbox-change="onToolCheckboxChange"
       :on-toggle-delete-confirm="() => aiConfigDeleteConfirm = !aiConfigDeleteConfirm"
       :on-save="saveAiConfigAndRefresh"
       :on-delete="deleteAiConfigAndRefresh"
