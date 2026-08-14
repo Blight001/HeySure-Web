@@ -99,6 +99,8 @@ const governanceToolsOverride = reactive<Record<number, string[]>>({})
 const displayRemarkOverride = reactive<Record<string, string>>({})
 const displayIconOverride = reactive<Record<string, string>>({})
 const displayIconSettingOverride = reactive<Record<string, string>>({})
+const aiDescriptionSettingOverride = reactive<Record<string, string>>({})
+const effectiveAiDescriptionOverride = reactive<Record<string, string>>({})
 
 const DEVICE_ICON_PRESETS = Array.from({ length: 8 }, (_, index) => `/device_png/${index + 1}.webp`)
 const DEVICE_ICON_CACHE_BUST = Date.now().toString(36)
@@ -220,13 +222,16 @@ const confirmDeleteRecord = async () => {
 }
 
 const deviceSettingsTarget = ref<ConnectedDevice | null>(null)
-const deviceSettingsDraft = reactive({ remark: '', icon: '' })
+const deviceSettingsDraft = reactive({ remark: '', icon: '', aiDescriptionOverride: '' })
 const openDeviceSettings = (device: ConnectedDevice) => {
   deviceSettingsTarget.value = device
   deviceSettingsDraft.remark = displayRemark(device)
   deviceSettingsDraft.icon = device.id in displayIconSettingOverride
     ? displayIconSettingOverride[device.id]
     : device.iconOverride ?? device.icon ?? ''
+  deviceSettingsDraft.aiDescriptionOverride = device.id in aiDescriptionSettingOverride
+    ? aiDescriptionSettingOverride[device.id]
+    : device.aiDescriptionOverride ?? ''
 }
 const closeDeviceSettings = () => {
   deviceSettingsTarget.value = null
@@ -243,10 +248,13 @@ const saveDeviceSettings = async () => {
     const data = await updateDeviceDisplay(device.id, {
       remark: deviceSettingsDraft.remark,
       icon: deviceSettingsDraft.icon,
+      aiDescriptionOverride: deviceSettingsDraft.aiDescriptionOverride,
     })
     displayRemarkOverride[device.id] = data.remark || ''
     displayIconOverride[device.id] = data.icon || ''
     displayIconSettingOverride[device.id] = data.iconOverride || ''
+    aiDescriptionSettingOverride[device.id] = data.aiDescriptionOverride || ''
+    effectiveAiDescriptionOverride[device.id] = data.effectiveAiDescription || ''
     closeDeviceSettings()
   } catch (err: any) {
     errors[device.id] = err?.message || '显示设置保存失败'
@@ -327,6 +335,11 @@ const isEndpointDevice = (device: ConnectedDevice) => {
 const displayRemark = (device: ConnectedDevice) => {
   if (device.id in displayRemarkOverride) return displayRemarkOverride[device.id]
   return String(device.remark || '').trim()
+}
+
+const effectiveAiDescription = (device: ConnectedDevice) => {
+  if (device.id in effectiveAiDescriptionOverride) return effectiveAiDescriptionOverride[device.id]
+  return String(device.effectiveAiDescription || device.reportedAiDescription || '').trim()
 }
 
 const deviceDisplayName = (device: ConnectedDevice) => {
@@ -631,7 +644,7 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
         <div class="acrylic-modal rounded-xl border border-zinc-200 dark:border-zinc-700 w-full max-w-[430px] p-4" @click.stop>
           <div class="flex items-center justify-between mb-3">
             <div class="min-w-0">
-              <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">设备显示设置</div>
+              <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">设备设置</div>
               <div class="mt-0.5 text-[10px] text-zinc-400 truncate">{{ deviceSettingsTarget.name || deviceSettingsTarget.id }}</div>
             </div>
             <button class="text-zinc-400 hover:text-zinc-600" @click="closeDeviceSettings">✕</button>
@@ -644,6 +657,21 @@ const deviceAvatarUrl = (device: ConnectedDevice) => {
             class="w-full rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 text-sm outline-none transition-colors focus:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
             placeholder="例如：客厅电脑、测试手机、仓库传感器"
           />
+
+          <label class="mt-3 block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">AI 用途描述</label>
+          <textarea
+            v-model.trim="deviceSettingsDraft.aiDescriptionOverride"
+            maxlength="240"
+            rows="3"
+            class="w-full resize-none rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 text-xs outline-none transition-colors focus:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
+            :placeholder="effectiveAiDescription(deviceSettingsTarget) || '例如：用于操作已登录的内容平台并发布图文'"
+          />
+          <div class="mt-1 text-[10px] leading-4 text-zinc-400">
+            这段说明会作为设备能力元数据提供给 AI，不会替代上面的界面备注。留空时使用设备上报或类型默认说明。
+          </div>
+          <div v-if="deviceSettingsTarget.reportedAiDescription" class="mt-1 text-[10px] leading-4 text-zinc-400">
+            设备上报：{{ deviceSettingsTarget.reportedAiDescription }}
+          </div>
 
           <div class="mt-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">图标</div>
           <div class="mt-2 grid grid-cols-5 gap-2">

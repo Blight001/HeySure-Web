@@ -42,6 +42,15 @@ export interface ConnectedDevice {
   icon?: string
   /** 用户备注，显示在设备名后面。 */
   remark?: string
+  /** 设备端上报的用途说明，仅作为能力元数据。 */
+  reportedAiDescription?: string
+  /** 控制台设置的用途覆盖说明，与 remark 独立。 */
+  aiDescriptionOverride?: string
+  /** 服务端计算后实际提供给 AI 的用途说明。 */
+  effectiveAiDescription?: string
+  catalogGeneration?: number
+  catalogHash?: string
+  catalogProtocolVersion?: number
   /** 用户覆盖图标；存在时 icon 已按该值生效。 */
   iconOverride?: string
   capabilities: string[]
@@ -432,6 +441,14 @@ export const useDashboardData = (options: UseDashboardDataOptions) => {
     deviceType: raw?.deviceType ? String(raw.deviceType).toLowerCase() : undefined,
     icon: raw?.icon ? String(raw.icon) : undefined,
     remark: raw?.remark ? String(raw.remark) : undefined,
+    reportedAiDescription: raw?.reportedAiDescription ? String(raw.reportedAiDescription) : undefined,
+    aiDescriptionOverride: raw?.aiDescriptionOverride ? String(raw.aiDescriptionOverride) : undefined,
+    effectiveAiDescription: raw?.effectiveAiDescription ? String(raw.effectiveAiDescription) : undefined,
+    catalogGeneration: Number.isFinite(Number(raw?.catalogGeneration)) ? Number(raw.catalogGeneration) : undefined,
+    catalogHash: raw?.catalogHash ? String(raw.catalogHash) : undefined,
+    catalogProtocolVersion: Number.isFinite(Number(raw?.catalogProtocolVersion))
+      ? Number(raw.catalogProtocolVersion)
+      : undefined,
     iconOverride: raw?.iconOverride ? String(raw.iconOverride) : undefined,
     capabilities: Array.isArray(raw?.capabilities) ? raw.capabilities.map((c: any) => String(c)) : [],
     libraryGovernanceTools: Array.isArray(raw?.libraryGovernanceTools)

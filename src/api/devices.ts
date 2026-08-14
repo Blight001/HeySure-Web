@@ -17,6 +17,15 @@ export interface ConnectedDeviceRow {
   icon?: string
   /** 用户在设备面板保存的显示备注，展示在设备名后面 */
   remark?: string
+  /** 设备自行上报的用途说明；只作为 AI 能力元数据。 */
+  reportedAiDescription?: string
+  /** 用户在控制台设置的 AI 用途覆盖说明，与 remark 相互独立。 */
+  aiDescriptionOverride?: string
+  /** 服务端按“覆盖说明 > 上报说明 > 类型默认值”计算的最终用途。 */
+  effectiveAiDescription?: string
+  catalogGeneration?: number
+  catalogHash?: string
+  catalogProtocolVersion?: number
   /** 用户覆盖图标；存在时 icon 会优先返回这个值 */
   iconOverride?: string
   capabilities?: any[]
@@ -45,10 +54,29 @@ export const assignDeviceAi = (deviceId: string, aiConfigId: number | null) =>
     { fallbackError: '分配 AI 失败' },
   )
 
-export const updateDeviceDisplay = (deviceId: string, payload: { remark?: string; icon?: string }) =>
-  put<{ ok: boolean; deviceId: string; remark: string; icon: string; iconOverride: string }>(
+export const updateDeviceDisplay = (
+  deviceId: string,
+  payload: { remark?: string; icon?: string; aiDescriptionOverride?: string },
+) =>
+  put<{
+    ok: boolean
+    deviceId: string
+    remark: string
+    icon: string
+    iconOverride: string
+    reportedAiDescription: string
+    aiDescriptionOverride: string
+    effectiveAiDescription: string
+    catalogGeneration: number
+    catalogHash: string
+    catalogProtocolVersion: number
+  }>(
     `/api/devices/${encodeURIComponent(deviceId)}/display`,
-    { remark: payload.remark || '', icon: payload.icon || '' },
+    {
+      remark: payload.remark || '',
+      icon: payload.icon || '',
+      aiDescriptionOverride: payload.aiDescriptionOverride || '',
+    },
     { fallbackError: '设备显示设置保存失败' },
   )
 
