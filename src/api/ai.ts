@@ -58,6 +58,7 @@ export interface AiConfigUpsertPayload {
   token_limit: number
   model?: string
   model_preset_id?: string
+  reasoning_effort?: '' | 'low' | 'medium' | 'high'
   execution_mode?: 'internal_model' | 'external_mcp'
   prompt?: string
   mcp_tools: string

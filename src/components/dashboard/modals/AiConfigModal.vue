@@ -617,6 +617,21 @@ const builtinDeviceOccupiedByOther = (agent: BuiltinDeviceItem) =>
             <div v-else class="mt-1 text-[11px] text-amber-600 dark:text-amber-300">
               请先在系统设置中保存服务器模型。
             </div>
+            <label class="mt-3 block text-xs text-zinc-500 dark:text-zinc-400">
+              <span class="mb-1 block">推理强度</span>
+              <select
+                v-model="form.reasoning_effort"
+                class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100"
+              >
+                <option value="">跟随模型默认</option>
+                <option value="low">低</option>
+                <option value="medium">中</option>
+                <option value="high">高</option>
+              </select>
+              <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">
+                默认不会向模型或 CLI 强制指定档位。
+              </span>
+            </label>
           </div>
           <div>
             <label class="block text-xs text-zinc-500 mb-1">Token 上限</label>

@@ -138,6 +138,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     token_limit: role === 'assistant_admin' ? 0 : 10000,
     model_preset_id: modelPresets.value[0]?.id || '',
     model: modelPresets.value[0]?.model || '',
+    reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
     execution_mode: 'internal_model' as 'internal_model' | 'external_mcp',
     prompt: '',
     // 工具授权只在设备栏目按成员配置；该兼容字段固定为空。
@@ -249,6 +250,9 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       token_limit: cfg.token_limit ?? aiConfigForm.value.token_limit,
       model_preset_id: presetIdForModel(cfg.model_preset_id, cfg.model),
       model: cfg.model ?? aiConfigForm.value.model,
+      reasoning_effort: ['low', 'medium', 'high'].includes(String(cfg.reasoning_effort || ''))
+        ? cfg.reasoning_effort
+        : '',
       execution_mode: cfg.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: cfg.prompt || '',
       mcp_tools: [],
@@ -277,6 +281,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       token_limit: agent.aiRole === 'assistant_admin' ? 0 : agent.tokenLimit,
       model_preset_id: presetIdForModel('', agent.model),
       model: agent.model || '',
+      reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
       execution_mode: agent.executionMode === 'external_mcp' ? 'external_mcp' : 'internal_model',
       prompt: '',
       mcp_tools: [],
@@ -320,6 +325,9 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       execution_mode: executionMode,
       model: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.model : '',
       model_preset_id: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.id : '',
+      reasoning_effort: executionMode === 'internal_model'
+        ? aiConfigForm.value.reasoning_effort
+        : '',
       prompt: aiConfigForm.value.prompt,
       mcp_tools: '[]',
       bot_channel: selectedBotChannel,
