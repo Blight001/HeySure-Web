@@ -23,6 +23,7 @@ import GodDashboardMainStage from './GodDashboardMainStage.vue'
 import GodDashboardChatWorkspace from './GodDashboardChatWorkspace.vue'
 
 const GodDashboardModals = defineAsyncComponent(() => import('./GodDashboardModals.vue'))
+const MaintenanceCenterModal = defineAsyncComponent(() => import('@/components/maintenance/MaintenanceCenterModal.vue'))
 
 const { alert, confirm } = useMessage()
 
@@ -50,6 +51,7 @@ const chatActiveAiConfigId = ref<number | null>(null)
 const adminModalOpen = ref(false)
 const deviceDocOpen = ref(false)
 const deviceToolsModalOpen = ref(false)
+const maintenanceCenterOpen = ref(false)
 const deviceToolsInitialType = ref<'desktop' | 'browser' | 'android' | undefined>(undefined)
 const mcpToolMetaByName = ref<Record<string, McpToolDefinition>>({})
 const defaultMcpTools = [...DEFAULT_MCP_TOOLS]
@@ -274,6 +276,7 @@ onUnmounted(() => {
     :user-menu-open="ui.userMenuOpen"
     @background-click="ui.closeSettings(); ui.closeUserMenu()"
     @open-admin="adminModalOpen = true"
+    @open-maintenance="maintenanceCenterOpen = true"
     @open-settings="ui.settingsOpen = true"
     @toggle-user-menu="ui.userMenuOpen = !ui.userMenuOpen"
     @update-profile="emit('updateProfile'); ui.userMenuOpen = false"
@@ -351,6 +354,12 @@ onUnmounted(() => {
       @save-ai="saveAiConfigAndRefresh"
       @delete-ai="deleteAiConfigAndRefresh"
       @show-task-detail="onShowTaskDetail"
+    />
+
+    <MaintenanceCenterModal
+      v-if="maintenanceCenterOpen"
+      :show="maintenanceCenterOpen"
+      @close="maintenanceCenterOpen = false"
     />
   </GodDashboardChrome>
 </template>

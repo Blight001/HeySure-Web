@@ -54,6 +54,7 @@ src/
 | 设备工具调用 | `api/deviceTools.ts` | `gateway/routers/device_tools.py` |
 | 远控 ICE / RTC | `api/rtc.ts` | `gateway/routers/rtc.py` |
 | 世界观 | `api/world.ts` | `gateway/routers/world.py` |
+| Codex 维护中心 | `api/maintenance.ts` | `gateway/routers/maintenance.py` |
 
 ## MCP 工具相关文件
 
@@ -73,6 +74,7 @@ src/
 | `task_update` | Gateway 调度器 | 任务状态变更 |
 | `device_status` | Connector Runtime | 端侧设备上下线 |
 | `agent_presence` | Gateway | AI 成员在线状态变化 |
+| `maintenance:update` | Gateway / Connector Runtime | Codex 维护工单、事件或审批状态变化 |
 
 监听位置：`src/composables/useMessage.ts` / `useChatRunStream.ts`（聊天）、`src/composables/dashboard/`（仪表盘状态）。
 远控：`useRemoteControl.ts`（画面 `rc:*`）、`useRemoteTerminal.ts`（命令行 `rt:*`）。
@@ -87,6 +89,7 @@ src/
 | 共享类型 | `src/types/` |
 | MCP 工具展示/格式化 | `src/utils/mcpTools.ts` + `mcpFormat.ts` + `constants/mcp.ts` |
 | 任务系统前端解析 | `src/utils/taskSystem.ts` |
+| Codex 维护中心 | `src/components/maintenance/` + `src/composables/maintenance/` + `src/api/maintenance.ts` |
 | 远程画面 / 终端 | `composables/useRemoteControl.ts` / `useRemoteTerminal.ts` + dashboard 下对应 Modal |
 | 统一请求配置（超时/token） | `src/api/http.ts` |
 

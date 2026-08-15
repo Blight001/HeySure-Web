@@ -19,6 +19,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'background-click'): void
   (e: 'open-admin'): void
+  (e: 'open-maintenance'): void
   (e: 'open-settings'): void
   (e: 'toggle-user-menu'): void
   (e: 'update-profile'): void
@@ -58,6 +59,13 @@ const emit = defineEmits<{
             <span class="text-xs text-zinc-400 uppercase font-semibold">文明代数</span>
             <span class="text-lg font-bold text-emerald-600 leading-none">Gen {{ globalGeneration }}</span>
           </div>
+          <button
+            class="ml-1 sm:ml-2 flex h-8 items-center gap-1.5 rounded-full border border-indigo-200/70 bg-white/60 px-2.5 text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 dark:border-indigo-700/60 dark:bg-zinc-800/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40 md:h-9 md:px-3"
+            title="项目维护中心"
+            @click.stop="emit('open-maintenance')"
+          >
+            <span class="font-mono text-sm">⌘</span><span class="hidden text-xs font-semibold lg:inline">维护中心</span>
+          </button>
           <button
             v-if="isAdminUser"
             class="ml-1 sm:ml-2 w-8 h-8 md:w-9 md:h-9 rounded-full border border-amber-200/70 bg-white/60 backdrop-blur-sm text-amber-600 active:bg-amber-100 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50/70 transition-colors dark:bg-zinc-800/60 dark:border-amber-700/60 dark:text-amber-300 dark:hover:text-amber-200 shadow-sm hover:shadow-md flex items-center justify-center"
