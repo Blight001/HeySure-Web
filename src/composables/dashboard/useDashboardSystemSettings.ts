@@ -3,6 +3,17 @@ import { normalizeSystemAutoControl as normalizeTaskSystemAutoControl } from '@/
 import { syncUiPreferencesToStorage } from '@/utils/uiPreferences'
 import type { ModelPreset, User } from '@/types'
 import { updateProfile } from '@/api/auth'
+import {
+  applyUserSystemSettings,
+  clampIdleSeconds,
+  clampMcpHistoryResultChars,
+  clampMcpMaxSteps,
+  clampReminderSeconds,
+  DEFAULT_MCP_DYNAMIC_RULE,
+  DEFAULT_MCP_NAMESPACE_HINTS,
+  normalizeModelPresets,
+  stripLegacyOneToolRule,
+} from './useDashboardSystemSettingsHelpers'
 
 type ThemeMode = 'light' | 'dark'
 type FontSize = 'sm' | 'md' | 'lg'
@@ -15,87 +26,6 @@ interface UseDashboardSystemSettingsOptions {
   alert: AlertFn
   onRefreshUser: (user: User) => void
 }
-
-const clampIdleSeconds = (value: unknown) => {
-  const parsed = Number(value ?? 25)
-  if (!Number.isFinite(parsed)) return 25
-  return Math.max(5, Math.min(3600, Math.floor(parsed)))
-}
-
-const clampReminderSeconds = (value: unknown) => {
-  const parsed = Number(value ?? 3)
-  if (!Number.isFinite(parsed)) return 3
-  return Math.max(0, Math.min(3600, Math.floor(parsed)))
-}
-
-const clampMcpMaxSteps = (value: unknown) => {
-  const parsed = Number(value ?? 48)
-  if (!Number.isFinite(parsed)) return 48
-  return Math.max(1, Math.min(999, Math.floor(parsed)))
-}
-
-const clampMcpHistoryResultChars = (value: unknown) => {
-  const parsed = Number(value ?? 100)
-  if (!Number.isFinite(parsed)) return 100
-  return Math.max(20, Math.min(10000, Math.floor(parsed)))
-}
-
-const DEFAULT_MCP_NAMESPACE_HINTS = JSON.stringify({
-  mcp: 'MCP 自省入口。使用 mcp.describe+tool 的 tool、tools 或 query 参数发现工具并查询参数。',
-  member: 'AI 数字成员管理。member.manage 用于查询、创建和编辑成员及其任务、Token 上限和设备绑定，需要绑定图书馆；成员删除只允许人在控制台确认。',
-  todo: '统一计划管理。todo.manage 用 create/get/edit/delete 创建、查看、推进或删除计划；阶段完成用 edit，最后阶段更新后系统自动收尾。',
-  workspace: '工作区与命令执行。用于检查文件、运行只读诊断命令或执行用户明确要求的工作区操作。',
-  conversation: '会话管理。用于查找、新建、删除会话或按请求清理上下文。',
-  ai: 'AI 间通信。用于向其他 AI 发送询问、回复、通知或协作消息。',
-  user: '用户通知。用于向用户发送异步消息。',
-  web: '联网搜索。用于查询外部或实时信息。',
-  memory: '长期记忆。用于写入、检索、更新和归档结构化记忆。',
-  librarian: '知识流程库。用于咨询、提交、读取和归档可复用流程。',
-  evolution: '系统进化建议。用于提交、列出和评审改进建议。',
-  project: '项目管理。用于查看或维护项目记录。',
-}, null, 2)
-
-const DEFAULT_MCP_DYNAMIC_RULE = `系统提示的[动态 MCP 说明]目录会一次性列出全部可调用工具的名称与简介，模型据此直接定位。需要参数时用 mcp.describe+tool（支持 tool 单个、tools 批量或 query 关键词搜索）取 schema；被加载的目标工具会在随后轮次直接可调用。
-
-browser_tab 仅 7 种动作：list 获取全部页面（id/url/title/active）及 activeTab；switch+tab_id 切换到已有页；replace+url 在当前页覆盖跳转；navigate+url 新标签打开；close 关闭；back/forward 历史导航。流程：先 list，已开则 switch，当前页改址用 replace，并行任务用 navigate。`
-
-const normalizeModelPresets = (raw: unknown): ModelPreset[] => {
-  let parsed = raw
-  if (typeof raw === 'string') {
-    try { parsed = JSON.parse(raw || '[]') } catch { parsed = [] }
-  }
-  if (!Array.isArray(parsed)) return []
-  const seen = new Set<string>()
-  return parsed
-    .map((item: any, index) => {
-      const model = String(item?.model || '').trim()
-      const apiKey = String(item?.api_key || '').trim()
-      const baseUrl = String(item?.base_url || '').trim()
-      if (!model || !apiKey || !baseUrl) return null
-      let id = String(item?.id || model || `model_${index + 1}`).trim()
-      if (!id || seen.has(id)) id = `${model}_${index + 1}`
-      seen.add(id)
-      const provider = String(item?.provider || '').trim().toLowerCase()
-      const toolProtocol = String(item?.tool_protocol || '').trim().toLowerCase()
-      return {
-        id,
-        name: String(item?.name || model).trim() || model,
-        api_key: apiKey,
-        base_url: baseUrl,
-        model,
-        provider: (['anthropic', 'openai'].includes(provider) ? provider : 'auto') as ModelPreset['provider'],
-        tool_protocol: (['native', 'text'].includes(toolProtocol) ? toolProtocol : 'auto') as ModelPreset['tool_protocol'],
-      }
-    })
-    .filter(Boolean) as ModelPreset[]
-}
-
-const stripLegacyOneToolRule = (raw: unknown) =>
-  String(raw ?? '')
-    .split(/\r?\n/)
-    .filter(line => !line.includes('Call exactly one tool per <mcp-call> block; never join two tool names into one name.'))
-    .join('\n')
-    .trim()
 
 export const useDashboardSystemSettings = (options: UseDashboardSystemSettingsOptions) => {
   const themeMode = ref<ThemeMode>('dark')
@@ -292,89 +222,16 @@ Rules:
 
   watch(
     () => options.getCurrentUser(),
-    (user) => {
-      if (!user) return
-      const rawUser = user as any
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'ui_theme_mode')) {
-        const rawTheme = String(rawUser.ui_theme_mode ?? '').toLowerCase()
-        themeMode.value = rawTheme === 'light' ? 'light' : 'dark'
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'ui_font_size')) {
-        const rawFont = String(rawUser.ui_font_size ?? '').toLowerCase()
-        fontSize.value = rawFont === 'sm' || rawFont === 'lg' ? rawFont : 'md'
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'ui_brain_view_mode')) {
-        const rawMode = String(rawUser.ui_brain_view_mode ?? '').toLowerCase()
-        brainViewMode.value = rawMode === 'all' ? 'all' : 'sections'
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_call_method')) {
-        globalMcpCallMethod.value = stripLegacyOneToolRule(rawUser.mcp_call_method)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_namespace_hints')) {
-        mcpNamespaceHints.value = String(rawUser.mcp_namespace_hints || DEFAULT_MCP_NAMESPACE_HINTS)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_dynamic_rule')) {
-        mcpDynamicRule.value = String(rawUser.mcp_dynamic_rule || DEFAULT_MCP_DYNAMIC_RULE)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'tavily_api_key')) {
-        tavilyApiKey.value = String(rawUser.tavily_api_key ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'model_presets')) {
-        modelPresets.value = normalizeModelPresets(rawUser.model_presets)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_format_error_hint')) {
-        globalMcpFormatErrorHint.value = String(rawUser.mcp_format_error_hint ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_max_steps')) {
-        mcpMaxSteps.value = clampMcpMaxSteps(rawUser.mcp_max_steps)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'mcp_history_result_max_chars')) {
-        mcpHistoryResultMaxChars.value = clampMcpHistoryResultChars(rawUser.mcp_history_result_max_chars)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'conversation_auto_compress_enabled')) {
-        conversationAutoCompressEnabled.value = rawUser.conversation_auto_compress_enabled !== false
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'default_start_task_prompt')) {
-        defaultStartTaskPrompt.value = String(rawUser.default_start_task_prompt ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'default_resume_task_prompt')) {
-        defaultResumeTaskPrompt.value = String(rawUser.default_resume_task_prompt ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'default_supervision_prompt')) {
-        defaultSupervisionPrompt.value = String(rawUser.default_supervision_prompt ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'default_supervision_idle_seconds')) {
-        defaultSupervisionIdleSeconds.value = clampIdleSeconds(rawUser.default_supervision_idle_seconds)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'default_compression_prompt')) {
-        defaultCompressionPrompt.value = String(rawUser.default_compression_prompt ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_notify')) {
-        promptAiMessageNotify.value = String(rawUser.prompt_ai_message_notify ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_inquiry')) {
-        promptAiMessageInquiry.value = String(rawUser.prompt_ai_message_inquiry ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'ai_message_inquiry_reminder_seconds')) {
-        aiMessageInquiryReminderSeconds.value = clampReminderSeconds(rawUser.ai_message_inquiry_reminder_seconds)
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_inquiry_reminder')) {
-        promptAiMessageInquiryReminder.value = String(rawUser.prompt_ai_message_inquiry_reminder ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_reply')) {
-        promptAiMessageReply.value = String(rawUser.prompt_ai_message_reply ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_chitchat')) {
-        promptAiMessageChitchat.value = String(rawUser.prompt_ai_message_chitchat ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_reply_success')) {
-        promptAiMessageReplySuccess.value = String(rawUser.prompt_ai_message_reply_success ?? '')
-      }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_user_message_notice')) {
-        promptUserMessageNotice.value = String(rawUser.prompt_user_message_notice ?? '')
-      }
-    },
-    { immediate: true }
+    user => applyUserSystemSettings(user, {
+      themeMode, fontSize, brainViewMode, globalMcpCallMethod, mcpNamespaceHints, mcpDynamicRule,
+      tavilyApiKey, modelPresets, globalMcpFormatErrorHint, mcpMaxSteps, mcpHistoryResultMaxChars,
+      conversationAutoCompressEnabled, defaultStartTaskPrompt, defaultResumeTaskPrompt,
+      defaultSupervisionPrompt, defaultSupervisionIdleSeconds, defaultCompressionPrompt,
+      promptAiMessageNotify, promptAiMessageInquiry, aiMessageInquiryReminderSeconds,
+      promptAiMessageInquiryReminder, promptAiMessageReply, promptAiMessageChitchat,
+      promptAiMessageReplySuccess, promptUserMessageNotice,
+    }),
+    { immediate: true },
   )
 
   return {

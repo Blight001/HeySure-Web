@@ -2,25 +2,12 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import heySureLogo from '@/assets/logo/HeySure.png'
 import AmbientBackground from '@/components/common/AmbientBackground.vue'
+import { HOME_MARQUEE_ITEMS as MARQUEE_ITEMS } from '@/constants/home'
 
 const emit = defineEmits<{
   (e: 'login'): void
   (e: 'register'): void
 }>()
-
-// 跑马灯展示的真实能力关键词（与 README 核心能力对齐）
-const MARQUEE_ITEMS = [
-  'MCP Runtime',
-  'Socket.IO 实时同步',
-  'Windows 桌面 Agent',
-  'Linux 桌面 Agent',
-  'Chrome 浏览器扩展',
-  'QQ 机器人',
-  '飞书机器人',
-  '知识库沉淀',
-  '任务系统',
-  'AI 成员治理',
-]
 
 const mockupEl = ref<HTMLElement | null>(null)
 const statAgents = ref(0)

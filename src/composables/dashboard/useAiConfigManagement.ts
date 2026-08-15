@@ -8,9 +8,14 @@ import {
   listAiConfigs,
   updateAiConfig,
   updateAiConfigFields,
-  type AiConfigUpsertPayload,
 } from '@/api/ai'
-import { DEFAULT_AI_AVATAR, resolveAiAvatarUrl } from '@/utils/aiAvatar'
+import {
+  applyLoadedConfig,
+  buildAiConfigPayload,
+  buildAiForm,
+  buildEditForm,
+  mapMcpToolRows,
+} from './useAiConfigManagementHelpers'
 
 type SettingsSection = 'mcp' | 'bot' | 'appearance'
 
@@ -21,79 +26,6 @@ interface UseAiConfigManagementOptions {
   normalizeSystemAutoControl: (raw: unknown) => any
   alert?: (options: { title?: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' }) => Promise<void>
   onReloadAgents: () => Promise<void>
-}
-
-// Server-side schema mirrors (see ``api/bots/<name>/_config.py``).
-// Anything outside these keys is dropped by the adapters; keep them in
-// sync when a bot's config schema changes.
-const BOT_CONFIG_DEFAULTS: Record<string, Record<string, any>> = {
-  feishu: {
-    enabled: false,
-    webhook_url: '',
-    app_id: '',
-    app_secret: '',
-    verification_token: '',
-    default_receive_id: '',
-    default_receive_id_type: 'chat_id',
-  },
-  qq: {
-    enabled: false,
-    app_id: '',
-    app_secret: '',
-    sandbox: false,
-    default_target_id: '',
-    default_target_type: 'c2c',
-    markdown_mode: 'native',
-    markdown_template_id: '',
-    stream_enabled: true,
-  },
-  wechat: {
-    enabled: false,
-    bot_agent: 'HeySureAI/2.0.0',
-  },
-}
-
-function hydrateBotConfigs(raw: any): Record<string, Record<string, any>> {
-  // Merge server payload on top of defaults so every channel slice always
-  // has every field populated for v-model bindings.
-  // The server stores ``bot_configs`` as a JSON *string* column, so the
-  // ``/api/ai/configs`` row hands it back as a string; parse it before use
-  // (otherwise ``typeof raw === 'object'`` is false and the saved config is
-  // silently dropped, leaving the popup blank).
-  if (typeof raw === 'string') {
-    try {
-      raw = raw.trim() ? JSON.parse(raw) : null
-    } catch {
-      raw = null
-    }
-  }
-  const out: Record<string, Record<string, any>> = {}
-  for (const [channel, defaults] of Object.entries(BOT_CONFIG_DEFAULTS)) {
-    const incoming = (raw && typeof raw === 'object' ? raw[channel] : null) || {}
-    const merged: Record<string, any> = { ...defaults }
-    for (const key of Object.keys(defaults)) {
-      if (incoming[key] !== undefined && incoming[key] !== null) {
-        merged[key] = incoming[key]
-      }
-    }
-    out[channel] = merged
-  }
-  return out
-}
-
-function buildBotConfigsPayload(
-  formConfigs: Record<string, Record<string, any>>,
-  _activeChannel: string,
-): Record<string, Record<string, any>> {
-  // Every channel is independently enabled. bot_channel only records the
-  // preferred/default channel and which configuration pane is selected.
-  const out: Record<string, Record<string, any>> = {}
-  for (const [channel, defaults] of Object.entries(BOT_CONFIG_DEFAULTS)) {
-    const slice = formConfigs?.[channel] || {}
-    const merged: Record<string, any> = { ...defaults, ...slice }
-    out[channel] = merged
-  }
-  return out
 }
 
 export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => {
@@ -113,103 +45,18 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
   const aiConfigForm = ref<any>(null)
   const availableMcpTools = ref<string[]>([])
 
-  const roleGroupFromRole = (role?: string): 'assistant_admin' | 'digital_member' => {
-    return role === 'assistant_admin' ? 'assistant_admin' : 'digital_member'
-  }
-
-  const roleFromGroup = (group?: string): 'assistant_admin' | 'digital_member' => {
-    if (group === 'assistant_admin') return 'assistant_admin'
-    return 'digital_member'
-  }
-
-  const normalizeDigitalMemberRole = (value?: string): 'manager' | 'member' => {
-    return value === 'manager' ? 'manager' : 'member'
-  }
-
-  // 角色扁平化：新建 AI 一律是数字生命成员；辅助管理员由系统默认创建。
-  const buildAiForm = (role: 'assistant_admin' | 'worker' = 'worker') => ({
-    id: undefined as number | undefined,
-    name: role === 'assistant_admin' ? '新辅助管理员' : '新执行AI',
-    description: '',
-    avatar: DEFAULT_AI_AVATAR,
-    ai_role_group: roleGroupFromRole(role),
-    digital_member_role: 'member' as 'manager' | 'member',
-    platform: role === 'assistant_admin' ? 'Server-Node' : 'Ubuntu-Worker',
-    token_limit: role === 'assistant_admin' ? 0 : 10000,
-    model_preset_id: modelPresets.value[0]?.id || '',
-    model: modelPresets.value[0]?.model || '',
-    reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
-    execution_mode: 'internal_model' as 'internal_model' | 'external_mcp',
-    prompt: '',
-    // 工具授权只在设备栏目按成员配置；该兼容字段固定为空。
-    mcp_tools: [],
-    bot_channel: 'feishu' as 'feishu' | 'qq' | 'wechat',
-    bot_configs: {
-      feishu: {
-        enabled: false,
-        webhook_url: '',
-        app_id: '',
-        app_secret: '',
-        verification_token: '',
-        default_receive_id: '',
-        default_receive_id_type: 'chat_id',
-      },
-      qq: {
-        enabled: false,
-        app_id: '',
-        app_secret: '',
-        sandbox: false,
-        default_target_id: '',
-        default_target_type: 'c2c',
-        markdown_mode: 'native',
-        markdown_template_id: '',
-        stream_enabled: true,
-      },
-      wechat: {
-        enabled: false,
-        bot_agent: 'HeySureAI/2.0.0',
-      },
-    } as Record<string, Record<string, any>>,
-    system_auto_control: normalizeSystemAutoControl({}),
-  })
-
-  const presetIdForModel = (presetId?: string, model?: string) => {
-    const id = String(presetId || '').trim()
-    if (id && modelPresets.value.some(item => item.id === id)) return id
-    const modelName = String(model || '').trim()
-    return modelPresets.value.find(item => item.model === modelName || item.id === modelName)?.id || id
-  }
-
   const loadMcpTools = async () => {
     if (!getAuthToken()) return
-    let data
     try {
-      data = await listMcpTools()
+      const rows = mapMcpToolRows(await listMcpTools())
+      const map: Record<string, McpToolDefinition> = {}
+      for (const row of rows) map[row.name] = row
+      mcpToolMetaByName.value = map
+      const tools = Array.from(new Set(rows.map(item => item.name)))
+      availableMcpTools.value = tools.length > 0 ? tools : [...defaultMcpTools]
     } catch {
-      return
+      // catalog is optional on first paint
     }
-    const rows: McpToolDefinition[] = Array.isArray(data.tools)
-      ? data.tools
-        .map((item: any) => ({
-          name: String(item?.name || '').trim(),
-          description: String(item?.description || '').trim(),
-          inputSchema: item?.inputSchema && typeof item.inputSchema === 'object' ? item.inputSchema : { type: 'object', properties: {} },
-          destructive: !!item?.destructive,
-          mcpSource: 'server' as const,
-        }))
-        .filter((item: McpToolDefinition) => !!item.name)
-      : []
-    // Full catalog is still used by task overrides and catalog views. Runtime
-    // authorization comes from bound-device member scopes.
-    // Toolbox / library bindings still affect governance + UI grouping.
-    const map: Record<string, McpToolDefinition> = {}
-    for (const row of rows) {
-      map[row.name] = row
-    }
-    mcpToolMetaByName.value = map
-    const tools = Array.from(new Set(rows.map(item => item.name)))
-    availableMcpTools.value = tools.length > 0 ? tools : [...defaultMcpTools]
-
   }
 
   const toggleAiConfigSettingsSection = (section: SettingsSection) => {
@@ -220,49 +67,24 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigMode.value = 'create'
     aiConfigDeleteConfirm.value = false
     aiConfigSettingsSection.value = ''
-    // 新建默认勾选全部 MCP：确保工具列表已加载，buildAiForm 才能取到全量工具。
     if (!availableMcpTools.value.length) {
-      try { await loadMcpTools() } catch { /* 加载失败时回退到基础默认集 */ }
+      try { await loadMcpTools() } catch { /* fallback defaults */ }
     }
-    // 角色扁平化：创建入口统一按数字成员处理（辅助管理员不可新建）。
-    aiConfigForm.value = buildAiForm(role === 'assistant_admin' ? 'worker' : role)
+    aiConfigForm.value = {
+      ...buildAiForm(role === 'assistant_admin' ? 'worker' : role, modelPresets.value),
+      system_auto_control: normalizeSystemAutoControl({}),
+    }
     aiConfigModalOpen.value = true
   }
 
   const loadAiConfigDetail = async (id?: number) => {
-    if (!id) return
-    if (!getAuthToken()) return
-    let rows
+    if (!id || !getAuthToken() || !aiConfigForm.value) return
     try {
-      rows = await listAiConfigs()
+      const cfg = (await listAiConfigs()).find((row: any) => row.id === id)
+      if (!cfg) return
+      aiConfigForm.value = applyLoadedConfig(aiConfigForm.value, cfg, modelPresets.value, normalizeSystemAutoControl)
     } catch {
-      return
-    }
-    const cfg = rows.find((r: any) => r.id === id)
-    if (!cfg || !aiConfigForm.value) return
-    aiConfigForm.value = {
-      ...aiConfigForm.value,
-      description: cfg.description || '',
-      avatar: resolveAiAvatarUrl(cfg.avatar) || DEFAULT_AI_AVATAR,
-      ai_role_group: roleGroupFromRole(cfg.ai_role),
-      digital_member_role: normalizeDigitalMemberRole(cfg.digital_member_role),
-      platform: cfg.platform || aiConfigForm.value.platform,
-      token_limit: cfg.token_limit ?? aiConfigForm.value.token_limit,
-      model_preset_id: presetIdForModel(cfg.model_preset_id, cfg.model),
-      model: cfg.model ?? aiConfigForm.value.model,
-      reasoning_effort: ['low', 'medium', 'high'].includes(String(cfg.reasoning_effort || ''))
-        ? cfg.reasoning_effort
-        : '',
-      execution_mode: cfg.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model',
-      prompt: cfg.prompt || '',
-      mcp_tools: [],
-      bot_channel: cfg.bot_channel === 'wechat' ? 'wechat' : (cfg.bot_channel === 'qq' ? 'qq' : 'feishu'),
-      // Hydrate ``bot_configs`` from the server (default fills in any
-      // missing keys so the form bindings always have a value).
-      bot_configs: hydrateBotConfigs(cfg.bot_configs),
-      system_auto_control: normalizeSystemAutoControl((() => {
-        try { return JSON.parse(cfg.system_auto_control || '{}') } catch { return {} }
-      })()),
+      // keep the optimistic form
     }
   }
 
@@ -270,75 +92,23 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigMode.value = 'edit'
     aiConfigDeleteConfirm.value = false
     aiConfigSettingsSection.value = ''
-    aiConfigForm.value = {
-      id: agent.aiConfigId,
-      name: agent.name,
-      description: '',
-      avatar: resolveAiAvatarUrl(agent.avatar) || DEFAULT_AI_AVATAR,
-      ai_role_group: roleGroupFromRole(agent.aiRole),
-      digital_member_role: normalizeDigitalMemberRole(agent.digitalMemberRole || (agent.role === 'admin' ? 'manager' : 'member')),
-      platform: agent.platform,
-      token_limit: agent.aiRole === 'assistant_admin' ? 0 : agent.tokenLimit,
-      model_preset_id: presetIdForModel('', agent.model),
-      model: agent.model || '',
-      reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
-      execution_mode: agent.executionMode === 'external_mcp' ? 'external_mcp' : 'internal_model',
-      prompt: '',
-      mcp_tools: [],
-      bot_channel: agent.botChannel === 'wechat' ? 'wechat' : (agent.botChannel === 'qq' ? 'qq' : 'feishu'),
-      bot_configs: hydrateBotConfigs(null),
-      system_auto_control: normalizeSystemAutoControl({}),
-    }
+    aiConfigForm.value = buildEditForm(agent, modelPresets.value, normalizeSystemAutoControl)
     aiConfigModalOpen.value = true
     void loadAiConfigDetail(agent.aiConfigId)
   }
 
   const saveAiConfig = async () => {
-    if (!aiConfigForm.value) return false
-    if (!getAuthToken()) return false
-    const selectedBotChannel = aiConfigForm.value.bot_channel === 'wechat'
-      ? 'wechat'
-      : (aiConfigForm.value.bot_channel === 'qq' ? 'qq' : 'feishu')
-    const executionMode = aiConfigForm.value.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model'
-    const selectedPreset = modelPresets.value.find(item => item.id === aiConfigForm.value.model_preset_id)
+    if (!aiConfigForm.value || !getAuthToken()) return false
+    const { payload, executionMode, selectedPreset } = buildAiConfigPayload(
+      aiConfigForm.value,
+      aiConfigMode.value,
+      modelPresets.value,
+      normalizeSystemAutoControl,
+    )
     if (!selectedPreset && (executionMode === 'internal_model' || aiConfigMode.value === 'create')) {
-      await alert?.({
-        title: '保存失败',
-        message: '请先选择一个已保存的服务器模型。',
-        type: 'warning',
-      })
+      await alert?.({ title: '保存失败', message: '请先选择一个已保存的服务器模型。', type: 'warning' })
       return false
     }
-
-    const payload: AiConfigUpsertPayload = {
-      name: aiConfigForm.value.name,
-      description: aiConfigForm.value.description,
-      avatar: aiConfigForm.value.avatar || DEFAULT_AI_AVATAR,
-      ai_role: roleFromGroup(aiConfigForm.value.ai_role_group),
-      digital_member_role: aiConfigForm.value.ai_role_group === 'digital_member'
-        ? normalizeDigitalMemberRole(aiConfigForm.value.digital_member_role)
-        : 'member',
-      platform: aiConfigForm.value.platform,
-      token_limit: aiConfigForm.value.ai_role_group === 'assistant_admin'
-        ? 0
-        : (Number(aiConfigForm.value.token_limit) || 10000),
-      execution_mode: executionMode,
-      model: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.model : '',
-      model_preset_id: executionMode === 'internal_model' || aiConfigMode.value === 'create' ? selectedPreset?.id : '',
-      reasoning_effort: executionMode === 'internal_model'
-        ? aiConfigForm.value.reasoning_effort
-        : '',
-      prompt: aiConfigForm.value.prompt,
-      mcp_tools: '[]',
-      bot_channel: selectedBotChannel,
-      bot_configs: buildBotConfigsPayload(aiConfigForm.value.bot_configs, selectedBotChannel),
-      system_auto_control: JSON.stringify(
-        normalizeSystemAutoControl(
-          aiConfigForm.value.system_auto_control || {},
-        ),
-      ),
-    }
-
     try {
       if (aiConfigMode.value === 'create') {
         const created = await createAiConfig(payload)
@@ -349,45 +119,28 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
         await updateAiConfig(aiConfigForm.value.id, payload)
       }
     } catch (err) {
-      await alert?.({
-        title: '保存失败',
-        message: (err as Error)?.message || 'AI 配置保存失败，请检查配置后重试。',
-        type: 'error',
-      })
+      await alert?.({ title: '保存失败', message: (err as Error)?.message || 'AI 配置保存失败，请检查配置后重试。', type: 'error' })
       return false
     }
     aiConfigModalOpen.value = false
     await onReloadAgents()
-    await alert?.({
-      title: '保存成功',
-      message: 'AI 配置已保存。',
-      type: 'success',
-    })
+    await alert?.({ title: '保存成功', message: 'AI 配置已保存。', type: 'success' })
     return true
   }
 
   const deleteAiConfig = async () => {
-    if (!aiConfigForm.value?.id) return
-    if (!getAuthToken()) return
-    try {
-      await apiDeleteAiConfig(aiConfigForm.value.id)
-    } catch {
-      // best-effort
-    }
+    if (!aiConfigForm.value?.id || !getAuthToken()) return
+    try { await apiDeleteAiConfig(aiConfigForm.value.id) } catch { /* best-effort */ }
     aiConfigModalOpen.value = false
     aiConfigDeleteConfirm.value = false
     await onReloadAgents()
   }
 
-  watch(
-    modelPresets,
-    presets => {
-      if (!aiConfigForm.value || aiConfigForm.value.model_preset_id) return
-      aiConfigForm.value.model_preset_id = presets[0]?.id || ''
-      aiConfigForm.value.model = presets[0]?.model || ''
-    },
-    { deep: true }
-  )
+  watch(modelPresets, presets => {
+    if (!aiConfigForm.value || aiConfigForm.value.model_preset_id) return
+    aiConfigForm.value.model_preset_id = presets[0]?.id || ''
+    aiConfigForm.value.model = presets[0]?.model || ''
+  }, { deep: true })
 
   return {
     aiConfigModalOpen,

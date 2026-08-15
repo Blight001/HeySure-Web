@@ -1,0 +1,127 @@
+.agent-card-shell {
+  isolation: isolate;
+}
+
+.agent-card-avatar-layer {
+  opacity: 0.15;
+}
+
+.agent-card-world-focus {
+  z-index: 30;
+  transform: scale(1.035);
+  border-color: rgb(99 102 241) !important;
+  box-shadow: 0 0 0 3px rgb(165 180 252 / 0.65), 0 18px 42px rgb(49 46 129 / 0.28) !important;
+}
+
+.agent-card-world-focus::before {
+  opacity: 0.92;
+  filter: blur(10px);
+  animation-duration: 1.4s;
+}
+
+.agent-card-shell::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  z-index: -1;
+  border-radius: 1rem;
+  background: transparent;
+  border: 2px solid var(--agent-glow-color, rgba(99, 102, 241, 0.34));
+  box-shadow: 0 0 16px var(--agent-glow-color, rgba(99, 102, 241, 0.34));
+  filter: blur(7px);
+  opacity: 0.42;
+  transform: scale(0.985);
+  animation: agent-card-glow-pulse 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.agent-card-shell:hover::before {
+  opacity: 0.72;
+  filter: blur(9px);
+  box-shadow: 0 0 22px var(--agent-glow-color, rgba(99, 102, 241, 0.34));
+  animation-duration: 2.2s;
+}
+
+.agent-card-glow-assistant {
+  --agent-glow-color: rgba(139, 92, 246, 0.5);
+}
+
+.agent-card-glow-manager {
+  --agent-glow-color: rgba(245, 158, 11, 0.5);
+}
+
+.agent-card-glow-member {
+  --agent-glow-color: rgba(14, 165, 233, 0.48);
+}
+
+.agent-card-glow-default {
+  --agent-glow-color: rgba(99, 102, 241, 0.42);
+}
+
+.agent-card-glow-dead::before {
+  opacity: 0.14;
+  animation: none;
+  --agent-glow-color: rgba(113, 113, 122, 0.32);
+}
+
+@keyframes agent-card-glow-pulse {
+  0%, 100% {
+    opacity: 0.32;
+    transform: scale(0.985);
+  }
+
+  50% {
+    opacity: 0.66;
+    transform: scale(1.018);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-card-shell::before {
+    animation: none;
+  }
+}
+
+@media (hover: none) and (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .agent-card-shell {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 22rem;
+    background-image: none;
+    transition: none;
+  }
+
+  .agent-card-shell::before,
+  .agent-card-world-focus::before {
+    inset: -1px;
+    animation: none;
+    filter: none;
+    box-shadow: none;
+    opacity: 0.5;
+    transform: none;
+  }
+
+  .agent-card-avatar-layer {
+    opacity: 0.1;
+  }
+
+  .agent-card-avatar-image {
+    filter: none;
+    transform: none;
+  }
+
+  .agent-card-online-dot,
+  .agent-card-status {
+    animation: none !important;
+  }
+}
+
+.task-thinking-viewport {
+  min-height: 4.25em;
+  max-height: 4.25em;
+  overflow: hidden;
+}
+
+.task-thinking-content {
+  word-break: break-word;
+  white-space: pre-wrap;
+}

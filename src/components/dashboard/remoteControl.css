@@ -1,0 +1,122 @@
+/* Maximize: fill the viewport, overriding the inline drag-resize width/height
+   (hence !important) and dropping the rounded corners + resize handle. */
+.rc-panel-maximized {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  /* 移动端地址栏伸缩时 100vh 超出可视高度，dvh 跟随动态视口（旧浏览器回退上一行） */
+  height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  resize: none !important;
+}
+
+
+.rc-surface:fullscreen, .rc-surface:-webkit-full-screen, .rc-surface-fullscreen {
+  width: 100vw !important; height: 100vh !important; height: 100dvh !important;
+  max-width: none !important; max-height: none !important; aspect-ratio: auto !important;
+  background: #000; display: flex; align-items: center; justify-content: center;
+}
+.rc-zoom-layer { width:100%; height:100%; display:flex; align-items:center; justify-content:center; will-change:transform; }
+.rc-surface:fullscreen .rc-zoom-layer, .rc-surface:-webkit-full-screen .rc-zoom-layer { position:absolute; inset:0; }
+.rc-fullscreen-input { position:absolute; z-index:45; left:max(12px,env(safe-area-inset-left)); right:max(70px,env(safe-area-inset-right)); bottom:max(14px,env(safe-area-inset-bottom)); display:flex; gap:8px; padding:10px; border-radius:14px; background:rgba(24,24,27,.94); }
+.rc-fullscreen-input input { min-width:0; flex:1; border:1px solid #52525b; border-radius:9px; background:#27272a; color:white; padding:9px 11px; font-size:16px; }
+.rc-fullscreen-input button { border-radius:9px; background:#4f46e5; color:white; padding:8px 12px; font-size:13px; }
+.rc-fullscreen-input button:last-child { background:#3f3f46; }
+.rc-scroll-slider { position:absolute; z-index:42; right:max(10px,env(safe-area-inset-right)); top:50%; transform:translateY(-50%); width:42px; height:132px; border:1px solid rgba(255,255,255,.24); border-radius:999px; background:rgba(24,24,27,.68); backdrop-filter:blur(8px); touch-action:none; display:flex; align-items:center; justify-content:center; }
+.rc-scroll-slider::before { content:'↕'; color:rgba(255,255,255,.7); font-size:18px; }
+.rc-scroll-slider span { position:absolute; width:28px; height:38px; border-radius:999px; background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.25); }
+
+.rc-fullscreen-actions {
+  position: absolute;
+  z-index: 40;
+  right: max(12px, env(safe-area-inset-right));
+  top: max(18px, env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rc-fullscreen-bubble {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 9999px;
+  color: white;
+  background: rgba(24,24,27,.76);
+  box-shadow: 0 8px 24px rgba(0,0,0,.38);
+  backdrop-filter: blur(10px);
+  touch-action: manipulation;
+}
+.rc-bubble-dot { width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.rc-fullscreen-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 12px;
+  background: rgba(24,24,27,.92);
+  box-shadow: 0 12px 30px rgba(0,0,0,.45);
+  backdrop-filter: blur(12px);
+}
+.rc-fullscreen-menu button { padding: 11px 14px; color: #f4f4f5; font-size: 13px; text-align: left; white-space: nowrap; }
+.rc-fullscreen-menu button + button { border-top: 1px solid rgba(255,255,255,.1); }
+.rc-fullscreen-menu button:active { background: rgba(255,255,255,.12); }
+.rc-fullscreen-menu .danger { color: #fda4af; }
+
+@media (max-width: 900px), (max-height: 520px) {
+  .rc-panel-maximized > div:nth-of-type(2) { padding: 0 !important; overflow: hidden !important; }
+  .rc-panel-maximized video { border-radius: 0 !important; }
+}
+
+.rc-navbtn {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(63 63 70);
+  background: rgb(39 39 42);
+  color: rgb(228 228 231);
+  font-size: 0.8rem;
+  padding: 0.5rem 0;
+  transition: background-color 0.15s, color 0.15s;
+}
+.rc-navbtn:hover:not(:disabled) {
+  background: rgb(63 63 70);
+  color: #fff;
+}
+.rc-navbtn:disabled {
+  opacity: 0.4;
+}
+
+.rc-toolbtn {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: rgb(212 212 216);
+  font-size: 1rem;
+  line-height: 1;
+  transition: background-color 0.15s, color 0.15s;
+}
+.rc-toolbtn:hover:not(:disabled) {
+  background: rgb(39 39 42);
+  color: #fff;
+}
+.rc-toolbtn:disabled {
+  opacity: 0.4;
+}
+
+.rc-tabstrip::-webkit-scrollbar {
+  height: 4px;
+}
+.rc-tabstrip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}

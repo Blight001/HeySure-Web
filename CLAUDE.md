@@ -115,11 +115,32 @@ src/
 | 远控连不上 | `useRemoteControl.ts` / `api/rtc.ts`；后端 ICE 设置（`access/ice_settings.py`） |
 | 样式不生效 | Tailwind 类名是否在 `main.css` 的 content 扫描路径内；构建是否刷新 |
 
+## 复杂度门禁
+
+与 `deploy/server` 同一套渐进式规则，提交前至少运行 `npm run verify`。
+
+| 指标 | 生产 `src/` `game/src/` | 测试 `*.spec.ts` / `*.test.ts` / `__tests__/` |
+| --- | --- | --- |
+| 文件有效行 | 500 | 800 |
+| 函数有效行 | 80 | 120 |
+| 圈复杂度 | 15 | 20 |
+| 参数个数 | 8 | 8 |
+| 嵌套深度 | 4 | 4 |
+| 顶层依赖数 | 15 | 15 |
+
+- 实现：`scripts/check_guardrails.mjs`，对照 `scripts/guardrail_baseline.json`。
+- 已有旧债可暂留；**新违规或同一条债数值变大则失败**。baseline 只能下降，禁止扩大或增加豁免。
+- `.vue` 有效行 = script + template + style 中的非注释代码行。
+- 接近上限时先拆 types / utils / composable / 子组件，不要把逻辑继续堆进大 SFC。
+- 不要用 `--write-baseline` 把新债写进去过关；只在复核后记录已下降的债务。
+
 ## 命令
 
 ```bash
 npm install
 npm run dev      # 启动开发服务器，端口 58150
+npm run guardrails  # 复杂度门禁
+npm run verify   # 复杂度门禁 + vue-tsc
 npm run build    # vue-tsc 类型检查 + vite build → web/dist（gitignored）
 ```
 

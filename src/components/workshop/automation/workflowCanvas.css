@@ -1,0 +1,43 @@
+.canvas-editor { display: grid; gap: 10px; min-width: 0; }
+.canvas-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.canvas-button { border: 1px solid var(--editor-border, rgb(161 161 170)); border-radius: 7px; padding: 6px 9px; color: var(--editor-text, #27272a); background: var(--editor-field, #eef2f7); font-size: 13px; font-weight: 500; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
+.canvas-button:hover { border-color: #818cf8; color: var(--editor-heading, #3730a3); background: var(--editor-field-focus, #f1f5ff); }
+.canvas-button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgb(99 102 241 / 0.18); }
+.workflow-canvas { position: relative; height: clamp(500px, 58vh, 680px); overflow: hidden; border: 1px solid #334155; border-radius: 12px; background-color: #0f172a; background-image: radial-gradient(circle, rgb(148 163 184 / 0.25) 1px, transparent 1px); background-size: 20px 20px; cursor: grab; touch-action: none; }
+.canvas-view-controls { position: absolute; right: 12px; bottom: 12px; z-index: 20; display: flex; align-items: center; gap: 4px; padding: 5px; border: 1px solid rgb(100 116 139 / 0.7); border-radius: 10px; background: rgb(15 23 42 / 0.86); box-shadow: 0 8px 24px rgb(0 0 0 / 0.28); backdrop-filter: blur(8px); }
+.canvas-bottom-left { position: absolute; left: 12px; bottom: 12px; z-index: 25; display: flex; gap: 6px; }
+.canvas-inspector { position: absolute; z-index: 30; width: min(360px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; border: 1px solid rgb(100 116 139 / 0.8); border-radius: 12px; color: #e2e8f0; background: rgb(15 23 42 / 0.96); box-shadow: 0 16px 40px rgb(0 0 0 / 0.42); padding: 12px; touch-action: pan-y; }
+.canvas-view-controls .canvas-button { min-height: 34px; color: #e2e8f0; border-color: #475569; background: rgb(30 41 59 / 0.94); }
+.workflow-viewport { position: absolute; inset: 0 auto auto 0; width: 2200px; height: 1400px; transform-origin: 0 0; }
+.workflow-svg { position: absolute; inset: 0; overflow: visible; }
+.workflow-edge { fill: none; stroke: #64748b; stroke-width: 2.2; pointer-events: none; }
+.workflow-edge.selected { stroke: #818cf8; stroke-width: 3.2; }
+.edge-hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; pointer-events: stroke; }
+.edge-preview { fill: none; stroke: #818cf8; stroke-width: 2; stroke-dasharray: 7 5; }
+.edge-label { fill: #f1f5f9; font: 700 12px ui-sans-serif, system-ui; paint-order: stroke; stroke: #0f172a; stroke-width: 3px; }
+.workflow-node { position: absolute; width: 184px; height: 92px; box-sizing: border-box; padding: 10px 15px; border: 1px solid #64748b; border-radius: 11px; color: #f8fafc; background: rgb(30 41 59 / 0.82); box-shadow: 0 10px 24px rgb(0 0 0 / 0.28); cursor: move; user-select: none; backdrop-filter: blur(7px); }
+.workflow-node.selected { outline: 2px solid rgb(196 181 253 / 0.9); outline-offset: 3px; }
+.workflow-node.type-mcp { border-color: #60a5fa; background: rgb(37 99 235 / 0.22); }
+.workflow-node.type-condition { border-color: #f59e0b; background: rgb(245 158 11 / 0.2); }
+.workflow-node.type-delay { border-color: #2dd4bf; background: rgb(13 148 136 / 0.2); }
+.workflow-node.type-confirm { border-color: #e879f9; background: rgb(192 38 211 / 0.2); }
+.workflow-node.type-ai { border-color: #38bdf8; background: rgb(14 165 233 / 0.2); }
+.workflow-node.type-end { border-color: #60a5fa; background: rgb(37 99 235 / 0.2); }
+.workflow-node.is-start { border-color: #4ade80; box-shadow: 0 0 0 2px rgb(74 222 128 / 0.42), 0 0 22px rgb(34 197 94 / 0.5), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.is-end { border-color: #60a5fa; box-shadow: 0 0 0 2px rgb(96 165 250 / 0.42), 0 0 22px rgb(59 130 246 / 0.52), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.is-start.is-end { box-shadow: 0 0 0 2px rgb(74 222 128 / 0.48), 0 0 18px rgb(34 197 94 / 0.45), 0 0 30px rgb(59 130 246 / 0.42), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.diff-added { border-color: #22c55e; box-shadow: 0 0 0 2px rgb(34 197 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.diff-removed { border-color: #f43f5e; box-shadow: 0 0 0 2px rgb(244 63 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.diff-changed { border-color: #f59e0b; box-shadow: 0 0 0 2px rgb(245 158 11 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.diff-unchanged { opacity: 0.72; }
+.node-port { position: absolute; width: 15px; height: 15px; padding: 0; border: 2px solid #94a3b8; border-radius: 50%; background: #172033; cursor: crosshair; }
+.node-port:hover { border-color: #818cf8; background: #818cf8; }
+.input-port { left: -9px; top: 38px; }
+.output-port-wrap { position: absolute; right: -9px; height: 15px; }
+.output-port-wrap.is-bottom { right: auto; bottom: -8px; left: 50%; transform: translateX(-50%); }
+.output-port { position: relative; inset: auto; display: block; }
+.port-label { position: absolute; right: 19px; top: -2px; color: #e2e8f0; font-size: 11px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 2px #0f172a; }
+.output-port-wrap.is-bottom .port-label { top: -20px; right: auto; left: 50%; transform: translateX(-50%); }
+.tone-success { border-color: #34d399; color: #6ee7b7; }
+.tone-danger { border-color: #fb7185; color: #fda4af; }
+@media (max-width: 900px) { .workflow-canvas { height: 480px; } .canvas-view-controls { right: 8px; bottom: 8px; max-width: calc(100% - 16px); } .canvas-view-controls .canvas-button { padding: 6px 8px; } }

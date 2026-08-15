@@ -101,6 +101,16 @@ export interface ExternalControlStatus {
   credentials: Array<Record<string, any>>
   runs: Array<Record<string, any>>
   events: ExternalControlEvent[]
+  message_queue?: { queued: number; running: number }
+}
+
+export interface ExternalControllerTurn {
+  turn_id: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  session_id: string
+  user_message_id: number
+  assistant_message_id?: number | null
+  created_at: number
 }
 
 export const issueExternalControllerCredential = (configId: number, payload: { label?: string; ttl_days?: number } = {}) =>
@@ -108,6 +118,15 @@ export const issueExternalControllerCredential = (configId: number, payload: { l
 
 export const getExternalControlStatus = (configId: number) =>
   get<ExternalControlStatus>(`/api/external-control/${configId}`, { fallbackError: '外部控制状态加载失败' })
+
+export const enqueueExternalControllerMessage = (
+  configId: number,
+  payload: { content: string; session_id: string; session_name: string; ai_kind: string; tags?: string },
+) => post<ExternalControllerTurn>(
+  `/api/external-control/${configId}/messages`,
+  payload,
+  { fallbackError: '消息发送到外部控制器失败' },
+)
 
 export const revokeExternalControllerCredential = (configId: number, credentialId: number) =>
   del<{ revoked: number }>(`/api/external-control/${configId}/credentials/${credentialId}`, { fallbackError: '控制凭证吊销失败' })

@@ -1,0 +1,252 @@
+.canvas-overlay-button {
+  min-height: 34px;
+  border: 1px solid #475569;
+  border-radius: 7px;
+  padding: 6px 10px;
+  color: #e2e8f0;
+  background: rgb(30 41 59 / 0.96);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.25);
+}
+.canvas-overlay-button:hover { border-color: #818cf8; color: #c7d2fe; }
+.automation-editor-modal {
+  --editor-surface: #f8fafc;
+  --editor-panel: #eef2f7;
+  --editor-field: #e8eef5;
+  --editor-field-focus: #f1f5ff;
+  --editor-border: #b8c4d3;
+  --editor-heading: #3730a3;
+  --editor-label: #3f3f46;
+  --editor-muted: #52525b;
+  --editor-text: #18181b;
+  border-color: #c7d2fe;
+  color: var(--editor-text);
+  background:
+    linear-gradient(180deg, rgb(238 242 255 / 0.72), transparent 180px),
+    var(--editor-surface);
+  font-size: 14px;
+}
+
+.automation-editor-modal.is-fullscreen :deep(.workflow-canvas) {
+  height: max(620px, calc(100dvh - 390px));
+}
+
+.automation-editor-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #dbe3ee;
+}
+
+.automation-editor-title,
+.automation-editor-subtitle {
+  color: var(--editor-heading);
+}
+
+.automation-editor-close {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  color: #4f46e5;
+  background: #e0e7ff;
+  transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.automation-editor-close:hover {
+  border-color: #a5b4fc;
+  color: #3730a3;
+  background: #c7d2fe;
+}
+
+.automation-editor-section {
+  border-color: #c7d2fe !important;
+  background: rgb(238 242 255 / 0.52);
+}
+
+.automation-editor-inspector {
+  border-color: var(--editor-border) !important;
+  background: var(--editor-panel) !important;
+}
+
+.contract-device-select {
+  border-color: var(--editor-border) !important;
+  background: var(--editor-panel);
+}
+
+.contract-device-select[open] > summary {
+  background: rgb(99 102 241 / 0.08);
+}
+
+.contract-device-select > summary::after {
+  content: '⌄';
+  flex: 0 0 auto;
+  color: var(--editor-muted);
+  transition: transform 150ms ease;
+}
+
+.contract-device-select > summary::-webkit-details-marker {
+  display: none;
+}
+
+.contract-device-select[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.contract-device-options {
+  border-color: var(--editor-border) !important;
+}
+
+.contract-device-options label {
+  border-color: var(--editor-border) !important;
+  background: var(--editor-field);
+}
+
+.automation-editor-footer {
+  padding-top: 14px;
+  border-top: 1px solid #dbe3ee;
+}
+
+.automation-diff-modal :deep(.workflow-canvas) {
+  height: min(58vh, 640px);
+}
+
+.automation-diff-modal :deep(.canvas-editor) {
+  min-width: 0;
+}
+
+.automation-editor-modal :deep(.text-\[9px\]) {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.automation-editor-modal :deep(.text-\[10px\]),
+.automation-editor-modal :deep(.text-\[11px\]),
+.automation-editor-modal :deep(.text-xs) {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.automation-editor-modal :deep(.text-sm) {
+  font-size: 15px;
+}
+
+.automation-editor-modal :deep(.text-zinc-400),
+.automation-editor-modal :deep(.text-zinc-500) {
+  color: var(--editor-muted);
+}
+
+.automation-editor-modal label {
+  color: var(--editor-label) !important;
+  font-weight: 600;
+}
+
+.automation-editor-modal summary {
+  color: var(--editor-heading) !important;
+  font-weight: 700;
+}
+
+.automation-editor-modal input,
+.automation-editor-modal select,
+.automation-editor-modal textarea {
+  border-color: var(--editor-border) !important;
+  color: var(--editor-text) !important;
+  background-color: var(--editor-field) !important;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 1 !important;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.automation-editor-modal input:hover,
+.automation-editor-modal select:hover,
+.automation-editor-modal textarea:hover {
+  border-color: #94a3b8 !important;
+}
+
+.automation-editor-modal input:focus,
+.automation-editor-modal select:focus,
+.automation-editor-modal textarea:focus {
+  border-color: #6366f1 !important;
+  outline: none;
+  background-color: var(--editor-field-focus) !important;
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 0.16);
+}
+
+.automation-editor-modal select option {
+  color: var(--editor-text) !important;
+  background-color: var(--editor-panel) !important;
+}
+
+.automation-editor-modal input::placeholder,
+.automation-editor-modal textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+:global(.dark .automation-editor-modal) {
+  --editor-surface: #111827;
+  --editor-panel: #172033;
+  --editor-field: #1e293b;
+  --editor-field-focus: #222d45;
+  --editor-border: #475569;
+  --editor-heading: #c7d2fe;
+  --editor-label: #e4e4e7;
+  --editor-muted: #a1a1aa;
+  --editor-text: #f4f4f5;
+  border-color: #374151;
+  background:
+    linear-gradient(180deg, rgb(49 46 129 / 0.24), transparent 190px),
+    var(--editor-surface);
+}
+
+:global(.dark .automation-editor-header),
+:global(.dark .automation-editor-footer) {
+  border-color: #334155;
+}
+
+:global(.dark .automation-editor-close) {
+  border-color: #4338ca;
+  color: #c7d2fe;
+  background: rgb(49 46 129 / 0.55);
+}
+
+:global(.dark .automation-editor-close:hover) {
+  border-color: #6366f1;
+  color: #eef2ff;
+  background: rgb(67 56 202 / 0.68);
+}
+
+:global(.dark .automation-editor-section) {
+  border-color: #373e68 !important;
+  background: rgb(49 46 129 / 0.13);
+}
+
+:global(.dark .automation-editor-modal .text-zinc-400),
+:global(.dark .automation-editor-modal .text-zinc-500),
+:global(.dark .automation-editor-modal label) {
+  color: var(--editor-label) !important;
+}
+
+:global(.dark .automation-editor-modal summary) {
+  color: var(--editor-heading) !important;
+}
+
+:global(.dark .automation-editor-modal input),
+:global(.dark .automation-editor-modal select),
+:global(.dark .automation-editor-modal textarea) {
+  border-color: var(--editor-border) !important;
+  color: var(--editor-text) !important;
+  background-color: var(--editor-field) !important;
+}
+
+:global(.dark .automation-editor-modal select option) {
+  color: var(--editor-text) !important;
+  background-color: var(--editor-panel) !important;
+}
+
+:global(.dark .automation-editor-modal input::placeholder),
+:global(.dark .automation-editor-modal textarea::placeholder) {
+  color: #94a3b8 !important;
+}

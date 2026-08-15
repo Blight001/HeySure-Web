@@ -1,5 +1,4 @@
 import { computed, ref, watch, type Ref } from 'vue'
-import { formatDate, formatDateMinute } from '@/utils/datetime'
 import {
   batchDeleteTaskJobsById,
   deleteTaskJobById,
@@ -9,6 +8,14 @@ import {
   triggerTaskForAgent,
   updateTaskJobById,
 } from '@/api/task'
+import {
+  buildTaskCreateForm,
+  buildTaskCreateFormFromJob,
+  buildTaskSubmitPayload,
+  parseAgentMcpTools,
+  toolsMatch,
+  validateTaskCreateForm,
+} from './useTaskManagementHelpers'
 import {
   canPauseTaskJob,
   canResumeTaskJob,
@@ -95,121 +102,27 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
     selectedTaskJobIds.value = []
   }
 
-  const parseAgentMcpTools = (agent?: Agent | null) => {
-    try {
-      const parsed = JSON.parse(agent?.mcpTools || '[]')
-      if (Array.isArray(parsed)) {
-        return parsed.map(item => String(item || '').trim()).filter(Boolean)
-      }
-    } catch {
-      // ignore parse issue and fallback
-    }
-    return [...(availableMcpTools.value.length ? availableMcpTools.value : defaultMcpTools)]
-  }
-
-  const buildTaskCreateForm = (agent?: Agent | null): TaskCreateForm => ({
-    title: '',
-    instruction: '',
-    priority: 5,
-    schedule_enabled: false,
-    schedule_loop_enabled: false,
-    schedule_loop_mode: 'interval',
-    schedule_run_immediately: false,
-    schedule_time_mode: 'duration',
-    schedule_duration_minutes: 30,
-    schedule_daily_time: '09:00',
-    schedule_weekly_days: [],
-    schedule_max_runs: 0,
-    schedule_end_at: '',
-    schedule_at: '',
-    override_mcp_tools_enabled: false,
-    mcp_tools_override: parseAgentMcpTools(agent),
-  })
-
-  const formatDateLocal = (unixSeconds?: number) => {
-    const ts = Number(unixSeconds || 0)
-    return Number.isFinite(ts) && ts > 0 ? formatDate(ts, '') : ''
-  }
-
-  const formatDateTimeLocal = (unixSeconds?: number) => {
-    const ts = Number(unixSeconds || 0)
-    return Number.isFinite(ts) && ts > 0 ? formatDateMinute(ts, '').replace(' ', 'T') : ''
-  }
-
-  const buildTaskCreateFormFromJob = (agent?: Agent | null, job?: AITaskJobItem | null): TaskCreateForm => {
-    const base = buildTaskCreateForm(agent)
-    if (!job) return base
-
-    const payload = job.task_payload && typeof job.task_payload === 'object'
-      ? job.task_payload
-      : {}
-    const schedule = payload.schedule && typeof payload.schedule === 'object'
-      ? payload.schedule
-      : {}
-    const overrideMcp = payload.override_mcp_tools && typeof payload.override_mcp_tools === 'object'
-      ? payload.override_mcp_tools
-      : {}
-
-    const overrideMcpTools = Array.isArray(overrideMcp.tools)
-      ? overrideMcp.tools.map((item: any) => String(item || '').trim()).filter(Boolean)
-      : []
-
-    const loopEnabled = !!schedule.loop_enabled
-    let parsedScheduleAt = Number(schedule.schedule_at)
-    if (!Number.isFinite(parsedScheduleAt) && typeof schedule.schedule_at === 'string') {
-      const parsedMs = Date.parse(schedule.schedule_at)
-      if (Number.isFinite(parsedMs) && parsedMs > 0) {
-        parsedScheduleAt = Math.floor(parsedMs / 1000)
-      }
-    }
-    const hasScheduleAt = Number.isFinite(parsedScheduleAt) && parsedScheduleAt > 0
-    const scheduleTimeMode: TaskCreateForm['schedule_time_mode'] = (!loopEnabled && hasScheduleAt) ? 'datetime' : 'duration'
-    const rawLoopMode = String(schedule.loop_mode || 'interval')
-    const loopMode: TaskCreateForm['schedule_loop_mode'] =
-      rawLoopMode === 'daily' || rawLoopMode === 'weekly' ? rawLoopMode : 'interval'
-    return {
-      ...base,
-      title: String(job.title || ''),
-      instruction: String(job.instruction || ''),
-      priority: Math.max(1, Math.min(10, Number(job.priority) || 5)),
-      schedule_enabled: !!schedule.enabled,
-      schedule_loop_enabled: loopEnabled,
-      schedule_loop_mode: loopMode,
-      schedule_run_immediately: !!schedule.run_immediately,
-      schedule_time_mode: scheduleTimeMode,
-      schedule_duration_minutes: Math.max(1, Number(schedule.duration_minutes) || 30),
-      schedule_daily_time: String(schedule.daily_time || base.schedule_daily_time),
-      schedule_weekly_days: Array.isArray(schedule.weekly_days)
-        ? schedule.weekly_days.map((d: any) => Number(d)).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6)
-        : [],
-      schedule_max_runs: Math.max(0, Number(schedule.max_runs) || 0),
-      schedule_end_at: formatDateLocal(Number(schedule.end_at) || 0),
-      schedule_at: scheduleTimeMode === 'datetime' ? formatDateTimeLocal(parsedScheduleAt) : '',
-      override_mcp_tools_enabled: !!overrideMcp.enabled,
-      mcp_tools_override: overrideMcpTools.length > 0 ? overrideMcpTools : base.mcp_tools_override,
-    }
-  }
-
-  const taskCreateForm = ref<TaskCreateForm>(buildTaskCreateForm())
+  const fallbackTools = () => (availableMcpTools.value.length ? availableMcpTools.value : defaultMcpTools)
+  const taskCreateForm = ref<TaskCreateForm>(buildTaskCreateForm(null, fallbackTools()))
 
   const openTaskCreatePanel = (agent?: Agent | null) => {
     if (!agent?.aiConfigId) return
     taskEditingJob.value = null
-    taskCreateForm.value = buildTaskCreateForm(agent)
+    taskCreateForm.value = buildTaskCreateForm(agent, fallbackTools())
     taskCreatePanelOpen.value = true
   }
 
   const openTaskCreatePanelFromJob = (agent?: Agent | null, job?: AITaskJobItem | null) => {
     if (!agent?.aiConfigId || !job?.job_id) return
     taskEditingJob.value = null
-    taskCreateForm.value = buildTaskCreateFormFromJob(agent, job)
+    taskCreateForm.value = buildTaskCreateFormFromJob(agent, job, fallbackTools())
     taskCreatePanelOpen.value = true
   }
 
   const openTaskEditPanel = (agent?: Agent | null, job?: AITaskJobItem | null) => {
     if (!agent?.aiConfigId || !job?.job_id) return
     taskEditingJob.value = job
-    taskCreateForm.value = buildTaskCreateFormFromJob(agent, job)
+    taskCreateForm.value = buildTaskCreateFormFromJob(agent, job, fallbackTools())
     taskCreatePanelOpen.value = true
   }
 
@@ -242,79 +155,20 @@ export const useTaskManagement = (options: UseTaskManagementOptions) => {
   const submitTaskForAgent = async (agent?: Agent | null) => {
     if (!agent?.aiConfigId || taskCreateSubmitting.value) return
     const editingJob = taskEditingJob.value
-    const title = taskCreateForm.value.title.trim()
-    if (!title) {
-      void alert({ message: '请填写任务名称', type: 'warning' })
-      return
-    }
-    if (!taskCreateForm.value.instruction.trim()) {
-      void alert({ message: '请填写任务具体内容', type: 'warning' })
-      return
-    }
-    if (taskCreateForm.value.override_mcp_tools_enabled && taskCreateForm.value.mcp_tools_override.length === 0) {
-      void alert({ message: '已启用 MCP 范围覆盖时，请至少选择一个工具', type: 'warning' })
+    const invalid = validateTaskCreateForm(taskCreateForm.value)
+    if (invalid) {
+      void alert({ message: invalid, type: 'warning' })
       return
     }
     const token = getAuthToken()
     if (!token) return
-    const defaultTools = parseAgentMcpTools(agent)
+    const defaultTools = parseAgentMcpTools(agent, fallbackTools())
     const selectedTools = [...taskCreateForm.value.mcp_tools_override].map(v => String(v || '').trim()).filter(Boolean)
-    const sameToolCount = selectedTools.length === defaultTools.length
-    const sameTools = sameToolCount && selectedTools.every(tool => defaultTools.includes(tool))
-    const autoEnableMcpOverride = !editingJob && !sameTools
-    const useScheduleDatetime = !!taskCreateForm.value.schedule_enabled
-      && !taskCreateForm.value.schedule_loop_enabled
-      && taskCreateForm.value.schedule_time_mode === 'datetime'
-    if (useScheduleDatetime && !taskCreateForm.value.schedule_at) {
-      void alert({ message: '请选择定时日期', type: 'warning' })
-      return
-    }
-    const loopEnabled = !!taskCreateForm.value.schedule_enabled && !!taskCreateForm.value.schedule_loop_enabled
-    const loopMode = loopEnabled ? taskCreateForm.value.schedule_loop_mode : 'interval'
-    if (loopEnabled && (loopMode === 'daily' || loopMode === 'weekly')) {
-      if (!/^\d{1,2}:\d{2}$/.test(taskCreateForm.value.schedule_daily_time.trim())) {
-        void alert({ message: '请选择循环触发时刻（HH:MM）', type: 'warning' })
-        return
-      }
-      if (loopMode === 'weekly' && taskCreateForm.value.schedule_weekly_days.length === 0) {
-        void alert({ message: '每周循环请至少选择一个星期', type: 'warning' })
-        return
-      }
-    }
-    let normalizedScheduleAt: number | string | null = null
-    if (useScheduleDatetime && taskCreateForm.value.schedule_at) {
-      const parsedMs = Date.parse(taskCreateForm.value.schedule_at)
-      normalizedScheduleAt = Number.isFinite(parsedMs) && parsedMs > 0
-        ? Math.floor(parsedMs / 1000)
-        : taskCreateForm.value.schedule_at
-    }
-    // 截止日期按当天结束算（23:59:59），让最后一天仍可触发
-    let normalizedEndAt: number | null = null
-    if (loopEnabled && taskCreateForm.value.schedule_end_at) {
-      const parsedMs = Date.parse(`${taskCreateForm.value.schedule_end_at}T23:59:59`)
-      if (Number.isFinite(parsedMs) && parsedMs > 0) normalizedEndAt = Math.floor(parsedMs / 1000)
-    }
+    const autoEnableMcpOverride = !editingJob && !toolsMatch(selectedTools, defaultTools)
+    const title = taskCreateForm.value.title.trim()
     taskCreateSubmitting.value = true
     try {
-      const payload = {
-        title,
-        instruction: taskCreateForm.value.instruction.trim(),
-        priority: Math.max(1, Math.min(10, Number(taskCreateForm.value.priority) || 5)),
-        schedule_enabled: !!taskCreateForm.value.schedule_enabled,
-        schedule_loop_enabled: loopEnabled,
-        schedule_loop_mode: loopMode,
-        schedule_run_immediately: loopEnabled && !!taskCreateForm.value.schedule_run_immediately,
-        schedule_duration_minutes: Math.max(1, Number(taskCreateForm.value.schedule_duration_minutes) || 30),
-        schedule_daily_time: loopEnabled && (loopMode === 'daily' || loopMode === 'weekly')
-          ? taskCreateForm.value.schedule_daily_time.trim()
-          : '',
-        schedule_weekly_days: loopEnabled && loopMode === 'weekly' ? [...taskCreateForm.value.schedule_weekly_days] : [],
-        schedule_max_runs: loopEnabled ? Math.max(0, Number(taskCreateForm.value.schedule_max_runs) || 0) : 0,
-        schedule_end_at: normalizedEndAt,
-        schedule_at: normalizedScheduleAt,
-        override_mcp_tools_enabled: !!taskCreateForm.value.override_mcp_tools_enabled || autoEnableMcpOverride,
-        mcp_tools_override: selectedTools,
-      }
+      const payload = buildTaskSubmitPayload(taskCreateForm.value, selectedTools, autoEnableMcpOverride)
       const data = editingJob
         ? await updateTaskJobById(agent.aiConfigId, editingJob.job_id, payload, token)
         : await triggerTaskForAgent(agent.aiConfigId, payload, token)
