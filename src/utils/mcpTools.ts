@@ -118,7 +118,10 @@ const getEndpointCapabilityTag = (name: string) => {
   return ''
 }
 
+const DESKTOP_EXACT_TAGS: Record<string, string> = { run_command: '终端', clipboard: '剪贴板' }
+
 const getMcpToolFallbackTag = (name: string) => {
+  if (DESKTOP_EXACT_TAGS[name]) return DESKTOP_EXACT_TAGS[name]
   const endpointCapabilityTag = getEndpointCapabilityTag(name)
   if (endpointCapabilityTag) return endpointCapabilityTag
   // workspace.run+command（终端/文件操作）、workspace.search（联网搜索）同归「工作区」。
@@ -149,6 +152,9 @@ const getMcpToolSource = (name: string): 'server' | 'desktop' | 'browser' => {
   if (!normalized) return 'server'
   if (hasMcpPrefix(normalized, 'browser') || hasMcpPrefix(normalized, 'card')) {
     return 'browser'
+  }
+  if (normalized === 'run_command' || normalized === 'clipboard' || /^(desktop|mouse|keyboard|screen|window|clipboard|shell|fs|git|process|speech|vision|text|display|hands|ui)[._]/.test(normalized)) {
+    return 'desktop'
   }
   return 'server'
 }
@@ -187,6 +193,11 @@ const MCP_TOOL_ZH_LABELS: Record<string, string> = {
   browser_cookie: '管理 Cookie',
   browser_storage: '管理存储',
   browser_session: '管理会话',
+  run_command: '命令执行',
+  desktop_observe: '桌面观察',
+  desktop_screenshot: '桌面截图',
+  desktop_action: '桌面操作',
+  clipboard: '剪贴板',
   'mouse.move': '鼠标移动',
   'mouse.click': '鼠标点击',
   'mouse.double_click': '鼠标双击',
