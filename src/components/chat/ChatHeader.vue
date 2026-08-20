@@ -207,9 +207,9 @@ useDismissibleLayer({
 </script>
 
 <template>
-  <div ref="rootRef" class="relative flex items-center gap-2 min-w-0">
+  <div ref="rootRef" class="relative flex w-full min-w-0 max-w-full items-center gap-2">
     <button
-      class="min-w-[140px] sm:min-w-[200px] max-w-[260px] sm:max-w-[320px] px-2 sm:px-3 py-1.5 sm:py-2 text-xs rounded-lg border border-zinc-200 bg-white/90 text-zinc-700 dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-200 flex items-center justify-between gap-2 overflow-hidden"
+      class="w-full min-w-0 max-w-[260px] sm:min-w-[200px] sm:max-w-[320px] px-2 sm:px-3 py-1.5 sm:py-2 text-xs rounded-lg border border-zinc-200 bg-white/90 text-zinc-700 dark:bg-zinc-800/80 dark:border-zinc-700 dark:text-zinc-200 flex items-center justify-between gap-2 overflow-hidden"
       @click="toggleOpen"
     >
       <span class="truncate text-left min-w-0">{{ currentSessionName }}</span>

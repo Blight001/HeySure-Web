@@ -30,6 +30,16 @@ export interface PendingUploadAttachment extends chatApi.ChatAttachment {
   status: 'uploading' | 'ready'
 }
 
+export interface QueuedChatMessage {
+  id: string
+  content: string
+  mentions: ChatMention[]
+  attachments: PendingUploadAttachment[]
+  selectedFiles: string[]
+  selectedMcpToolNames: string[]
+  createdAt: number
+}
+
 export interface SessionItem {
   id: string
   name: string

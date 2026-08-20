@@ -30,6 +30,7 @@ const initializeSessions = async (ctx: WorkspaceLifecycleCtx) => {
   void ctx.prompt.loadFrontPromptToolSchemas()
   await ctx.sessions.loadSessions()
   const requested = ctx.state.preferredInitialSessionId.value
+    || ctx.send.findQueuedSessionId(ctx.state.sessionList.value.map(item => item.id))
   if (requested && ctx.state.sessionList.value.some(item => item.id === requested)) {
     ctx.state.currentSessionId.value = requested
     await ctx.history.loadChatHistory(ctx.state.currentSessionId.value)

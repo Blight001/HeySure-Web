@@ -128,7 +128,7 @@ const applyLiveTexts = (
   liveLen?: number,
 ) => {
   pinIfTurnCleared(ctl.trackers, currText, currReason, ctl.deps.live.pinCompletedLiveSegment)
-  ctl.deps.live.liveThinkingText.value = currReason
+  ctl.deps.live.updateLiveThinkingView(currReason)
   ctl.deps.live.updateLiveAssistantView(nextViewText)
   ctl.deps.live.liveCursor.value = Number.isFinite(liveLen) ? Number(liveLen) : ctl.deps.live.liveTargetText.value.length
   requestSyncForTurn(ctl.trackers, currText, currReason, incomingPhase, toolChanged, () => requestRunHistorySync(ctl))
@@ -344,7 +344,7 @@ const applyActiveRun = (ctl: RunCtl, run: any) => {
   syncRunPhase(phaseCtlOf(ctl), (run.live_phase || 'generating') as ChatRunPhase)
   ctl.deps.state.currentMcpTool.value = String(run.current_tool || '')
   ctl.deps.state.currentMcpArguments.value = String(run.current_tool_arguments || '')
-  ctl.deps.live.liveThinkingText.value = String(run.live_reasoning || '')
+  ctl.deps.live.updateLiveThinkingView(String(run.live_reasoning || ''))
   ctl.deps.live.updateLiveAssistantView(String(run.live_text || ''))
   ctl.deps.live.liveCursor.value = Number(run.live_len || String(run.live_text || '').length || 0)
   ctl.deps.state.isTyping.value = ['queued', 'running'].includes(ctl.deps.state.currentRunStatus.value)

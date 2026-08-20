@@ -5,12 +5,19 @@ const USER_SCROLL_INTENT_MS = 900
 const PIN_SETTLE_INTERVAL_MS = 90
 const PIN_SETTLE_MAX_MS = 4000
 const LOAD_OLDER_THRESHOLD_PX = 800
+const FOLLOW_SPRING = 190
+const FOLLOW_DAMPING = 27
+const FOLLOW_MAX_SPEED = 4200
+const FOLLOW_SNAP_DISTANCE = 0.75
 
 interface ScrollBag {
   chatScrollRef: Ref<HTMLElement | null>
   chatRootRef: Ref<HTMLElement | null>
   stickToBottom: Ref<boolean>
   visualViewportFrame: number | null
+  followFrame: number | null
+  followVelocity: number
+  followLastFrameTs: number
   chatResizeObserver: ResizeObserver | null
   pinSettleTimer: number | null
   lastProgrammaticScrollTs: number
@@ -35,6 +42,43 @@ const followBottomNow = (bag: ScrollBag) => {
   bag.lastObservedScrollTop = el.scrollTop
 }
 
+const stopDampedFollow = (bag: ScrollBag) => {
+  if (bag.followFrame !== null) window.cancelAnimationFrame(bag.followFrame)
+  bag.followFrame = null
+  bag.followVelocity = 0
+  bag.followLastFrameTs = 0
+}
+
+const runDampedFollowFrame = (bag: ScrollBag, ts: number) => {
+  bag.followFrame = null
+  const el = bag.chatScrollRef.value
+  if (!el || !bag.stickToBottom.value) {
+    stopDampedFollow(bag)
+    return
+  }
+  const target = Math.max(0, el.scrollHeight - el.clientHeight)
+  const distance = target - el.scrollTop
+  const dt = bag.followLastFrameTs > 0 ? Math.min(0.034, (ts - bag.followLastFrameTs) / 1000) : 1 / 60
+  bag.followLastFrameTs = ts
+  const acceleration = distance * FOLLOW_SPRING - bag.followVelocity * FOLLOW_DAMPING
+  bag.followVelocity = Math.max(-FOLLOW_MAX_SPEED, Math.min(FOLLOW_MAX_SPEED, bag.followVelocity + acceleration * dt))
+  if (Math.abs(distance) <= FOLLOW_SNAP_DISTANCE && Math.abs(bag.followVelocity) < 12) {
+    followBottomNow(bag)
+    stopDampedFollow(bag)
+    return
+  }
+  const nextTop = el.scrollTop + bag.followVelocity * dt
+  bag.lastProgrammaticScrollTs = Date.now()
+  el.scrollTop = distance > 0 ? Math.min(target, nextTop) : Math.max(target, nextTop)
+  bag.lastObservedScrollTop = el.scrollTop
+  bag.followFrame = window.requestAnimationFrame(nextTs => runDampedFollowFrame(bag, nextTs))
+}
+
+const followBottomDamped = (bag: ScrollBag) => {
+  if (!bag.stickToBottom.value || bag.followFrame !== null) return
+  bag.followFrame = window.requestAnimationFrame(ts => runDampedFollowFrame(bag, ts))
+}
+
 const syncVisualViewport = (bag: ScrollBag) => {
   if (bag.visualViewportFrame !== null) return
   bag.visualViewportFrame = window.requestAnimationFrame(() => {
@@ -54,10 +98,12 @@ const scrollToBottom = async (bag: ScrollBag, smooth = false) => {
   await nextTick()
   const el = bag.chatScrollRef.value
   if (!el) return
-  bag.lastProgrammaticScrollTs = Date.now()
-  if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  else el.scrollTop = el.scrollHeight
-  bag.lastObservedScrollTop = el.scrollTop
+  if (smooth) {
+    followBottomDamped(bag)
+    return
+  }
+  stopDampedFollow(bag)
+  followBottomNow(bag)
 }
 
 const pinToBottomSettled = (bag: ScrollBag) => {
@@ -73,7 +119,7 @@ const pinToBottomSettled = (bag: ScrollBag) => {
     const el = bag.chatScrollRef.value
     if (!el || !bag.stickToBottom.value) return
     const height = el.scrollHeight
-    followBottomNow(bag)
+    followBottomDamped(bag)
     if (height === prevHeight) stableTicks += 1
     else {
       stableTicks = 0
@@ -92,16 +138,17 @@ const updateStickFromScroll = (bag: ScrollBag) => {
   const currentTop = el.scrollTop
   const movedTowardHistory = currentTop < bag.lastObservedScrollTop - 1
   bag.lastObservedScrollTop = currentTop
+  if (movedTowardHistory && now <= bag.userScrollIntentUntil) {
+    bag.stickToBottom.value = false
+    stopDampedFollow(bag)
+    return
+  }
   if (isNearBottom(el)) {
     bag.stickToBottom.value = true
     return
   }
-  if (movedTowardHistory && now <= bag.userScrollIntentUntil) {
-    bag.stickToBottom.value = false
-    return
-  }
   if (now - bag.lastProgrammaticScrollTs < PROGRAMMATIC_SCROLL_GRACE_MS) return
-  if (bag.stickToBottom.value) followBottomNow(bag)
+  if (bag.stickToBottom.value) followBottomDamped(bag)
 }
 
 const handleScroll = (bag: ScrollBag) => {
@@ -114,6 +161,8 @@ const handleScroll = (bag: ScrollBag) => {
 
 const markUserScrollIntent = (bag: ScrollBag) => {
   bag.userScrollIntentUntil = Date.now() + USER_SCROLL_INTENT_MS
+  bag.stickToBottom.value = false
+  stopDampedFollow(bag)
 }
 
 const resumeFollowingLatest = async (bag: ScrollBag) => {
@@ -205,9 +254,10 @@ const bindScrollElement = (bag: ScrollBag, el: HTMLElement) => {
   if (typeof ResizeObserver === 'undefined') return
   bag.chatResizeObserver = new ResizeObserver(() => {
     if (!bag.chatScrollRef.value || !bag.stickToBottom.value) return
-    followBottomNow(bag)
+    followBottomDamped(bag)
   })
-  bag.chatResizeObserver.observe(el.firstElementChild ?? el)
+  bag.chatResizeObserver.observe(el)
+  if (el.firstElementChild) bag.chatResizeObserver.observe(el.firstElementChild)
 }
 
 const detachScrollElement = (bag: ScrollBag, el: HTMLElement | null) => {
@@ -226,6 +276,7 @@ const preserveAnchorAfterPrepend = (bag: ScrollBag, prevHeight: number, prevTop:
 }
 
 const cleanupViewport = (bag: ScrollBag) => {
+  stopDampedFollow(bag)
   if (bag.visualViewportFrame !== null) {
     window.cancelAnimationFrame(bag.visualViewportFrame)
     bag.visualViewportFrame = null
@@ -242,6 +293,9 @@ export const useChatScroll = () => {
     chatRootRef: ref<HTMLElement | null>(null),
     stickToBottom: ref(true),
     visualViewportFrame: null,
+    followFrame: null,
+    followVelocity: 0,
+    followLastFrameTs: 0,
     chatResizeObserver: null,
     pinSettleTimer: null,
     lastProgrammaticScrollTs: 0,
@@ -277,6 +331,7 @@ export const useChatScroll = () => {
     pinToBottomSettled: () => pinToBottomSettled(bag),
     resumeFollowingLatest: () => resumeFollowingLatest(bag),
     followBottomNow: () => followBottomNow(bag),
+    followBottomDamped: () => followBottomDamped(bag),
     setLoadOlder: (fn: () => void) => { bag.onLoadOlder = fn },
     preserveAnchorAfterPrepend: (prevHeight: number, prevTop: number) =>
       preserveAnchorAfterPrepend(bag, prevHeight, prevTop),

@@ -31,6 +31,7 @@ const props = defineProps<{
   modelValue: string
   isTyping: boolean
   isSubmitting?: boolean
+  queueMode?: boolean
   isFileSelectorOpen: boolean
   allFiles: string[]
   selectedFiles: string[]
@@ -345,6 +346,7 @@ watch(() => [props.modelValue, props.mentions] as const, async ([value]) => {
         :show-stop="showStop"
         :can-send="canSend"
         :submitting="!!isSubmitting"
+        :queue-mode="!!queueMode"
         @click="handlePrimaryAction"
       />
     </div>

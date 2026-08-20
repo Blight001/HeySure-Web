@@ -3,6 +3,7 @@ defineProps<{
   showStop: boolean
   canSend: boolean
   submitting?: boolean
+  queueMode?: boolean
 }>()
 
 defineEmits<{
@@ -22,7 +23,7 @@ defineEmits<{
         : 'cursor-not-allowed bg-zinc-100/60 text-zinc-300 dark:bg-zinc-800/60 dark:text-zinc-600'"
     @click="$emit('click')"
     :disabled="submitting || (!showStop && !canSend)"
-    :title="submitting ? '正在发送' : (showStop ? '终止生成' : '发送')"
+    :title="submitting ? '正在处理' : (showStop ? '终止生成' : (queueMode ? '加入聊天队列' : '发送'))"
   >
     <svg v-if="submitting" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle class="opacity-30" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" />

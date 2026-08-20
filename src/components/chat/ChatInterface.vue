@@ -9,6 +9,7 @@ import heySureLogo from '@/assets/logo/HeySure.png'
 import ChatHeader from './ChatHeader.vue'
 import ChatConversationView from './ChatConversationView.vue'
 import ChatInput from './ChatInput.vue'
+import ChatQueuePanel from './ChatQueuePanel.vue'
 import FrontPromptPreview from './FrontPromptPreview.vue'
 import { resolveRemoteScreenDevice } from '@/utils/chatRemoteScreen'
 
@@ -37,6 +38,8 @@ const {
   deleteSessions,
   renameSession,
   pendingQueue,
+  removePendingQueueItem,
+  updatePendingQueueItem,
   frontPromptUsesPortal,
   openFrontPromptPopup,
   scheduleFrontPromptPopupClose,
@@ -120,8 +123,8 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
 </script>
 
 <template>
-  <div ref="chatRootRef" class="chat-viewport flex flex-col h-full gap-3">
-    <div class="flex items-center justify-between gap-1 sm:gap-2">
+  <div ref="chatRootRef" class="chat-viewport flex h-full w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden">
+    <div class="flex w-full min-w-0 max-w-full items-center justify-between gap-1 sm:gap-2">
       <div class="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
         <ChatHeader
           :currentSessionId="currentSessionId"
@@ -134,11 +137,6 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
         />
       </div>
       <div class="flex items-center gap-1 sm:gap-2 shrink-0">
-        <span
-          v-if="pendingQueue.length"
-          class="shrink-0 text-[11px] tabular-nums text-amber-600 dark:text-amber-400"
-          title="AI 正在生成，这些消息将于本轮结束后自动接上"
-        >待发送 {{ pendingQueue.length }} 条</span>
         <div
           class="relative"
           :class="{ 'group/front-prompt': !frontPromptUsesPortal }"
@@ -240,16 +238,15 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
             alt="HeySure"
             class="h-16 w-16 sm:h-20 sm:w-20 object-contain opacity-90 drop-shadow-sm"
           />
-          <div class="text-center space-y-1">
+          <div class="text-center">
             <div class="text-sm font-medium text-zinc-600 dark:text-zinc-300">开始一场新对话</div>
-            <div class="text-xs text-zinc-400 dark:text-zinc-500">输入第一句话后会自动生成标题，也可稍后手动重命名</div>
           </div>
 
           <div
             v-if="recentNormalSessions.length > 0 || recentTaskSessions.length > 0"
-            class="grid w-full max-w-2xl gap-4 sm:grid-cols-2"
+            class="w-full min-w-0 max-w-xl space-y-4 overflow-x-hidden"
           >
-            <div class="space-y-2">
+            <div class="min-w-0 space-y-2">
               <div class="px-1 text-[11px] font-semibold tracking-wide text-zinc-400 dark:text-zinc-500">
                 最近普通对话
               </div>
@@ -258,7 +255,7 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
                   v-for="session in recentNormalSessions"
                   :key="session.id"
                   type="button"
-                  class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-zinc-700 transition-colors hover:bg-indigo-50/70 dark:text-zinc-200 dark:hover:bg-indigo-900/20"
+                  class="flex w-full min-w-0 max-w-full items-center gap-2 overflow-hidden px-3 py-2.5 text-left text-xs text-zinc-700 transition-colors hover:bg-indigo-50/70 dark:text-zinc-200 dark:hover:bg-indigo-900/20"
                   @click="loadChatHistory(session.id)"
                 >
                   <span class="min-w-0 flex-1 truncate">{{ session.name || BLANK_SESSION_NAME }}</span>
@@ -272,7 +269,7 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
               </div>
             </div>
 
-            <div class="space-y-2">
+            <div class="min-w-0 space-y-2">
               <div class="px-1 text-[11px] font-semibold tracking-wide text-zinc-400 dark:text-zinc-500">
                 最近任务对话
               </div>
@@ -281,7 +278,7 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
                   v-for="session in recentTaskSessions"
                   :key="session.id"
                   type="button"
-                  class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-zinc-700 transition-colors hover:bg-emerald-50/70 dark:text-zinc-200 dark:hover:bg-emerald-900/20"
+                  class="flex w-full min-w-0 max-w-full items-center gap-2 overflow-hidden px-3 py-2.5 text-left text-xs text-zinc-700 transition-colors hover:bg-emerald-50/70 dark:text-zinc-200 dark:hover:bg-emerald-900/20"
                   @click="loadChatHistory(session.id)"
                 >
                   <span class="min-w-0 flex-1 truncate">{{ session.name || BLANK_SESSION_NAME }}</span>
@@ -345,11 +342,19 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
         </svg>
       </button>
 
+      <ChatQueuePanel
+        class="relative z-10"
+        :items="pendingQueue"
+        @update="updatePendingQueueItem"
+        @delete="removePendingQueueItem"
+      />
+
       <ChatInput
         class="relative z-10"
         v-model="chatInput"
         :isTyping="isTyping"
         :isSubmitting="isSubmitting"
+        :queueMode="isRunActive || pendingQueue.length > 0"
         :isFileSelectorOpen="isFileSelectorOpen"
         :allFiles="allFiles"
         :selectedFiles="selectedFiles"

@@ -7,12 +7,13 @@ const LIVE_MIN_SPEED = 36
 const LIVE_MAX_SPEED = 560
 const LIVE_DAMPING = 12
 const LIVE_SPEED_GAIN = 58
-const LIVE_SCROLL_INTERVAL_MS = 84
+const LIVE_SCROLL_INTERVAL_MS = 32
 
 export interface LiveScrollHooks {
   stickToBottom: Ref<boolean>
   chatScrollRef: Ref<HTMLElement | null>
   followBottomNow: () => void
+  followBottomDamped: () => void
 }
 
 interface LiveAssistState {
@@ -33,12 +34,17 @@ const applyLiveAssistantText = (bag: LiveAssistState, text: string) => {
   bag.liveAssistantText.value = text
 }
 
+const updateLiveThinkingView = (bag: LiveAssistState, text: string) => {
+  bag.liveThinkingText.value = text
+  if (bag.scroll.stickToBottom.value) bag.scroll.followBottomDamped()
+}
+
 const maybeAutoScrollDuringLive = (bag: LiveAssistState, ts: number) => {
   const el = bag.scroll.chatScrollRef.value
   if (!el || !bag.scroll.stickToBottom.value) return
   if (ts - bag.liveLastScrollTs < LIVE_SCROLL_INTERVAL_MS) return
   bag.liveLastScrollTs = ts
-  bag.scroll.followBottomNow()
+  bag.scroll.followBottomDamped()
 }
 
 const stopLiveTypingLoop = (bag: LiveAssistState) => {
@@ -170,6 +176,7 @@ export const useChatLiveAssistant = (scroll: LiveScrollHooks, messages: Ref<Chat
     liveAssistantText: bag.liveAssistantText,
     liveTargetText: bag.liveTargetText,
     liveCursor: bag.liveCursor,
+    updateLiveThinkingView: (text: string) => updateLiveThinkingView(bag, text),
     updateLiveAssistantView: (text: string) => updateLiveAssistantView(bag, text),
     clearLiveAssistantView: () => clearLiveAssistantView(bag),
     stopLiveTypingLoop: () => stopLiveTypingLoop(bag),
