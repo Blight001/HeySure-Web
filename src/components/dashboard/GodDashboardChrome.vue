@@ -21,6 +21,7 @@ const emit = defineEmits<{
   (e: 'open-admin'): void
   (e: 'open-maintenance'): void
   (e: 'open-settings'): void
+  (e: 'open-device-hall'): void
   (e: 'toggle-user-menu'): void
   (e: 'update-profile'): void
   (e: 'logout'): void
@@ -59,6 +60,13 @@ const emit = defineEmits<{
             <span class="text-xs text-zinc-400 uppercase font-semibold">文明代数</span>
             <span class="text-lg font-bold text-emerald-600 leading-none">Gen {{ globalGeneration }}</span>
           </div>
+          <button
+            class="ml-1 hidden h-8 items-center gap-1.5 rounded-full border border-cyan-200/70 bg-white/60 px-2.5 text-cyan-700 shadow-sm transition-colors hover:bg-cyan-50 dark:border-cyan-700/60 dark:bg-zinc-800/60 dark:text-cyan-300 dark:hover:bg-cyan-950/40 md:flex md:h-9 md:px-3"
+            title="下载并连接新设备"
+            @click.stop="emit('open-device-hall')"
+          >
+            <AppIcon name="download" class="h-4 w-4" /><span class="hidden text-xs font-semibold xl:inline">设备大厅</span>
+          </button>
           <button
             class="ml-1 sm:ml-2 flex h-8 items-center gap-1.5 rounded-full border border-indigo-200/70 bg-white/60 px-2.5 text-indigo-600 shadow-sm transition-colors hover:bg-indigo-50 dark:border-indigo-700/60 dark:bg-zinc-800/60 dark:text-indigo-300 dark:hover:bg-indigo-950/40 md:h-9 md:px-3"
             title="项目维护中心"

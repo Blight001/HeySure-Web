@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Agent } from '@/types'
+import type { ChatDeviceHint } from './godDashboardAgents'
 import ChatInterface from '@/components/chat/ChatInterface.vue'
 import ChatTokenUsageBar from '@/components/chat/ChatTokenUsageBar.vue'
 import TaskProgressPanel from '@/components/chat/TaskProgressPanel.vue'
@@ -17,6 +18,7 @@ const props = defineProps<{
   selectableFileRoot?: string
   cascadeIndex: number
   zIndex: number
+  connectedDevices: ChatDeviceHint[]
 }>()
 
 const emit = defineEmits<{
@@ -34,8 +36,7 @@ const currentSessionId = ref('')
 const taskPlanRefreshSignal = ref(0)
 const liveTokenUsed = ref(0)
 const dialogHost = computed(() => `chat-${props.windowId}`)
-const aiKind = computed<'assistant' | 'core'>(() =>
-  props.agent.aiRole === 'assistant_admin' ? 'assistant' : 'core')
+const aiKind = computed<'core'>(() => 'core')
 
 const onTotalTokensUpdate = (value: number) => {
   liveTokenUsed.value = Math.max(0, Number(value) || 0)
@@ -168,6 +169,7 @@ onBeforeUnmount(() => {
             :selectedFiles="selectedFiles"
             :allFiles="allFiles"
             :selectable-file-root="selectableFileRoot"
+            :remote-screen-devices="connectedDevices"
             @update:selectedFiles="selectedFiles = $event"
             @update:currentSessionId="currentSessionId = $event"
             @taskPlanRefresh="taskPlanRefreshSignal = $event"

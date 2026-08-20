@@ -52,7 +52,6 @@ const cardBorderClass = computed(() => agentCardBorderClass(props.agent))
 const cardGlowClass = computed(() => agentCardGlowClass(props.agent))
 const titleHoverClass = computed(() => agentTitleHoverClass(props.agent))
 const canControl = computed(() => typeof props.agent.aiConfigId === 'number')
-const isAssistantAdmin = computed(() => props.agent.aiRole === 'assistant_admin')
 const showRecentUserChatBadge = computed(() => !!props.agent.recentUserChatActive)
 const taskSnapshotDisplay = computed(() => props.agent.taskCurrent || null)
 const scheduledSnapshots = computed(() => scheduledTaskSnapshots(props.agent))
@@ -174,7 +173,7 @@ const openTaskDetail = () => {
       </button>
     </div>
 
-    <div v-if="!isAssistantAdmin && (showStatusDisplay || showRecentUserChatBadge)" class="mb-3 flex items-start gap-2 min-w-0">
+    <div v-if="showStatusDisplay || showRecentUserChatBadge" class="mb-3 flex items-start gap-2 min-w-0">
       <div class="flex flex-wrap items-start gap-1.5 min-w-0">
         <span
           v-if="showStatusDisplay"
@@ -250,7 +249,7 @@ const openTaskDetail = () => {
     </div>
 
     <div v-if="canControl" class="flex justify-end gap-2 mt-3 pt-2 border-t border-zinc-50 opacity-0 group-hover:opacity-100 max-lg:opacity-100 transition-opacity dark:border-zinc-800">
-      <button v-if="!isAssistantAdmin" class="text-xs text-zinc-500 hover:text-indigo-600 px-2 py-1 hover:bg-zinc-50 rounded transition-colors dark:text-zinc-400 dark:hover:text-indigo-300 dark:hover:bg-zinc-800" @click.stop="emit('show-tasks', agent)">
+      <button class="text-xs text-zinc-500 hover:text-indigo-600 px-2 py-1 hover:bg-zinc-50 rounded transition-colors dark:text-zinc-400 dark:hover:text-indigo-300 dark:hover:bg-zinc-800" @click.stop="emit('show-tasks', agent)">
         任务列表
       </button>
       <button v-if="agent.androidAgentConnected" class="text-xs text-teal-600 hover:text-teal-700 px-2 py-1 hover:bg-teal-50 rounded transition-colors dark:text-teal-300 dark:hover:text-teal-200 dark:hover:bg-teal-500/10" title="实时查看并控制该安卓设备" @click.stop="openRemote('android', agent.androidAgentId, agent.androidAgentName || agent.name)">

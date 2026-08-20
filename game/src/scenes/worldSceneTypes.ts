@@ -1,7 +1,6 @@
 import type Phaser from 'phaser'
 import type { MemberActor } from '../actors/MemberActor'
 import type { Overlay, TooltipData } from '../ui/overlay'
-import type { MinigameModal } from '../ui/minigames'
 import type { WorldSnapshot, WorldStore } from '../world/store'
 import type { Rect } from '../world/layout'
 import type { ButterflyHome } from '../world/map'
@@ -78,7 +77,6 @@ export type DecoFn = (key: string, x: number, y: number, frame?: number) => Phas
 export interface WorldSceneFields {
   store: WorldStore
   overlay: Overlay
-  minigameModal: MinigameModal
   actors: Map<number, MemberActor>
   workshops: Map<string, WorkshopView>
   deviceIconLoads: Set<string>
@@ -119,8 +117,6 @@ export interface WorldSceneFields {
   sakuraSpots: SakuraSpot[]
   lastTooltipTarget: Phaser.GameObjects.GameObject | null
   lastTooltipData: TooltipData | null
-  governorMode: boolean
-  governorId: number | null
   camVx: number
   camVy: number
   camDragging: boolean
@@ -130,9 +126,6 @@ export interface WorldSceneFields {
   pressedObj: Phaser.GameObjects.GameObject | null
   dragHoveredDeviceId: string | null
   dragHoveredSpawn: boolean
-  moveKeys: Record<string, Phaser.Input.Keyboard.Key> | null
-  interactPrompt: Phaser.GameObjects.Text
-  nearestInteractId: number | null
   chatMemberId: number | null
 }
 

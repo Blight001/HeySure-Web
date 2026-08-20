@@ -58,7 +58,6 @@ const emit = defineEmits<{
 }>()
 
 const { isMobile } = useBreakpoint()
-const autoOpenGovernorChatOnLoad = isMobile.value
 const selectedFiles = ref<string[]>([])
 const chatModalOpen = ref(false)
 const chatTarget = ref<Agent | null>(null)
@@ -72,7 +71,6 @@ const chatLiveTokenUsed = ref(0)
 const floatingAgentChats = ref<FloatingAgentChat[]>([])
 let floatingChatSequence = 0
 let floatingChatZIndex = PINNED_POPUP_Z_INDEX + 10
-let defaultGovernorChatHandled = false
 const chatPanel = ref<ChatPanelHandle | null>(null)
 const chatFloating = ref(false)
 const chatPipSupported = typeof window !== 'undefined' && 'documentPictureInPicture' in window
@@ -311,7 +309,6 @@ const openAgentChat = (agent: Agent, options: { floating?: boolean } = {}) => {
     openFloatingAgentChat(agent)
     return
   }
-  defaultGovernorChatHandled = true
   chatTarget.value = agent
   chatLiveTokenUsed.value = 0
   selectedFiles.value = []
@@ -354,14 +351,6 @@ const openAgentTaskDetail = (agent: Agent, jobId: string, sessionId?: string) =>
   chatModalOpen.value = true
 }
 
-const openDefaultGovernorChat = () => {
-  if (!autoOpenGovernorChatOnLoad || defaultGovernorChatHandled || chatModalOpen.value) return
-  const governor = props.agents.find(agent =>
-    agent.aiRole === 'assistant_admin' || String(agent.name || '').trim() === '总督',
-  )
-  if (governor) openAgentChat(governor, { floating: true })
-}
-
 const repositionFloat = () => {
   if (chatFloating.value) void positionChatFloatAtBottomRight()
 }
@@ -381,7 +370,6 @@ watch(() => chatPanel.value?.panelEl ?? null, el => {
 
 watch(() => props.agents, () => {
   syncOpenAgentReferences()
-  openDefaultGovernorChat()
 }, { flush: 'post' })
 
 watch(chatFloating, value => {
@@ -390,7 +378,6 @@ watch(chatFloating, value => {
 
 onMounted(() => {
   window.addEventListener('resize', onViewportResize)
-  openDefaultGovernorChat()
 })
 
 onUnmounted(() => {
@@ -438,6 +425,7 @@ defineExpose({
           :all-files="allFiles"
           :selectable-file-root="aiWorkspaceDirname(chatTarget)"
           :current-user-id="Number(currentUser?.id) || undefined"
+          :connected-devices="connectedDevices"
           @close="closeAgentChat"
           @toggle-float="toggleChatFloating"
           @toggle-pip="chatPipActive ? closeChatPip() : openChatPip()"
@@ -469,6 +457,7 @@ defineExpose({
     :selectable-file-root="aiWorkspaceDirname(window.agent)"
     :cascade-index="index + 1"
     :z-index="window.zIndex"
+    :connected-devices="connectedDevices"
     @focus="focusFloatingAgentChat(window.windowId)"
     @close="closeFloatingAgentChat(window.windowId)"
     @expand="expandFloatingAgentChat(window.windowId)"

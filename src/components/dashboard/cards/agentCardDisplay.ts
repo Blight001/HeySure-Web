@@ -140,9 +140,6 @@ export function agentStatusDisplay(agent: Agent): { text: string; class: string 
 }
 
 export function agentCardBorderClass(agent: Agent): string {
-  if (agent.aiRole === 'assistant_admin') {
-    return 'border-2 border-violet-300 ring-1 ring-inset ring-violet-200/80 shadow-[0_0_14px_rgba(196,181,253,0.5)] dark:border-violet-400/70 dark:ring-violet-500/35 dark:shadow-[0_0_16px_rgba(139,92,246,0.22)]'
-  }
   if (agent.aiRole === 'digital_member' && agent.digitalMemberRole === 'manager') {
     return 'border-2 border-amber-300 ring-1 ring-inset ring-amber-200/80 shadow-[0_0_14px_rgba(252,211,77,0.5)] dark:border-amber-400/70 dark:ring-amber-500/35 dark:shadow-[0_0_16px_rgba(245,158,11,0.22)]'
   }
@@ -155,7 +152,6 @@ export function agentCardBorderClass(agent: Agent): string {
 
 export function agentCardGlowClass(agent: Agent): string {
   if (agent.status === 'dead') return 'agent-card-glow-dead'
-  if (agent.aiRole === 'assistant_admin') return 'agent-card-glow-assistant'
   if (agent.aiRole === 'digital_member' && agent.digitalMemberRole === 'manager') return 'agent-card-glow-manager'
   if (agent.aiRole === 'digital_member') return 'agent-card-glow-member'
   return 'agent-card-glow-default'
@@ -163,20 +159,12 @@ export function agentCardGlowClass(agent: Agent): string {
 
 export function agentTitleHoverClass(agent: Agent): string {
   if (agent.status === 'dead') return 'group-hover:text-zinc-500'
-  if (agent.aiRole === 'assistant_admin') return 'group-hover:text-violet-600 dark:group-hover:text-violet-400'
   if (agent.aiRole === 'digital_member' && agent.digitalMemberRole === 'manager') return 'group-hover:text-amber-600 dark:group-hover:text-amber-400'
   if (agent.aiRole === 'digital_member') return 'group-hover:text-sky-600 dark:group-hover:text-sky-400'
   return 'group-hover:text-indigo-600'
 }
 
 export function agentRoleBadge(agent: Agent): RoleBadge | null {
-  if (agent.aiRole === 'assistant_admin') {
-    return {
-      text: '辅助管理员',
-      icon: 'sparkles',
-      class: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/40',
-    }
-  }
   if (agent.aiRole === 'digital_member' && agent.digitalMemberRole === 'manager') {
     return {
       text: '数字社会管理员',

@@ -167,7 +167,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar min-h-[300px]">
+  <div class="min-h-[300px] flex-1 space-y-4 overflow-x-hidden overflow-y-auto pr-2 custom-scrollbar">
     <div v-if="isEmpty" class="flex flex-col items-center justify-center h-full text-zinc-400 dark:text-zinc-500 gap-2 opacity-60">
       <AppIcon name="chat" class="w-10 h-10" />
       <span class="text-sm">开始一场智慧的碰撞吧...</span>

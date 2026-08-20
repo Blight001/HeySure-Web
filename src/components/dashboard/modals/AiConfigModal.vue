@@ -162,8 +162,7 @@ watch(() => props.show, show => {
           </div>
           <div>
             <label class="block text-xs text-zinc-500 mb-1">Token 上限</label>
-            <input v-if="form.ai_role_group !== 'assistant_admin'" v-model.number="form.token_limit" type="number" min="1" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
-            <div v-else class="w-full px-3 py-2 rounded-lg border border-zinc-200 text-xs text-zinc-500 bg-zinc-50/60 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-300">无 Token 上限（仅用于与用户对话）</div>
+            <input v-model.number="form.token_limit" type="number" min="1" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
           </div>
           <div class="md:col-span-2">
             <div class="mb-1 flex items-center justify-between gap-2">

@@ -8,6 +8,7 @@ export type AdminModalTab =
   | 'database'
   | 'audit'
   | 'diagnostics'
+  | 'deviceReleases'
   | 'update'
 
 export interface AdminStatusMeta {

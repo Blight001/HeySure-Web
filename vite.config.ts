@@ -87,5 +87,12 @@ export default defineConfig({
   },
   preview: {
     allowedHosts: ['web'],
+    proxy: {
+      '/host-rescue': {
+        target: process.env.HEYSURE_RESCUE_URL || 'http://127.0.0.1:58152',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/host-rescue/, ''),
+      },
+    },
   }
 })

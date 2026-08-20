@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import type { WorkflowStepType } from '@/api/workflowCards'
 import {
   defaultPosition,
   palette,
   typeLabels,
-  type CanvasEdge,
   type CanvasStep,
   type TouchGesture,
   type WorkflowCanvasConnection,
@@ -14,7 +13,7 @@ import {
 import {
   buildCanvasEdges,
   computeAutoLayout,
-  edgePath as edgePathOf,
+  edgePathFromPoints,
   edgePoints as edgePointsOf,
   nodeMeta,
   outputPorts,
@@ -62,14 +61,43 @@ const selectedEdgeId = ref('')
 const connection = ref<{ from: string; branch: WorkflowCanvasConnection['branch'] } | null>(null)
 const previewPoint = ref<WorkflowNodePosition | null>(null)
 let touchGesture: TouchGesture | null = null
+let positionFrame = 0
+let pendingPosition: { stepId: string; position: WorkflowNodePosition } | null = null
 
 const positionFor = (stepId: string) => locatePosition(stepId, props.steps, props.positions)
 const edges = computed(() => buildCanvasEdges(props.steps))
-const edgePath = (edge: CanvasEdge) => edgePathOf(edge, props.steps, props.positions)
-const edgePoints = (edge: CanvasEdge) => edgePointsOf(edge, props.steps, props.positions)
+const renderedEdges = computed(() => edges.value.map((edge) => {
+  const points = edgePointsOf(edge, props.steps, props.positions)
+  return { ...edge, path: edgePathFromPoints(points.from, points.to, points.fromPlacement), points }
+}))
+const renderedNodes = computed(() => props.steps.map((step, index) => {
+  const position = positionFor(step.id)
+  return {
+    step,
+    index,
+    x: position.x,
+    y: position.y,
+    meta: nodeMeta(step),
+    ports: outputPorts(step),
+    status: props.nodeStatuses?.[step.id] || '',
+    selected: props.selectedStepId === step.id,
+    start: props.startStepId === step.id,
+  }
+}))
 const previewPath = computed(() => previewEdgePath(connection.value, previewPoint.value, props.steps, props.positions))
 
 const updatePosition = (stepId: string, position: WorkflowNodePosition) => {
+  pendingPosition = { stepId, position }
+  if (positionFrame) return
+  positionFrame = window.requestAnimationFrame(flushPositionUpdate)
+}
+
+const flushPositionUpdate = () => {
+  if (positionFrame) window.cancelAnimationFrame(positionFrame)
+  positionFrame = 0
+  if (!pendingPosition) return
+  const { stepId, position } = pendingPosition
+  pendingPosition = null
   emit('update:positions', { ...props.positions, [stepId]: position })
 }
 
@@ -82,7 +110,7 @@ const startNodeDrag = (event: PointerEvent, step: CanvasStep) => {
   selectedEdgeId.value = ''
   const initial = positionFor(step.id)
   const start = { x: event.clientX, y: event.clientY }
-  trackWindowPointer((next) => updatePosition(step.id, draggedNodePosition(initial, start, next, scale.value)), () => {})
+  trackWindowPointer((next) => updatePosition(step.id, draggedNodePosition(initial, start, next, scale.value)), flushPositionUpdate)
 }
 
 const canvasPoint = (event: { clientX: number; clientY: number }) => (
@@ -198,6 +226,7 @@ const moveCanvasTouch = (event: TouchEvent) => {
 
 const finishCanvasTouch = (event: TouchEvent) => {
   event.preventDefault()
+  flushPositionUpdate()
   if (touchGesture?.kind === 'connection' && event.changedTouches[0]) {
     const touch = event.changedTouches[0]
     const linked = finishConnectionAt(touch.clientX, touch.clientY, touchGesture.from, touchGesture.branch)
@@ -253,6 +282,12 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
   event.stopPropagation()
   deleteSelectedEdge()
 }
+
+onBeforeUnmount(() => {
+  if (positionFrame) window.cancelAnimationFrame(positionFrame)
+  positionFrame = 0
+  pendingPosition = null
+})
 </script>
 
 <template>
@@ -297,56 +332,57 @@ const onCanvasKeydown = (event: KeyboardEvent) => {
               <path d="M0,0 L0,6 L9,3 z" fill="#64748b" />
             </marker>
           </defs>
-          <g v-for="edge in edges" :key="edge.id" :data-edge="edge.id" @pointerdown.stop="selectEdge(edge.id)">
-            <path class="edge-hit" :d="edgePath(edge)" />
-            <path class="workflow-edge" :class="{ selected: selectedEdgeId === edge.id }" :d="edgePath(edge)" marker-end="url(#workflow-arrow)" />
+          <g v-for="edge in renderedEdges" :key="edge.id" :data-edge="edge.id" @pointerdown.stop="selectEdge(edge.id)">
+            <path class="edge-hit" :d="edge.path" />
+            <path class="workflow-edge" :class="{ selected: selectedEdgeId === edge.id }" :d="edge.path" marker-end="url(#workflow-arrow)" />
             <text
               v-if="edge.branch !== 'next'"
               class="edge-label"
-              :x="(edgePoints(edge).from.x + edgePoints(edge).to.x) / 2"
-              :y="(edgePoints(edge).from.y + edgePoints(edge).to.y) / 2 - 8"
+              :x="(edge.points.from.x + edge.points.to.x) / 2"
+              :y="(edge.points.from.y + edge.points.to.y) / 2 - 8"
             >{{ edge.label }}</text>
           </g>
           <path v-if="previewPath" class="edge-preview" :d="previewPath" />
         </svg>
 
         <article
-          v-for="(step, index) in steps"
-          :key="step.id"
+          v-for="node in renderedNodes"
+          :key="node.step.id"
+          v-memo="[node.index, node.x, node.y, node.step.title, node.meta, node.step.type, node.status, node.selected, node.start, readonly]"
           data-node
-          :data-node-step="step.id"
+          :data-node-step="node.step.id"
           class="workflow-node"
-          :class="[`type-${step.type}`, nodeStatuses?.[step.id] ? `diff-${nodeStatuses[step.id]}` : '', { selected: selectedStepId === step.id, 'is-start': startStepId === step.id, 'is-end': step.type === 'end' }]"
-          :style="{ left: `${positionFor(step.id).x}px`, top: `${positionFor(step.id).y}px` }"
-          @pointerdown="startNodeDrag($event, step)"
-          @click.stop="emit('select', step.id); selectedEdgeId = ''"
-          @dblclick.stop="emit('set-start', step.id)"
+          :class="[`type-${node.step.type}`, node.status ? `diff-${node.status}` : '', { selected: node.selected, 'is-start': node.start, 'is-end': node.step.type === 'end' }]"
+          :style="{ left: `${node.x}px`, top: `${node.y}px` }"
+          @pointerdown="startNodeDrag($event, node.step)"
+          @click.stop="emit('select', node.step.id); selectedEdgeId = ''"
+          @dblclick.stop="emit('set-start', node.step.id)"
         >
-          <button data-port :data-input-step="step.id" class="node-port input-port" type="button" aria-label="输入端点" />
+          <button data-port :data-input-step="node.step.id" class="node-port input-port" type="button" aria-label="输入端点" />
           <div class="flex items-center justify-between text-[9px] text-slate-400">
-            <span>#{{ index + 1 }} · {{ typeLabels[step.type] }}</span>
-            <span v-if="startStepId === step.id" class="rounded bg-indigo-500/20 px-1 text-indigo-300">入口</span>
+            <span>#{{ node.index + 1 }} · {{ typeLabels[node.step.type] }}</span>
+            <span v-if="node.start" class="rounded bg-indigo-500/20 px-1 text-indigo-300">入口</span>
           </div>
-          <div class="mt-2 truncate text-xs font-bold text-slate-100">{{ step.title || step.id }}</div>
-          <div class="mt-1 truncate text-[10px] text-slate-400">{{ nodeMeta(step) }}</div>
+          <div class="mt-2 truncate text-xs font-bold text-slate-100">{{ node.step.title || node.step.id }}</div>
+          <div class="mt-1 truncate text-[10px] text-slate-400">{{ node.meta }}</div>
           <div
-            v-for="port in outputPorts(step)"
+            v-for="port in node.ports"
             :key="port.branch"
             class="output-port-wrap"
             :class="`is-${port.placement}`"
-            :style="port.placement === 'right' ? { top: `${portY(step, port.branch) - 7}px` } : undefined"
+            :style="port.placement === 'right' ? { top: `${portY(node.step, port.branch) - 7}px` } : undefined"
           >
             <span class="port-label" :class="`tone-${port.tone}`">{{ port.label }}</span>
             <button
               data-port
-              :data-output-step="step.id"
+              :data-output-step="node.step.id"
               :data-output-branch="port.branch"
               class="node-port output-port"
               :class="`tone-${port.tone}`"
               type="button"
               :disabled="readonly"
               :aria-label="`${port.label}输出端点`"
-              @pointerdown="startConnection($event, step, port.branch)"
+              @pointerdown="startConnection($event, node.step, port.branch)"
             />
           </div>
         </article>

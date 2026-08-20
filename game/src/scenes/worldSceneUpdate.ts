@@ -1,5 +1,4 @@
 import { WORLD_H, WORLD_W } from '../world/layout'
-import { updateGovernor } from './worldSceneGovernor'
 import { anchorFor } from './worldSceneMembers'
 import type { WorldButterfly, WorldSceneHost } from './worldSceneTypes'
 
@@ -7,7 +6,6 @@ export const updateWorldScene = (scene: WorldSceneHost, time: number, delta: num
   updatePatrolAnchors(scene, time)
   updateCameraInertia(scene)
   updateActors(scene, time, delta)
-  updateGovernor(scene)
   updateWorkshopTaskGlows(scene, time)
   updateWorkshopPads(scene, time)
   updateSwayTrees(scene, time)
@@ -26,7 +24,7 @@ const updatePatrolAnchors = (scene: WorldSceneHost, time: number) => {
 }
 
 const updateCameraInertia = (scene: WorldSceneHost) => {
-  if (scene.camDragging || scene.governorMode) return
+  if (scene.camDragging) return
   if (Math.abs(scene.camVx) > 0.15 || Math.abs(scene.camVy) > 0.15) {
     scene.cameras.main.scrollX += scene.camVx
     scene.cameras.main.scrollY += scene.camVy

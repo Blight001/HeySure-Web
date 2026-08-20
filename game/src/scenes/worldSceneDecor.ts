@@ -1,11 +1,8 @@
 import Phaser from 'phaser'
-import { MINIGAME_DEFS, minigameBestScore } from '../ui/minigames'
 import { buildingTooltipData } from '../ui/worldText'
 import {
   FIXED_BUILDINGS,
   LIBRARY_DEVICE_POS,
-  MINIGAME_BUILDINGS,
-  MINIGAME_SCALE,
   TILE,
   WORKSHOP_COLS,
   WORKSHOP_SLOTS,
@@ -13,7 +10,6 @@ import {
   WORLD_W,
   mulberry32,
   workshopSlotPos,
-  type MinigameBuildingDef,
 } from '../world/layout'
 import {
   BENCH_POSITIONS,
@@ -32,7 +28,6 @@ import {
   WORKSHOP_STREET_LAMPS,
   type ButterflyHome,
 } from '../world/map'
-import { WORKSHOP_BASE_ORIGIN_Y, WORKSHOP_LABEL_GAP } from './worldSceneShared'
 import type { DecoFn, NightGlowSpec, WorldSceneHost } from './worldSceneTypes'
 
 const makeDeco = (scene: WorldSceneHost): DecoFn => {
@@ -342,42 +337,4 @@ export const createBuildings = (scene: WorldSceneHost) => {
     scene.buildings.set(def.key, sprite)
   }
   scene.buildings.get('spawn')?.play('building_spawn.png:loop')
-}
-
-export const createMinigameBuildings = (scene: WorldSceneHost) => {
-  for (const def of MINIGAME_BUILDINGS) {
-    const sprite = scene.add.sprite(def.pos.x, def.pos.y, def.sheet, 0)
-    sprite.setOrigin(0.5, WORKSHOP_BASE_ORIGIN_Y)
-    sprite.setScale(MINIGAME_SCALE)
-    sprite.setDepth(def.pos.y)
-    sprite.setInteractive({ pixelPerfect: true })
-    sprite.setData('tooltip', () => minigameTooltip(def))
-    sprite.setData('buildingKey', def.key)
-    sprite.setData('minigameId', def.game)
-    sprite.play(`${def.sheet}:loop`)
-    scene.buildings.set(def.key, sprite)
-    const label = scene.add.text(def.pos.x, def.pos.y - sprite.displayHeight - WORKSHOP_LABEL_GAP, `🕹 ${def.label}`, {
-      fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
-      fontSize: '12px',
-      color: '#fff4d2',
-      backgroundColor: '#14100dcc',
-      padding: { x: 5, y: 2 },
-      align: 'center',
-    })
-    label.setOrigin(0.5, 1)
-    label.setDepth(def.pos.y + 12)
-  }
-}
-
-const minigameTooltip = (def: MinigameBuildingDef) => {
-  const game = MINIGAME_DEFS[def.game]
-  return {
-    title: def.label,
-    badge: '小游戏',
-    rows: [
-      { label: '玩法', value: game.hint },
-      { label: '最高分', value: String(minigameBestScore(def.game)) },
-      { label: '入口', value: '点击建筑开始游戏' },
-    ],
-  }
 }

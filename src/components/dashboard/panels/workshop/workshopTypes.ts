@@ -5,7 +5,7 @@ export interface WorkshopAgent {
   name: string
   avatar?: string
   role: 'admin' | 'worker'
-  aiRole?: 'assistant_admin' | 'digital_member' | 'admin' | 'worker'
+  aiRole?: 'digital_member' | 'admin' | 'worker'
   digitalMemberRole?: 'manager' | 'member'
   aiConfigId?: number
   mcpTools?: string

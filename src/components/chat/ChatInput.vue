@@ -30,6 +30,7 @@ interface ChatModelOption {
 const props = defineProps<{
   modelValue: string
   isTyping: boolean
+  isSubmitting?: boolean
   isFileSelectorOpen: boolean
   allFiles: string[]
   selectedFiles: string[]
@@ -77,8 +78,8 @@ const attachCount = computed(() => props.selectedFiles.length
 
 const hasContent = computed(() => !!inputValue.value.trim())
 const hasReadyUpload = computed(() => (props.uploadedAttachments || []).some(item => item.status === 'ready'))
-const showStop = computed(() => props.isTyping && !hasContent.value && !hasReadyUpload.value)
-const canSend = computed(() => (hasContent.value || hasReadyUpload.value) && !props.uploadingCount)
+const showStop = computed(() => !props.isSubmitting && props.isTyping && !hasContent.value && !hasReadyUpload.value)
+const canSend = computed(() => !props.isSubmitting && (hasContent.value || hasReadyUpload.value) && !props.uploadingCount)
 const editorRef = ref<HTMLDivElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
@@ -176,6 +177,7 @@ const handleKeydown = (e: KeyboardEvent) => {
 }
 
 const handlePrimaryAction = () => {
+  if (props.isSubmitting) return
   if (showStop.value) {
     emit('stop')
     return
@@ -339,7 +341,12 @@ watch(() => [props.modelValue, props.mentions] as const, async ([value]) => {
         @pointerout="hideMentionTooltip"
       ></div>
 
-      <ChatInputSendButton :show-stop="showStop" :can-send="canSend" @click="handlePrimaryAction" />
+      <ChatInputSendButton
+        :show-stop="showStop"
+        :can-send="canSend"
+        :submitting="!!isSubmitting"
+        @click="handlePrimaryAction"
+      />
     </div>
     <ChatMentionTooltip :state="mentionTooltip" @keep="keepMentionTooltip" @hide="hideMentionTooltip" />
   </div>

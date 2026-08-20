@@ -8,7 +8,6 @@ export interface WorkshopTooltipView {
 
 export const MEMBER_ROLE_LABELS: Record<WorldMember['role'], string> = {
   core_admin: '核心管理员',
-  assistant_admin: '辅助管理员',
   librarian: '图书管理员',
   member: '数字成员',
 }

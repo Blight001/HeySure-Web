@@ -38,12 +38,12 @@ export function buildBotConfigsPayload(formConfigs: Record<string, Record<string
   return out
 }
 
-export function roleGroupFromRole(role?: string): 'assistant_admin' | 'digital_member' {
-  return role === 'assistant_admin' ? 'assistant_admin' : 'digital_member'
+export function roleGroupFromRole(_role?: string): 'digital_member' {
+  return 'digital_member'
 }
 
-export function roleFromGroup(group?: string): 'assistant_admin' | 'digital_member' {
-  return group === 'assistant_admin' ? 'assistant_admin' : 'digital_member'
+export function roleFromGroup(_group?: string): 'digital_member' {
+  return 'digital_member'
 }
 
 export function normalizeDigitalMemberRole(value?: string): 'manager' | 'member' {
@@ -63,16 +63,16 @@ export function presetIdForModel(presets: ModelPreset[], presetId?: string, mode
   return presets.find(item => item.model === modelName || item.id === modelName)?.id || id
 }
 
-export function buildAiForm(role: 'assistant_admin' | 'worker', presets: ModelPreset[]) {
+export function buildAiForm(_role: 'worker', presets: ModelPreset[]) {
   return {
     id: undefined as number | undefined,
-    name: role === 'assistant_admin' ? '新辅助管理员' : '新执行AI',
+    name: '新执行AI',
     description: '',
     avatar: DEFAULT_AI_AVATAR,
-    ai_role_group: roleGroupFromRole(role),
+    ai_role_group: roleGroupFromRole(_role),
     digital_member_role: 'member' as 'manager' | 'member',
-    platform: role === 'assistant_admin' ? 'Server-Node' : 'Ubuntu-Worker',
-    token_limit: role === 'assistant_admin' ? 0 : 10000,
+    platform: 'Ubuntu-Worker',
+    token_limit: 10000,
     model_preset_id: presets[0]?.id || '',
     model: presets[0]?.model || '',
     reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
@@ -93,7 +93,7 @@ export function buildEditForm(agent: Agent, presets: ModelPreset[], normalizeSys
     ai_role_group: roleGroupFromRole(agent.aiRole),
     digital_member_role: normalizeDigitalMemberRole(agent.digitalMemberRole || (agent.role === 'admin' ? 'manager' : 'member')),
     platform: agent.platform,
-    token_limit: agent.aiRole === 'assistant_admin' ? 0 : agent.tokenLimit,
+    token_limit: agent.tokenLimit,
     model_preset_id: presetIdForModel(presets, '', agent.model),
     model: agent.model || '',
     reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
@@ -167,7 +167,7 @@ export function buildAiConfigPayload(
       ai_role: roleFromGroup(form.ai_role_group),
       digital_member_role: form.ai_role_group === 'digital_member' ? normalizeDigitalMemberRole(form.digital_member_role) : 'member',
       platform: form.platform,
-      token_limit: form.ai_role_group === 'assistant_admin' ? 0 : (Number(form.token_limit) || 10000),
+      token_limit: Number(form.token_limit) || 10000,
       execution_mode: executionMode,
       model: usePreset ? selectedPreset?.model : '',
       model_preset_id: usePreset ? selectedPreset?.id : '',

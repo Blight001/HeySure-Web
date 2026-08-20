@@ -66,16 +66,55 @@ const tryMergeAssistant = (ctx: HistoryCtx, msg: ChatMessage) => {
   return false
 }
 
+const tryMergeOptimisticUser = (ctx: HistoryCtx, msg: ChatMessage) => {
+  if (msg.role !== 'user' || !msg.id) return false
+  const idx = ctx.state.chatMessages.value.findIndex(item =>
+    item.role === 'user'
+    && Number(item.id || 0) < 0
+    && item.content === msg.content)
+  if (idx < 0) return false
+  ctx.state.chatMessages.value.splice(idx, 1, mapHistoryMessage(msg))
+  return true
+}
+
 const upsertHistoryMessages = async (ctx: HistoryCtx, incoming: ChatMessage[]) => {
   if (!incoming.length) return
   const existingIds = new Set(ctx.state.chatMessages.value.map(m => m.id).filter(Boolean))
   for (const msg of incoming) {
     if (msg.id && existingIds.has(msg.id)) continue
+    if (tryMergeOptimisticUser(ctx, msg)) continue
     if (tryMergeAssistant(ctx, msg)) continue
     ctx.state.chatMessages.value.push(mapHistoryMessage(msg))
   }
   ctx.actions.restoreActionStatesFromHistory(ctx.state.chatMessages.value)
   if (ctx.scroll.stickToBottom.value) await ctx.scroll.scrollToBottom(true)
+}
+
+const appendOptimisticUserMessage = async (
+  ctx: HistoryCtx,
+  content: string,
+  tags: string,
+  attachments: ChatMessage['attachments'],
+) => {
+  const id = -Date.now()
+  ctx.state.chatMessages.value.push({
+    id,
+    role: 'user',
+    content,
+    display_text: content,
+    inlineContent: [{ type: 'text', content }],
+    tags,
+    attachments,
+    created_at: Date.now(),
+  })
+  ctx.scroll.stickToBottom.value = true
+  await ctx.scroll.scrollToBottom(true)
+  return id
+}
+
+const removeOptimisticUserMessage = (ctx: HistoryCtx, id: number) => {
+  const idx = ctx.state.chatMessages.value.findIndex(item => item.id === id)
+  if (idx >= 0) ctx.state.chatMessages.value.splice(idx, 1)
 }
 
 const loadOlderHistory = async (ctx: HistoryCtx) => {
@@ -277,6 +316,12 @@ export const useChatHistory = (
     upsertHistoryMessages: (incoming: ChatMessage[]) => upsertHistoryMessages(ctx, incoming),
     appendLiveAssistantAsLocalMessage: (text: string) => appendLiveAssistantAsLocalMessage(ctx, text),
     appendRunErrorNotice: (runId: string, message: string) => appendRunErrorNotice(ctx, runId, message),
+    appendOptimisticUserMessage: (
+      content: string,
+      tags: string,
+      attachments: ChatMessage['attachments'],
+    ) => appendOptimisticUserMessage(ctx, content, tags, attachments),
+    removeOptimisticUserMessage: (id: number) => removeOptimisticUserMessage(ctx, id),
     reloadCurrentHistorySnapshot: () => reloadCurrentHistorySnapshot(ctx),
     hasAssistantMessageWithContent: (content: string) =>
       hasAssistantMessageWithContent(state.chatMessages.value, content),

@@ -24,10 +24,6 @@
     "nesting": 3
   },
   "violations": {
-    "complexity:game/src/ui/minigames/game2048.ts:createGame2048": 43,
-    "complexity:game/src/ui/minigames/game2048.ts:createGame2048.move": 16,
-    "complexity:game/src/ui/minigames/snake.ts:createSnake": 26,
-    "complexity:game/src/ui/minigames/tetris.ts:createTetris": 53,
     "complexity:game/src/world/map.ts:createGrassField": 16,
     "complexity:game/src/world/map.ts:decorateSpawnGround": 19,
     "complexity:game/src/world/map.ts:scatterTrees": 21,
@@ -57,9 +53,6 @@
     "complexity:src/utils/chatParser.ts:parseMcpPayload": 17,
     "complexity:src/utils/mcpTools.ts:getEndpointCapabilityTag": 18,
     "complexity:src/utils/taskSystem.ts:getTaskPayloadTags": 27,
-    "function_lines:game/src/ui/minigames/game2048.ts:createGame2048": 136,
-    "function_lines:game/src/ui/minigames/snake.ts:createSnake": 111,
-    "function_lines:game/src/ui/minigames/tetris.ts:createTetris": 230,
     "function_lines:game/src/ui/overlay.ts:Overlay.constructor": 142,
     "function_lines:game/src/ui/overlay.ts:Overlay.initVirtualPad": 90,
     "function_lines:src/components/chat/MarkdownText.vue:renderBlocks": 110,

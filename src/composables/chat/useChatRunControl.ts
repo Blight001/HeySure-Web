@@ -173,12 +173,14 @@ const isCurrentDeviceTaskEvent = (ctl: RunCtl, payload: DeviceTaskEventPayload) 
 
 const handleDeviceProgress = (ctl: RunCtl, payload: DeviceTaskEventPayload) => {
   if (!isCurrentDeviceTaskEvent(ctl, payload)) return
+  ctl.deps.state.currentMcpDeviceId.value = String(payload.deviceId || '').trim()
   ctl.deps.state.currentDeviceTaskId.value = String(payload.taskId || '')
   ctl.deps.state.currentDeviceProgress.value = String(payload.message || '').trim() || '设备已接收调用'
 }
 
 const handleDeviceTerminal = (ctl: RunCtl, payload: DeviceTaskEventPayload) => {
   if (!isCurrentDeviceTaskEvent(ctl, payload)) return
+  ctl.deps.state.currentMcpDeviceId.value = String(payload.deviceId || '').trim()
   const taskId = String(payload.taskId || '')
   if (ctl.deps.state.currentDeviceTaskId.value && taskId && taskId !== ctl.deps.state.currentDeviceTaskId.value) return
   ctl.deps.state.currentDeviceProgress.value = payload.error
@@ -420,6 +422,7 @@ const resetRunUi = (ctl: RunCtl) => {
   ctl.deps.state.currentRunStatus.value = 'idle'
   ctl.deps.state.currentRunPhase.value = 'idle'
   ctl.deps.state.currentMcpTool.value = ''
+  ctl.deps.state.currentMcpDeviceId.value = ''
   ctl.deps.live.clearLiveAssistantView()
   ctl.deps.state.isTyping.value = false
 }

@@ -55,7 +55,7 @@ const emit = defineEmits<{
           <div v-if="accessMemberOptions.length === 0" class="text-[10px] text-zinc-400">暂无可选 AI 成员。</div>
         </div>
         <div v-else-if="editor.accessScope === 'owner'" class="mt-2 text-[10px] text-zinc-400">创建者：{{ ownerIds.map(id => aiMemberOptions.find(member => member.id === id)?.name || `成员 ${id}`).join('、') }}</div>
-        <div class="mt-2 text-[9px] text-zinc-400">管理员或辅助管理员创建时默认全员可调用；普通成员创建时默认仅自己可调用。</div>
+        <div class="mt-2 text-[9px] text-zinc-400">数字成员管理者创建时默认全员可调用；普通成员创建时默认仅自己可调用。</div>
       </div>
       <footer class="mt-4 flex justify-end gap-2"><button class="rounded border px-3 py-1.5 text-xs" @click="emit('close-card-settings', false)">取消</button><button class="rounded bg-indigo-600 px-3 py-1.5 text-xs text-white" @click="emit('close-card-settings', true)">保存设置</button></footer>
     </section>

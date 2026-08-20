@@ -263,13 +263,11 @@ export function mapAiCardToAgent(
   const parsedConfigId = Number(row.id)
   const configId = Number.isFinite(parsedConfigId) ? parsedConfigId : undefined
   const projectId = row.project_id || unassignedProjectId
-  const aiRole = (row.ai_role || 'digital_member') as 'assistant_admin' | 'digital_member' | 'admin' | 'worker'
+  const aiRole = 'digital_member' as const
   const digitalMemberRole = (row.digital_member_role === 'manager' ? 'manager' : 'member') as 'manager' | 'member'
   const isCoreMember = digitalMemberRole === 'manager' || row.switch_key === 'assistant_default'
-  const uiRole: AgentRole = aiRole === 'assistant_admin' || isCoreMember ? 'admin' : 'worker'
-  const defaultTokenLimit = aiRole === 'assistant_admin'
-    ? 0
-    : (uiRole === 'admin' ? TOKEN_LIMIT_DEFAULTS.admin : TOKEN_LIMIT_DEFAULTS.worker)
+  const uiRole: AgentRole = isCoreMember ? 'admin' : 'worker'
+  const defaultTokenLimit = uiRole === 'admin' ? TOKEN_LIMIT_DEFAULTS.admin : TOKEN_LIMIT_DEFAULTS.worker
   const parsedTokenLimit = Number(row.token_limit)
   const taskCurrent = parseTaskSnapshot(row.task_current)
   const taskCurrentOrRecent = parseTaskSnapshot(row.task_current_or_recent)

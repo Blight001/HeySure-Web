@@ -41,3 +41,13 @@
 .tone-success { border-color: #34d399; color: #6ee7b7; }
 .tone-danger { border-color: #fb7185; color: #fda4af; }
 @media (max-width: 900px) { .workflow-canvas { height: 480px; } .canvas-view-controls { right: 8px; bottom: 8px; max-width: calc(100% - 16px); } .canvas-view-controls .canvas-button { padding: 6px 8px; } }
+@media (hover: none) and (pointer: coarse) {
+  .workflow-node { background: #1e293b; box-shadow: none; backdrop-filter: none; }
+  .workflow-node.type-mcp, .workflow-node.type-end { background: #1e3a5f; }
+  .workflow-node.type-condition { background: #4a3415; }
+  .workflow-node.type-delay { background: #123f3b; }
+  .workflow-node.type-confirm { background: #482050; }
+  .workflow-node.type-ai { background: #173f52; }
+  .workflow-node.is-start, .workflow-node.is-end, .workflow-node.is-start.is-end { box-shadow: 0 0 0 2px currentColor; }
+  .canvas-view-controls, .canvas-inspector { backdrop-filter: none; }
+}

@@ -198,7 +198,11 @@ const isApplied = (block: any) => {
 
 <style scoped>
 .inline-content-wrapper {
+  min-width: 0;
+  max-width: 100%;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .result-view {
   max-height: 240px;

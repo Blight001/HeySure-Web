@@ -4,7 +4,6 @@
  */
 import Phaser from 'phaser'
 import type { MemberActor } from '../actors/MemberActor'
-import { MinigameModal } from '../ui/minigames'
 import type { Overlay, TooltipData } from '../ui/overlay'
 import { WorldStore, type WorldSnapshot } from '../world/store'
 import { createWorldAnims, preloadWorldAssets } from './assetSetup'
@@ -16,8 +15,7 @@ import {
   createGround,
 } from './worldSceneAmbient'
 import { attachWorldCamera } from './worldSceneCamera'
-import { createBuildings, createDecor, createMinigameBuildings } from './worldSceneDecor'
-import { attachGovernorControls, createGovernor } from './worldSceneGovernor'
+import { createBuildings, createDecor } from './worldSceneDecor'
 import { attachClickAndDrag, attachHover } from './worldSceneInput'
 import { applySnapshot, handleWorldEvent } from './worldSceneMembers'
 import type {
@@ -37,7 +35,6 @@ import { updateWorldScene } from './worldSceneUpdate'
 export class WorldScene extends Phaser.Scene implements WorldSceneFields {
   store!: WorldStore
   overlay!: Overlay
-  minigameModal = new MinigameModal()
   actors = new Map<number, MemberActor>()
   workshops = new Map<string, WorkshopView>()
   deviceIconLoads = new Set<string>()
@@ -78,8 +75,6 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
   sakuraSpots: SakuraSpot[] = []
   lastTooltipTarget: Phaser.GameObjects.GameObject | null = null
   lastTooltipData: TooltipData | null = null
-  governorMode = false
-  governorId: number | null = null
   camVx = 0
   camVy = 0
   camDragging = false
@@ -89,9 +84,6 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
   pressedObj: Phaser.GameObjects.GameObject | null = null
   dragHoveredDeviceId: string | null = null
   dragHoveredSpawn = false
-  moveKeys: Record<string, Phaser.Input.Keyboard.Key> | null = null
-  interactPrompt!: Phaser.GameObjects.Text
-  nearestInteractId: number | null = null
   chatMemberId: number | null = null
 
   private readonly onParentMessage = (event: MessageEvent) => {
@@ -120,15 +112,12 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
     createGround(this)
     createDecor(this)
     createBuildings(this)
-    createMinigameBuildings(this)
     attachWorldCamera(this)
-    createGovernor(this)
     createDayNight(this)
     createAudio(this)
     createCloudCurtain(this)
     attachHover(this)
     attachClickAndDrag(this)
-    attachGovernorControls(this)
     createAmbientLife(this)
     window.addEventListener('message', this.onParentMessage)
     this.store.subscribe(snap => applySnapshot(this, snap))

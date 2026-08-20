@@ -4,7 +4,6 @@ import {
   MAP_H,
   MAP_W,
   LIBRARY_DEVICE_POS,
-  MINIGAME_BUILDINGS,
   TILE,
   WORKSHOP_COLS,
   WORKSHOP_SLOTS,
@@ -185,7 +184,6 @@ export const generateGroundMap = (): GroundMap => {
 
   paveLibraryPlaza(grid, rnd)
   paveWorkshopPads(grid, rnd)
-  paveMinigamePads(grid, rnd)
   paveRoads(path)
   decorateSpawnGround(grid, rnd)
 
@@ -314,21 +312,6 @@ const paveWorkshopPads = (grid: number[][], rnd: () => number) => {
     const ty = Math.floor(pos.y / TILE)
     for (let y = ty - 2; y <= ty + 2; y++) {
       for (let x = tx - 2; x <= tx + 2; x++) {
-        if (y >= 0 && y < MAP_H && x >= 0 && x < MAP_W) {
-          grid[y][x] = rnd() > 0.5 ? TILES.plazaA : TILES.plazaB
-        }
-      }
-    }
-  }
-}
-
-/** 小游戏建筑（池塘右侧游乐角）：每座建筑脚下铺一小块石板地坪 */
-const paveMinigamePads = (grid: number[][], rnd: () => number) => {
-  for (const def of MINIGAME_BUILDINGS) {
-    const tx = Math.floor(def.pos.x / TILE)
-    const ty = Math.floor(def.pos.y / TILE)
-    for (let y = ty - 2; y <= ty; y++) {
-      for (let x = tx - 1; x <= tx + 1; x++) {
         if (y >= 0 && y < MAP_H && x >= 0 && x < MAP_W) {
           grid[y][x] = rnd() > 0.5 ? TILES.plazaA : TILES.plazaB
         }

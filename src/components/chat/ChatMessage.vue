@@ -94,7 +94,7 @@ const userMessageCopyText = computed(() => kind.value.text)
     ]"
   >
     <div
-      class="group relative"
+      class="group relative min-w-0 max-w-full"
       :class="[
         chatMessageWidthClass(!!props.embedded, kind),
         kind.isUserBubble ? 'ml-auto w-full min-w-0' : ''

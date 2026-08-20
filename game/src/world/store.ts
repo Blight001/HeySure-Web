@@ -5,7 +5,6 @@
  *
  * 角色判定与 useDashboardData.ts 对齐：
  *   core_admin  = digital_member_role==='manager' || switch_key==='assistant_default'
- *   assistant   = ai_role==='assistant_admin'
  *   librarian   = is_librarian===true（/api/ai/cards 已透出该字段）
  */
 import { io, type Socket } from 'socket.io-client'
@@ -28,7 +27,7 @@ export interface WorldEvent {
   timestamp: number
 }
 
-export type MemberRole = 'core_admin' | 'assistant_admin' | 'librarian' | 'member'
+export type MemberRole = 'core_admin' | 'librarian' | 'member'
 
 export interface WorldMember {
   id: number
@@ -115,7 +114,6 @@ const normalizeRuntime = (v: unknown): WorldMember['runtimeStatus'] => {
 
 const roleOf = (row: Record<string, any>): MemberRole => {
   if (row.is_librarian) return 'librarian'
-  if (row.ai_role === 'assistant_admin') return 'assistant_admin'
   if (row.digital_member_role === 'manager' || row.switch_key === 'assistant_default') return 'core_admin'
   return 'member'
 }

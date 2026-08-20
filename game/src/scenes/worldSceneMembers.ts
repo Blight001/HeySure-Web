@@ -190,7 +190,6 @@ export const anchorFor = (scene: WorldSceneHost, m: WorldMember, time: number): 
   if (boundZone) return boundZone
   if (m.role === 'core_admin') return ZONES.plaza
   if (m.role === 'librarian') return ZONES.library
-  if (m.role === 'assistant_admin') return ZONES.wanderAll
   if (!m.projectId || m.lifecycle === 'learning') return ZONES.spawn
   return ZONES.wanderAll
 }

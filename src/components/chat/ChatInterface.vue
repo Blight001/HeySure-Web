@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, defineAsyncComponent } from 'vue'
 import { useMessage } from '@/composables/useMessage'
 import { useChatWorkspace } from '@/composables/chat/useChatWorkspace'
 import type { ChatInterfaceProps } from '@/types/chat'
@@ -9,6 +10,9 @@ import ChatHeader from './ChatHeader.vue'
 import ChatConversationView from './ChatConversationView.vue'
 import ChatInput from './ChatInput.vue'
 import FrontPromptPreview from './FrontPromptPreview.vue'
+import { resolveRemoteScreenDevice } from '@/utils/chatRemoteScreen'
+
+const ChatRemoteScreenBackdrop = defineAsyncComponent(() => import('./ChatRemoteScreenBackdrop.vue'))
 
 const props = defineProps<ChatInterfaceProps>()
 const { alert, confirm } = useMessage(() => props.embeddedDialogs ? (props.dialogHost || 'chat') : 'global')
@@ -55,6 +59,7 @@ const {
   externalControlError,
   isBlankConversation,
   recentNormalSessions,
+  recentTaskSessions,
   chatMessages,
   configuredFrontPrompt,
   liveAssistantText,
@@ -64,6 +69,7 @@ const {
   isRunActive,
   runTimingText,
   currentMcpArguments,
+  currentMcpDeviceId,
   timeTick,
   phaseEnterTs,
   appliedEditsArray,
@@ -71,6 +77,7 @@ const {
   actionResults,
   actionResultsBySignature,
   isTyping,
+  isSubmitting,
   onConversationDelete,
   onConversationRecall,
   onConversationApply,
@@ -106,6 +113,12 @@ const {
   switchConversationModel,
   addChatMention,
 } = useChatWorkspace(props, emit, { alert, confirm })
+
+const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
+  props.remoteScreenDevices || [],
+  currentMcpDeviceId.value,
+  chatMessages.value,
+))
 </script>
 
 <template>
@@ -213,7 +226,12 @@ const {
 
     <!-- 聊天内容区：消息 + 输入（任务流程已移到顶部标题边上，水平显示） -->
     <div class="relative flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
-      <div ref="chatScrollRef" class="chat-scroll-viewport flex-1 overflow-y-auto">
+      <ChatRemoteScreenBackdrop
+        v-if="remoteScreenDevice"
+        class="z-0"
+        :device-id="remoteScreenDevice.id"
+      />
+      <div ref="chatScrollRef" class="chat-scroll-viewport relative z-10 flex-1 overflow-y-auto">
         <!-- 空白对话欢迎页：logo + 最近对话 -->
         <div
           v-if="isBlankConversation"
@@ -229,23 +247,54 @@ const {
             <div class="text-xs text-zinc-400 dark:text-zinc-500">输入第一句话后会自动生成标题，也可稍后手动重命名</div>
           </div>
 
-          <div v-if="recentNormalSessions.length > 0" class="w-full max-w-md space-y-2">
-            <div class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 px-1">
-              最近对话
+          <div
+            v-if="recentNormalSessions.length > 0 || recentTaskSessions.length > 0"
+            class="grid w-full max-w-2xl gap-4 sm:grid-cols-2"
+          >
+            <div class="space-y-2">
+              <div class="px-1 text-[11px] font-semibold tracking-wide text-zinc-400 dark:text-zinc-500">
+                最近普通对话
+              </div>
+              <div class="overflow-hidden rounded-xl border border-zinc-200/80 bg-white/50 divide-y divide-zinc-100 dark:border-zinc-700/60 dark:bg-zinc-900/30 dark:divide-zinc-800">
+                <button
+                  v-for="session in recentNormalSessions"
+                  :key="session.id"
+                  type="button"
+                  class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-zinc-700 transition-colors hover:bg-indigo-50/70 dark:text-zinc-200 dark:hover:bg-indigo-900/20"
+                  @click="loadChatHistory(session.id)"
+                >
+                  <span class="min-w-0 flex-1 truncate">{{ session.name || BLANK_SESSION_NAME }}</span>
+                  <span class="shrink-0 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                    Token {{ formatTokenCount(session.totalTokens) }}
+                  </span>
+                </button>
+                <div v-if="recentNormalSessions.length === 0" class="px-3 py-3 text-xs text-zinc-400 dark:text-zinc-500">
+                  暂无普通对话
+                </div>
+              </div>
             </div>
-            <div class="rounded-xl border border-zinc-200/80 bg-white/50 dark:border-zinc-700/60 dark:bg-zinc-900/30 overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-800">
-              <button
-                v-for="session in recentNormalSessions"
-                :key="session.id"
-                type="button"
-                class="w-full flex items-center gap-2 px-3 py-2.5 text-left text-xs text-zinc-700 hover:bg-emerald-50/70 dark:text-zinc-200 dark:hover:bg-emerald-900/20 transition-colors"
-                @click="loadChatHistory(session.id)"
-              >
-                <span class="min-w-0 flex-1 truncate">{{ session.name || BLANK_SESSION_NAME }}</span>
-                <span class="shrink-0 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
-                  Token {{ formatTokenCount(session.totalTokens) }}
-                </span>
-              </button>
+
+            <div class="space-y-2">
+              <div class="px-1 text-[11px] font-semibold tracking-wide text-zinc-400 dark:text-zinc-500">
+                最近任务对话
+              </div>
+              <div class="overflow-hidden rounded-xl border border-zinc-200/80 bg-white/50 divide-y divide-zinc-100 dark:border-zinc-700/60 dark:bg-zinc-900/30 dark:divide-zinc-800">
+                <button
+                  v-for="session in recentTaskSessions"
+                  :key="session.id"
+                  type="button"
+                  class="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs text-zinc-700 transition-colors hover:bg-emerald-50/70 dark:text-zinc-200 dark:hover:bg-emerald-900/20"
+                  @click="loadChatHistory(session.id)"
+                >
+                  <span class="min-w-0 flex-1 truncate">{{ session.name || BLANK_SESSION_NAME }}</span>
+                  <span class="shrink-0 text-[10px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                    Token {{ formatTokenCount(session.totalTokens) }}
+                  </span>
+                </button>
+                <div v-if="recentTaskSessions.length === 0" class="px-3 py-3 text-xs text-zinc-400 dark:text-zinc-500">
+                  暂无任务对话
+                </div>
+              </div>
             </div>
           </div>
           <div v-else class="text-[11px] text-zinc-400 dark:text-zinc-500">
@@ -288,15 +337,14 @@ const {
       <button
         v-if="!stickToBottom && !isBlankConversation"
         type="button"
-        class="absolute bottom-20 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-zinc-200 bg-white/95 px-3 py-1.5 text-[11px] font-normal text-zinc-600 shadow-lg backdrop-blur transition hover:border-indigo-300 hover:text-indigo-600 dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-300 dark:hover:border-indigo-500 dark:hover:text-indigo-300"
-        title="回到最新消息并继续自动跟随"
+        class="absolute bottom-20 left-1/2 z-40 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-lg backdrop-blur transition hover:border-indigo-300 hover:text-indigo-600 dark:border-zinc-700 dark:bg-zinc-900/95 dark:text-zinc-300 dark:hover:border-indigo-500 dark:hover:text-indigo-300"
+        :aria-label="isRunActive ? '跟随最新消息' : '回到最新消息'"
+        :title="isRunActive ? '跟随最新消息' : '回到最新消息'"
         @click="resumeFollowingLatest"
       >
-        <span v-if="isRunActive" class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
         <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
           <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6" />
         </svg>
-        <span>{{ isRunActive ? '跟随最新消息' : '回到最新消息' }}</span>
       </button>
 
       <div v-if="externalControlMode" class="rounded-xl border border-cyan-200 bg-cyan-50/80 px-4 py-2 text-center text-xs text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-950/20 dark:text-cyan-300">
@@ -304,8 +352,10 @@ const {
         <span v-if="externalControlError" class="ml-1 text-rose-600 dark:text-rose-300">{{ externalControlError }}</span>
       </div>
       <ChatInput
+        class="relative z-10"
         v-model="chatInput"
         :isTyping="isTyping"
+        :isSubmitting="isSubmitting"
         :isFileSelectorOpen="isFileSelectorOpen"
         :allFiles="allFiles"
         :selectedFiles="selectedFiles"

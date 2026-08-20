@@ -63,7 +63,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigSettingsSection.value = aiConfigSettingsSection.value === section ? '' : section
   }
 
-  const openCreateAiConfig = async (role: 'assistant_admin' | 'worker' = 'worker') => {
+  const openCreateAiConfig = async (role: 'worker' = 'worker') => {
     aiConfigMode.value = 'create'
     aiConfigDeleteConfirm.value = false
     aiConfigSettingsSection.value = ''
@@ -71,7 +71,7 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
       try { await loadMcpTools() } catch { /* fallback defaults */ }
     }
     aiConfigForm.value = {
-      ...buildAiForm(role === 'assistant_admin' ? 'worker' : role, modelPresets.value),
+      ...buildAiForm(role, modelPresets.value),
       system_auto_control: normalizeSystemAutoControl({}),
     }
     aiConfigModalOpen.value = true

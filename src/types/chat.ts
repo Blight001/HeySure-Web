@@ -53,6 +53,12 @@ export interface ChatModelOption {
   model: string
 }
 
+export interface ChatRemoteScreenDevice {
+  id: string
+  online?: boolean
+  capabilities?: string[]
+}
+
 export interface StoredChatDraft {
   content: string
   mentions: ChatMention[]
@@ -77,6 +83,7 @@ export interface ChatInterfaceProps {
   selectedFiles: string[]
   allFiles: string[]
   selectableFileRoot?: string
+  remoteScreenDevices?: ChatRemoteScreenDevice[]
 }
 
 export type ChatInterfaceEmitFn = {

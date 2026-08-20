@@ -9,6 +9,7 @@ export const ADMIN_TAB_ORDER: AdminModalTab[] = [
   'database',
   'audit',
   'diagnostics',
+  'deviceReleases',
   'update',
 ]
 
@@ -20,6 +21,7 @@ export const ADMIN_TAB_LABELS: Record<AdminModalTab, string> = {
   database: '数据库',
   audit: '操作审计',
   diagnostics: '系统测试',
+  deviceReleases: '设备版本',
   update: '版本更新',
 }
 

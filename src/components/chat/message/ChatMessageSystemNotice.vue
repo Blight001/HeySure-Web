@@ -12,7 +12,7 @@ defineProps<{
   <ChatCollapsible
     details-class="group/system-notice"
     summary-class="flex items-center gap-2 cursor-pointer select-none text-[12px] font-medium leading-5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-    body-class="mt-2 border-t border-slate-300/70 pt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600 dark:border-slate-600/70 dark:text-slate-400"
+    body-class="mt-2 max-w-full border-t border-slate-300/70 pt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[12px] leading-relaxed text-slate-600 dark:border-slate-600/70 dark:text-slate-400"
   >
     <template #summary="{ open }">
       <span

@@ -55,7 +55,7 @@ const emit = defineEmits<{
 
   <div
     v-else
-    class="whitespace-pre-wrap text-[13px] leading-relaxed"
+    class="min-w-0 max-w-full whitespace-pre-wrap break-words text-[13px] leading-relaxed [overflow-wrap:anywhere]"
     :class="[
       kind.isUserBubble ? 'text-indigo-700 dark:text-indigo-300' : '',
       kind.isFrontPrompt ? 'text-left w-full front-prompt-content' : '',

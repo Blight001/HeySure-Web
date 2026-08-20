@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onUnmounted, ref, watch } from 'vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { User } from '@/types'
@@ -17,6 +17,10 @@ import AdminDatabaseTab from './admin/AdminDatabaseTab.vue'
 import AdminAuditTab from './admin/AdminAuditTab.vue'
 import AdminDiagnosticsTab from './admin/AdminDiagnosticsTab.vue'
 import AdminUpdateTab from './admin/AdminUpdateTab.vue'
+
+const AdminDeviceReleasesTab = defineAsyncComponent(
+  () => import('./admin/AdminDeviceReleasesTab.vue'),
+)
 
 const props = defineProps<{
   show: boolean
@@ -43,6 +47,7 @@ const filesTab = ref<TabHandle | null>(null)
 const databaseTab = ref<TabHandle | null>(null)
 const auditTab = ref<TabHandle | null>(null)
 const diagnosticsTab = ref<TabHandle | null>(null)
+const deviceReleasesTab = ref<TabHandle | null>(null)
 const updateTab = ref<TabHandle | null>(null)
 
 const switchTab = (next: Tab) => {
@@ -57,6 +62,7 @@ const switchTab = (next: Tab) => {
     database: databaseTab.value,
     audit: auditTab.value,
     diagnostics: diagnosticsTab.value,
+    deviceReleases: deviceReleasesTab.value,
     update: updateTab.value,
   }
   handlers[next]?.onSwitch?.()
@@ -151,6 +157,7 @@ onUnmounted(() => {
           <AdminDatabaseTab v-show="tab === 'database'" ref="databaseTab" :current-user="currentUser" />
           <AdminAuditTab v-show="tab === 'audit'" ref="auditTab" />
           <AdminDiagnosticsTab v-show="tab === 'diagnostics'" ref="diagnosticsTab" />
+          <AdminDeviceReleasesTab v-if="tab === 'deviceReleases'" ref="deviceReleasesTab" />
           <AdminUpdateTab v-show="tab === 'update'" ref="updateTab" />
         </div>
       </div>

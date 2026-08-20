@@ -78,6 +78,12 @@ export const isCompressionNotice = (tags?: string) => {
   return false
 }
 
+const isWorkflowInteractionNotice = (tags?: string) => {
+  const tagSet = parseMessageTagSet(tags)
+  return tagSet.has('workflow_interaction')
+    || Array.from(tagSet).some(tag => tag.startsWith('workflow_interaction:'))
+}
+
 export const isFrontPromptMessage = (message: ChatMessageViewModel) =>
   message.role === 'system' && messageDisplayText(message).startsWith('[前置 Prompt]')
 
@@ -85,6 +91,7 @@ export const isSystemNoticeMessage = (message: ChatMessageViewModel) => {
   if (message.role !== 'user' && message.role !== 'system') return false
   const text = messageDisplayText(message).trim()
   return isCompressionNotice(message.tags)
+    || isWorkflowInteractionNotice(message.tags)
     || text.startsWith('[系统提示]')
     || text.startsWith('【任务完成回执】')
 }
@@ -92,12 +99,15 @@ export const isSystemNoticeMessage = (message: ChatMessageViewModel) => {
 export const isCollapsibleSystemNotice = (message: ChatMessageViewModel) => {
   if (message.role !== 'user' && message.role !== 'system') return false
   const text = messageDisplayText(message).trim()
-  return isCompressionNotice(message.tags) || text.startsWith('[系统提示]')
+  return isCompressionNotice(message.tags)
+    || isWorkflowInteractionNotice(message.tags)
+    || text.startsWith('[系统提示]')
 }
 
 export const systemNoticeBody = (message: ChatMessageViewModel) =>
   messageDisplayText(message).trim()
     .replace(/^\[系统提示\]\s*/, '')
+    .replace(/^【自动化卡片交互请求】\s*/, '自动化卡片交互请求\n\n')
     .replace(/^\[对话历史摘要\]\s*/, '对话压缩摘要\n\n')
     .trim()
 

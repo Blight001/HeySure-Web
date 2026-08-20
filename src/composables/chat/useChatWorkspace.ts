@@ -56,7 +56,7 @@ const isBlankConversationOf = (state: ChatWorkspaceState, liveText: { value: str
     return !String(liveText.value || '').trim()
   })
 
-const sendExternalControllerChat = async (ctx: WorkspaceCtx, overrideContent?: string) => {
+const sendExternalControllerChatCore = async (ctx: WorkspaceCtx, overrideContent?: string) => {
   const content = (overrideContent ?? ctx.state.chatInput.value).trim()
   const readyUploads = ctx.uploads.uploadedAttachments.value.filter(item => item.status === 'ready' && item.file_ref)
   if (!content && readyUploads.length === 0) return
@@ -70,6 +70,16 @@ const sendExternalControllerChat = async (ctx: WorkspaceCtx, overrideContent?: s
   }
   if (!getAuthToken()) return
   await dispatchExternalControllerChat(ctx, content)
+}
+
+const sendExternalControllerChat = async (ctx: WorkspaceCtx, overrideContent?: string) => {
+  if (ctx.state.isSubmitting.value) return
+  ctx.state.isSubmitting.value = true
+  try {
+    await sendExternalControllerChatCore(ctx, overrideContent)
+  } finally {
+    ctx.state.isSubmitting.value = false
+  }
 }
 
 const dispatchExternalControllerChat = async (ctx: WorkspaceCtx, content: string) => {

@@ -921,8 +921,6 @@ def gen_arcade_tetris():
 LOOKS = {
     # 核心管理员（数字社会管理员）：紫袍金冠（深棕发，避免与金冠混色）
     "char_admin": dict(hair=(74, 54, 40, 255), shirt=(124, 82, 180, 255), pants=(70, 50, 110, 255), accessory="crown"),
-    # 辅助管理员：青披风 + 提灯（全图巡逻）
-    "char_assistant": dict(hair=(52, 42, 46, 255), shirt=(52, 150, 150, 255), pants=(40, 90, 96, 255), accessory="lantern", cape=(36, 116, 122, 255)),
     # 图书管理员：绿衣 + 眼镜 + 书
     "char_librarian": dict(hair=(106, 76, 48, 255), shirt=(96, 150, 84, 255), pants=(70, 100, 60, 255), accessory="glasses_book"),
     # 普通数字成员皮肤族
@@ -1126,7 +1124,7 @@ def gen_emotes():
     c = new()
     c.rect(7, 2, 2, 8, (224, 96, 96, 255))
     c.rect(7, 12, 2, 2, (224, 96, 96, 255))
-    # 4 放大镜（辅助管理员巡查）
+    # 4 放大镜（巡查）
     c = new()
     c.ring(7, 6, 4, (70, 90, 140, 255))
     c.ring(7, 6, 3, (70, 90, 140, 255))

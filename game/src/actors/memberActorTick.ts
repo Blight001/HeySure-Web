@@ -224,7 +224,6 @@ export const triggerRoleEmote = (actor: MemberActorHost) => {
   const m = actor.member
   if (m.taskStatus === 'running') return
   if (m.role === 'librarian') flashEmote(actor, 'bulb', 1800)
-  else if (m.role === 'assistant_admin') flashEmote(actor, 'magnifier', 1600)
   else if (m.runtimeStatus === 'running') flashEmote(actor, 'scroll', 1400)
   else if (m.lifecycle === 'learning' && Math.random() < 0.5) flashEmote(actor, 'scroll', 1400)
 }

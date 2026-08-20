@@ -52,7 +52,7 @@ export interface AiConfigUpsertPayload {
   name: string
   description?: string
   avatar?: string
-  ai_role: 'assistant_admin' | 'digital_member'
+  ai_role: 'digital_member'
   digital_member_role: 'manager' | 'member'
   platform: string
   token_limit: number

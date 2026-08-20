@@ -29,6 +29,7 @@ const { alert, confirm } = useMessage()
 
 const props = defineProps<{
   currentUser?: User | null
+  openAdminOnMount?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   (e: 'updateProfile'): void
   (e: 'refreshUser', user: User): void
   (e: 'ready'): void
+  (e: 'deviceHall'): void
 }>()
 
 const { isMobile } = useBreakpoint()
@@ -48,7 +50,7 @@ const focusedDeviceId = ref('')
 const deviceFocusSignal = ref(0)
 const knowledgeFocusSignal = ref(0)
 const chatActiveAiConfigId = ref<number | null>(null)
-const adminModalOpen = ref(false)
+const adminModalOpen = ref(Boolean(props.openAdminOnMount))
 const deviceDocOpen = ref(false)
 const deviceToolsModalOpen = ref(false)
 const maintenanceCenterOpen = ref(false)
@@ -276,6 +278,7 @@ onUnmounted(() => {
     :user-menu-open="ui.userMenuOpen"
     @background-click="ui.closeSettings(); ui.closeUserMenu()"
     @open-admin="adminModalOpen = true"
+    @open-device-hall="emit('deviceHall')"
     @open-maintenance="maintenanceCenterOpen = true"
     @open-settings="ui.settingsOpen = true"
     @toggle-user-menu="ui.userMenuOpen = !ui.userMenuOpen"

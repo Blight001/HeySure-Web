@@ -7,7 +7,7 @@ interface Agent {
   id: string
   name: string
   role: 'admin' | 'worker'
-  aiRole?: 'assistant_admin' | 'digital_member' | 'admin' | 'worker'
+  aiRole?: 'digital_member' | 'admin' | 'worker'
   tokensUsed: number
   tokenLimit: number
   generation: number

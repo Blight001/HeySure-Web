@@ -80,6 +80,7 @@ const drainPendingQueue = async (deps: ChatSendDeps, sendChat: (content: string)
 interface PreparedSend {
   content: string
   readyUploads: PendingUploadAttachment[]
+  mentions: ChatMention[]
 }
 
 const prepareSendInput = async (
@@ -95,11 +96,10 @@ const prepareSendInput = async (
     return null
   }
   if (!getAuthToken()) return null
-  return { content, readyUploads }
+  return { content, readyUploads, mentions: [...deps.state.chatMentions.value] }
 }
 
-const injectIntoActiveRun = async (deps: ChatSendDeps, prepared: PreparedSend) => {
-  deps.state.chatInput.value = ''
+const injectIntoActiveRun = async (deps: ChatSendDeps, prepared: PreparedSend, optimisticId: number) => {
   try {
     const res = await chatApi.injectMessage({
       content: prepared.content || `已上传 ${prepared.readyUploads.length} 个附件`,
@@ -117,6 +117,7 @@ const injectIntoActiveRun = async (deps: ChatSendDeps, prepared: PreparedSend) =
       return 'done' as const
     }
   } catch {
+    deps.history.removeOptimisticUserMessage(optimisticId)
     return handleInjectFailure(deps, prepared)
   }
   return 'retry' as const
@@ -140,7 +141,7 @@ const buildSendPayload = (deps: ChatSendDeps, prepared: PreparedSend) => {
     .filter(file => deps.files.isSelectableFilePath(file))
   const selectedAiPaths = selectedReadableFiles.map(path => deps.files.toAiWorkspacePath(path))
   const attachedPathStr = buildAttachedPathSectionFromPaths(selectedReadableFiles, deps.files.toAiWorkspacePath)
-  const activeMentions = activeChatMentions(prepared.content, deps.state.chatMentions.value)
+  const activeMentions = activeChatMentions(prepared.content, prepared.mentions)
   const mentionContext = buildMentionContextSection(activeMentions)
   const currentSessionName = deps.state.sessionList.value.find(s => s.id === deps.state.currentSessionId.value)?.name || BLANK_SESSION_NAME
   const visibleUserContent = prepared.content || `已上传 ${prepared.readyUploads.length} 个附件`
@@ -166,8 +167,6 @@ const buildSendPayload = (deps: ChatSendDeps, prepared: PreparedSend) => {
 }
 
 const beginOutgoingRun = (deps: ChatSendDeps) => {
-  deps.state.chatInput.value = ''
-  deps.state.chatMentions.value = []
   deps.state.isTyping.value = true
   deps.state.currentRunStatus.value = 'queued'
   deps.state.currentMcpTool.value = ''
@@ -176,7 +175,15 @@ const beginOutgoingRun = (deps: ChatSendDeps) => {
   deps.timers.updatePhase('generating')
 }
 
-const handleSendError = async (deps: ChatSendDeps, err: any) => {
+const handleSendError = async (
+  deps: ChatSendDeps,
+  prepared: PreparedSend,
+  optimisticId: number,
+  err: any,
+) => {
+  deps.history.removeOptimisticUserMessage(optimisticId)
+  deps.state.chatInput.value = prepared.content
+  deps.state.chatMentions.value = prepared.mentions
   deps.state.isTyping.value = false
   deps.state.currentRunStatus.value = 'error'
   deps.timers.finalizeRunTimers()
@@ -192,7 +199,7 @@ const handleSendError = async (deps: ChatSendDeps, err: any) => {
   await deps.dialogs.alert({ message: `发送失败: ${text || '未知错误'}`, type: 'error' })
 }
 
-const dispatchNewRun = async (deps: ChatSendDeps, prepared: PreparedSend) => {
+const dispatchNewRun = async (deps: ChatSendDeps, prepared: PreparedSend, optimisticId: number) => {
   const built = buildSendPayload(deps, prepared)
   beginOutgoingRun(deps)
   try {
@@ -206,31 +213,62 @@ const dispatchNewRun = async (deps: ChatSendDeps, prepared: PreparedSend) => {
     deps.run.resetBoundaryTrackers()
     deps.run.startRunPolling()
   } catch (err: any) {
-    await handleSendError(deps, err)
+    await handleSendError(deps, prepared, optimisticId, err)
   }
 }
 
-const sendChat = async (
+const sendChatCore = async (
   deps: ChatSendDeps,
   overrideContent?: string,
   options: { silent?: boolean } = {},
 ) => {
   const prepared = await prepareSendInput(deps, overrideContent, !!options.silent)
   if (!prepared) return
+  const visibleContent = prepared.content || `已上传 ${prepared.readyUploads.length} 个附件`
+  const visibleMentions = activeChatMentions(prepared.content, prepared.mentions)
+  const optimisticTags = encodeUserContextTags(
+    deps.props.selectedFiles.map(path => deps.files.toAiWorkspacePath(deps.files.normalizeSelectionPath(path))),
+    visibleMentions,
+    deps.files.toAiWorkspacePath,
+  )
+  deps.state.chatInput.value = ''
+  deps.state.chatMentions.value = []
+  const optimisticId = await deps.history.appendOptimisticUserMessage(
+    visibleContent,
+    optimisticTags,
+    prepared.readyUploads,
+  )
   if (!deps.state.currentSessionId.value) {
-    const createdId = await deps.sessions.createSession(BLANK_SESSION_NAME, { carryDraft: true })
-    if (!createdId) return
+    const createdId = await deps.sessions.createSession(BLANK_SESSION_NAME, {
+      carryDraft: true,
+      preserveMessages: true,
+    })
+    if (!createdId) {
+      deps.history.removeOptimisticUserMessage(optimisticId)
+      deps.state.chatInput.value = prepared.content
+      deps.state.chatMentions.value = prepared.mentions
+      return
+    }
   }
   if (overrideContent === undefined && (deps.state.isTyping.value || deps.state.isRunActive.value)) {
-    const injected = await injectIntoActiveRun(deps, prepared)
+    const injected = await injectIntoActiveRun(deps, prepared, optimisticId)
     if (injected === 'done') return
-    return sendChat(deps, prepared.content)
+    await dispatchNewRun(deps, prepared, optimisticId)
+    return
   }
-  await dispatchNewRun(deps, prepared)
+  await dispatchNewRun(deps, prepared, optimisticId)
 }
 
 export const useChatSend = (deps: ChatSendDeps) => {
-  const send = (overrideContent?: string, options: { silent?: boolean } = {}) => sendChat(deps, overrideContent, options)
+  const send = async (overrideContent?: string, options: { silent?: boolean } = {}) => {
+    if (deps.state.isSubmitting.value) return
+    deps.state.isSubmitting.value = true
+    try {
+      await sendChatCore(deps, overrideContent, options)
+    } finally {
+      deps.state.isSubmitting.value = false
+    }
+  }
   return {
     pendingQueue: deps.state.pendingQueue,
     sendChat: send,

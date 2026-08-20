@@ -105,14 +105,8 @@ export const SHEETS: SheetDef[] = [
   strip('building_workshop_knowledge.png', '作坊·知识与进化', 'building', 64, 80, 4),
   strip('building_workshop_android.png', '作坊·移动信号坊（安卓 agent）', 'building', 64, 80, 4),
 
-  // ---- 小游戏建筑（池塘右侧游乐角） ----
-  strip('building_arcade_snake.png', '小游戏·贪吃蛇街机屋', 'building', 64, 80, 4),
-  strip('building_arcade_2048.png', '小游戏·2048 数字馆', 'building', 64, 80, 4, 2),
-  strip('building_arcade_tetris.png', '小游戏·方块塔', 'building', 64, 80, 4),
-
   // ---- 角色 ----
   character('char_admin.png', '核心管理员（紫袍金冠）'),
-  character('char_assistant.png', '辅助管理员（青衣提灯）'),
   character('char_librarian.png', '图书管理员（眼镜持书）'),
   character('char_member_blue.png', '数字成员 · 蓝'),
   character('char_member_red.png', '数字成员 · 红'),
@@ -169,7 +163,6 @@ export const MEMBER_SKINS = [
 /** 角色 → 专属皮肤映射（与 useDashboardData 的角色判定字段对应） */
 export const ROLE_SKINS = {
   coreAdmin: 'char_admin.png', // digital_member_role === 'manager' || switch_key === 'assistant_default'
-  assistantAdmin: 'char_assistant.png', // ai_role === 'assistant_admin'
   librarian: 'char_librarian.png', // is_librarian === true
 } as const
 
@@ -211,7 +204,7 @@ export const EMOTES = {
   bulb: 1, // 知识沉淀
   check: 2, // 任务完成
   alert: 3, // 异常
-  magnifier: 4, // 辅助管理员巡查
+  magnifier: 4, // 巡查
   zzz: 5, // 停用打盹
   scroll: 6, // 领任务
   skull: 7, // 死亡标记

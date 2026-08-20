@@ -27,7 +27,7 @@ const loadSessions = async (state: ChatWorkspaceState) => {
 const createSession = async (
   ctx: { state: ChatWorkspaceState; drafts: ChatDraftsApi; prompt: ChatFrontPromptApi },
   nameInput?: string,
-  options: { carryDraft?: boolean } = {},
+  options: { carryDraft?: boolean; preserveMessages?: boolean } = {},
 ) => {
   const name = String(nameInput ?? BLANK_SESSION_NAME).trim() || BLANK_SESSION_NAME
   if (!getAuthToken()) return ''
@@ -40,7 +40,7 @@ const createSession = async (
   await loadSessions(ctx.state)
   if (options.carryDraft) ctx.drafts.markPreserveDraft(session.id)
   ctx.state.currentSessionId.value = session.id
-  ctx.state.chatMessages.value = []
+  if (!options.preserveMessages) ctx.state.chatMessages.value = []
   await ctx.prompt.loadFrontPromptToolSchemas()
   return session.id
 }
@@ -157,10 +157,12 @@ export const useChatSessions = (
   return {
     sessionList: state.sessionList,
     recentNormalSessions: computed(() =>
-      state.sessionList.value.filter(item => !isTaskSession(item)).slice(0, 8)),
+      state.sessionList.value.filter(item => !isTaskSession(item)).slice(0, 3)),
+    recentTaskSessions: computed(() =>
+      state.sessionList.value.filter(isTaskSession).slice(0, 3)),
     bumpTokenEpoch: () => { tokenEpoch.value += 1 },
     loadSessions: () => loadSessions(state),
-    createSession: (nameInput?: string, options: { carryDraft?: boolean } = {}) =>
+    createSession: (nameInput?: string, options: { carryDraft?: boolean; preserveMessages?: boolean } = {}) =>
       createSession(sessionCtx, nameInput, options),
     createSessionFromButton: () => createSession(sessionCtx),
     maybeAutoTitleSession: (sessionId: string, firstMessage: string) =>

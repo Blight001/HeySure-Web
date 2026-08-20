@@ -1,7 +1,6 @@
 import Phaser from 'phaser'
 import { MemberActor } from '../actors/MemberActor'
 import { applyMemberDropBinding } from '../world/bindings'
-import type { MinigameId } from '../world/layout'
 import { memberTooltipData } from '../ui/worldText'
 import type { TooltipData } from '../ui/overlay'
 import { playSfx } from './worldSceneAmbient'
@@ -109,9 +108,7 @@ const handleNonMemberClick = (scene: WorldSceneHost, obj: Phaser.GameObjects.Gam
     return
   }
   const key = obj.getData?.('buildingKey') as string | undefined
-  const minigameId = obj.getData?.('minigameId') as MinigameId | undefined
-  if (minigameId) openMinigame(scene, minigameId)
-  else if (key === 'library') postToDashboard({ type: 'world:open-knowledge' })
+  if (key === 'library') postToDashboard({ type: 'world:open-knowledge' })
   if (key) bounceBuilding(scene, key)
 }
 
@@ -128,19 +125,6 @@ const bounceBuilding = (scene: WorldSceneHost, key: string) => {
     yoyo: true,
     ease: 'Sine.easeOut',
     onComplete: () => { bSprite.scaleX = sx; bSprite.scaleY = sy },
-  })
-}
-
-export const openMinigame = (scene: WorldSceneHost, id: MinigameId) => {
-  if (scene.minigameModal.isOpen) return
-  playSfx(scene, 'chime', 0.4)
-  const kb = scene.input.keyboard
-  if (kb) kb.enabled = false
-  scene.minigameModal.open(id, () => {
-    if (kb) {
-      kb.resetKeys()
-      kb.enabled = true
-    }
   })
 }
 

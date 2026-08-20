@@ -4,6 +4,7 @@ import ChatTokenUsageBar from '@/components/chat/ChatTokenUsageBar.vue'
 import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
 import { BACKGROUND_POPUP_Z_INDEX, PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import type { Agent } from '@/types'
+import type { ChatDeviceHint } from './godDashboardAgents'
 import type { ChatResizeEdge } from './godDashboardChatGeometry'
 import { CHAT_FLOAT_CONSTRAINTS } from './godDashboardChatGeometry'
 
@@ -28,6 +29,7 @@ const props = defineProps<{
   allFiles: string[]
   selectableFileRoot: string
   currentUserId?: number
+  connectedDevices: ChatDeviceHint[]
 }>()
 
 const emit = defineEmits<{
@@ -100,9 +102,7 @@ const onViewportResize = () => {
 
 defineExpose({ panelEl: panelRef, closeChatMemberMenu, onViewportResize })
 
-const chatTargetAiKind = computed<'assistant' | 'core'>(() => (
-  props.chatTarget.aiRole === 'assistant_admin' ? 'assistant' : 'core'
-))
+const chatTargetAiKind = computed<'core'>(() => 'core')
 
 const resizeEdges: ChatResizeEdge[] = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw']
 const resizeClass: Record<ChatResizeEdge, string> = {
@@ -259,6 +259,7 @@ const resizeClass: Record<ChatResizeEdge, string> = {
           :selectedFiles="selectedFiles"
           :allFiles="allFiles"
           :selectable-file-root="selectableFileRoot"
+          :remote-screen-devices="connectedDevices"
           @update:selectedFiles="emit('update:selectedFiles', $event)"
           @update:currentSessionId="emit('update:currentSessionId', $event)"
           @taskPlanRefresh="emit('taskPlanRefresh', $event)"

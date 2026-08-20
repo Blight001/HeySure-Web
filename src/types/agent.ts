@@ -25,7 +25,7 @@ export interface Agent {
   name: string
   avatar?: string
   role: AgentRole
-  aiRole?: 'assistant_admin' | 'digital_member' | 'admin' | 'worker'
+  aiRole?: 'digital_member' | 'admin' | 'worker'
   digitalMemberRole?: 'manager' | 'member'
   tokensUsed: number
   tokenLimit: number

@@ -10,13 +10,20 @@ const HomePage = defineAsyncComponent(() => import('@/components/home/HomePage.v
 const LoginModal = defineAsyncComponent(() => import('@/components/common/LoginModal.vue'))
 const ProfileModal = defineAsyncComponent(() => import('@/components/common/ProfileModal.vue'))
 const MessageDialog = defineAsyncComponent(() => import('@/components/common/MessageDialog.vue'))
+const HostRescueModal = defineAsyncComponent(() => import('@/components/home/HostRescueModal.vue'))
+const DeviceHallModal = defineAsyncComponent(() => import('@/components/device-hall/DeviceHallModal.vue'))
 
 const { user, handleLoginSuccess, updateUser, logout } = useAuth()
 const initialUiPreferences = getInitialUiPreferences()
 const isDarkStartup = initialUiPreferences.themeMode === 'dark'
 
 const showLogin = ref(false)
+const showHostRescue = ref(false)
+const adminLoginRequested = ref(false)
+const openAdminOnDashboard = ref(false)
 const showProfile = ref(false)
+const showDeviceHall = ref(false)
+const deviceHallProductId = ref('')
 const showSplash = ref(true)
 const revealContent = ref(false)
 // 登录成功 / 会话恢复后需等待控制台数据就绪，避免直接显示空白界面
@@ -92,8 +99,25 @@ const revealApp = () => {
 }
 
 const onLoginSuccess = (userData: User, token: string) => {
+  openAdminOnDashboard.value = adminLoginRequested.value
   handleLoginSuccess(userData, token)
+  adminLoginRequested.value = false
   showLogin.value = false
+}
+
+const openLogin = (adminOnly = false) => {
+  adminLoginRequested.value = adminOnly
+  showLogin.value = true
+}
+
+const closeLogin = () => {
+  adminLoginRequested.value = false
+  showLogin.value = false
+}
+
+const handleLogout = () => {
+  openAdminOnDashboard.value = false
+  void logout()
 }
 
 // 登录态从无到有时拉起加载遮罩，登出时立即撤下
@@ -111,6 +135,11 @@ const onUpdateSuccess = (userData: User) => {
 }
 
 onMounted(() => {
+  const startupQuery = new URLSearchParams(window.location.search)
+  if (startupQuery.get('device-hall') === '1') {
+    deviceHallProductId.value = startupQuery.get('product') || ''
+    showDeviceHall.value = true
+  }
   const startedAt = window.__HEYSURE_STARTUP__?.startedAt ?? performance.now()
   startupElapsedTimer = window.setInterval(() => {
     startupElapsed.value = ((performance.now() - startedAt) / 1000).toFixed(1)
@@ -180,23 +209,28 @@ onBeforeUnmount(() => {
     >
       <HomePage
         v-if="!user"
-        @login="showLogin = true"
-        @register="showLogin = true"
+        @login="openLogin()"
+        @register="openLogin()"
+        @admin="showHostRescue = true"
+        @device-hall="showDeviceHall = true"
       />
       <GodDashboard
         v-else
         :current-user="user"
-        @login="showLogin = true"
-        @logout="logout"
+        :open-admin-on-mount="openAdminOnDashboard"
+        @login="openLogin()"
+        @logout="handleLogout"
         @update-profile="showProfile = true"
         @refresh-user="updateUser"
         @ready="onDashboardReady"
+        @device-hall="showDeviceHall = true"
       />
     </div>
 
     <LoginModal
       :show="showLogin"
-      @close="showLogin = false"
+      :admin-only="adminLoginRequested"
+      @close="closeLogin"
       @login-success="onLoginSuccess"
     />
 
@@ -206,10 +240,24 @@ onBeforeUnmount(() => {
       :user="user"
       @close="showProfile = false"
       @update-success="onUpdateSuccess"
-      @password-changed="logout"
+      @password-changed="handleLogout"
+    />
+
+    <HostRescueModal
+      :show="showHostRescue"
+      @close="showHostRescue = false"
+      @open-admin="openLogin(true)"
     />
 
     <MessageDialog />
+
+    <DeviceHallModal
+      :show="showDeviceHall"
+      :logged-in="!!user"
+      :initial-product-id="deviceHallProductId"
+      @close="showDeviceHall = false"
+      @login="showDeviceHall = false; openLogin()"
+    />
 
     <Transition name="startup-splash">
       <div

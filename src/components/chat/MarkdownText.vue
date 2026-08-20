@@ -214,8 +214,12 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
 .markdown-text {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  line-height: 1.65;
+  min-width: 0;
+  max-width: 100%;
+  gap: 0.48rem;
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdown-text-plain {
@@ -226,8 +230,9 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
 
 /* Paragraphs - modern readable spacing */
 .markdown-text :deep(p) {
-  margin: 0 0 0.65rem 0;
-  line-height: 1.7;
+  max-width: 100%;
+  margin: 0;
+  line-height: 1.65;
 }
 
 .markdown-text :deep(p:last-child) {
@@ -251,7 +256,7 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
 .markdown-text :deep(h4),
 .markdown-text :deep(h5),
 .markdown-text :deep(h6) {
-  margin: 1.1rem 0 0.5rem 0;
+  margin: 0.55rem 0 0.1rem;
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -316,8 +321,8 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
 /* Tables - clean modern look */
 .markdown-text :deep(.md-table-wrap) {
   max-width: 100%;
-  overflow-x: auto;
-  margin: 0.5rem 0;
+  overflow: hidden;
+  margin: 0.25rem 0;
   border-radius: 0.5rem;
   border: 1px solid rgba(148, 163, 184, 0.2);
 }
@@ -327,8 +332,8 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
 }
 
 .markdown-text :deep(table) {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.78rem;
   background: white;
@@ -345,6 +350,8 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
   text-align: left;
   vertical-align: top;
   line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .dark .markdown-text :deep(th),
@@ -375,14 +382,16 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
 /* Modern code blocks - dark surface, good contrast, rounded */
 .markdown-text :deep(.md-code) {
   max-width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
   margin: 0.35rem 0;
   padding: 0.85rem 1rem;
   border-radius: 0.65rem;
   background: #0b0f19;
   border: 1px solid rgba(63, 63, 70, 0.6);
   color: #e2e8f0;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-size: 0.78rem;
   line-height: 1.55;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
@@ -402,6 +411,8 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
   font-size: 0.88em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   color: rgb(63 66 243);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .markdown-text :deep(.md-mention) {
@@ -434,7 +445,7 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
 
 /* Lists */
 .markdown-text :deep(.md-list) {
-  margin: 0.2rem 0 0.5rem;
+  margin: 0.1rem 0 0.25rem;
   padding-left: 1.35rem;
 }
 

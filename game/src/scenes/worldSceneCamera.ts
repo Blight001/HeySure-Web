@@ -64,7 +64,7 @@ const dragCamera = (
   drag: CamDragState,
   p: Phaser.Input.Pointer,
 ) => {
-  if (!scene.camDragging || !p.isDown || scene.draggingActor || scene.draggingWorkshop || scene.governorMode) {
+  if (!scene.camDragging || !p.isDown || scene.draggingActor || scene.draggingWorkshop) {
     return
   }
   const dx = (p.x - drag.lastX) / cam.zoom

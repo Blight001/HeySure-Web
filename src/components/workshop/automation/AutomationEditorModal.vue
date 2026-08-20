@@ -81,7 +81,7 @@ const aiMemberOptions = computed(() => (props.agents || [])
   .map(agent => ({
     id: Number(agent.aiConfigId),
     name: agent.name,
-    role: agent.aiRole === 'assistant_admin' ? '辅助管理员' : agent.digitalMemberRole === 'manager' ? '管理员' : '普通成员',
+    role: agent.digitalMemberRole === 'manager' ? '管理员' : '普通成员',
     enabled: agent.enabled !== false,
   }))
   .sort((first, second) => first.name.localeCompare(second.name, 'zh-CN')))
@@ -391,7 +391,7 @@ const closeDeviceSettings = (save: boolean) => {
 watch(onlineDevices, loadDeviceTools, { deep: true, immediate: true })
 watch(editorOpen, value => { if (!value) editorFullscreen.value = false })
 watch([() => ({ ...editor }), editorSteps, canvasPositions], () => {
-  if (editorOpen.value) editorHistory.schedule(captureEditorSnapshot())
+  if (editorOpen.value) editorHistory.schedule(captureEditorSnapshot)
 }, { deep: true })
 
 onMounted(() => window.addEventListener('keydown', handleEditorShortcut))

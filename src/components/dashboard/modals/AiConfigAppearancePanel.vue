@@ -100,10 +100,7 @@ watch(() => props.editingConfigId, () => { void loadAppearance() }, { immediate:
 
       <div>
         <div class="mb-2 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">人物皮肤</div>
-        <div v-if="roleGroup === 'assistant_admin'" class="rounded-lg border border-zinc-200 bg-zinc-50/60 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
-          该角色使用固定身份皮肤，可继续调整调色、体型和光环。
-        </div>
-        <div v-else class="grid grid-cols-5 gap-2">
+        <div class="grid grid-cols-5 gap-2">
           <button
             v-for="skin in MEMBER_SKIN_OPTIONS"
             :key="skin.key || 'default'"

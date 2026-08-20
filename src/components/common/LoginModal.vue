@@ -8,6 +8,7 @@ import { usePopupZIndex } from '@/composables/usePopupZIndex'
 
 const props = defineProps<{
   show: boolean
+  adminOnly?: boolean
 }>()
 
 const zIndex = usePopupZIndex(() => props.show)
@@ -25,7 +26,7 @@ const error = ref('')
 const authConfig = ref<AuthConfig>({ registration_mode: 'open', email_enabled: false })
 const loginMethod = ref<'password' | 'email'>('password')
 
-const title = computed(() => isLoginMode.value ? '登录' : '注册')
+const title = computed(() => props.adminOnly ? '管理员登录' : (isLoginMode.value ? '登录' : '注册'))
 const switchText = computed(() => isLoginMode.value ? '没有账号？去注册' : '已有账号？去登录')
 const registrationClosed = computed(() => authConfig.value.registration_mode === 'closed')
 const needEmailVerify = computed(() => authConfig.value.registration_mode === 'email')
@@ -59,6 +60,7 @@ watch(
   () => props.show,
   async (visible) => {
     if (!visible) return
+    if (props.adminOnly) isLoginMode.value = true
     error.value = ''
     try {
       authConfig.value = await authApi.getAuthConfig()
@@ -98,6 +100,10 @@ const handleSubmit = async () => {
       const data = loginMethod.value === 'email'
         ? await authApi.loginWithEmail(email.value.trim(), emailCode.value.trim())
         : await authApi.login({ account: account.value, password: password.value })
+      if (props.adminOnly && !['owner', 'admin'].includes(data.user.role || '')) {
+        error.value = '该账号没有管理员权限'
+        return
+      }
       emit('login-success', data.user, data.access_token)
       emit('close')
     } else {
@@ -145,6 +151,10 @@ onBeforeUnmount(() => {
           </svg>
         </button>
       </div>
+
+      <p v-if="adminOnly" class="-mt-3 mb-5 text-sm text-zinc-500 dark:text-zinc-400">
+        验证管理员身份后将直接打开服务管理，可查看状态并重启异常运行时。
+      </p>
 
       <!-- 注册已关闭提示 -->
       <div v-if="!isLoginMode && registrationClosed" class="space-y-5">
@@ -247,7 +257,7 @@ onBeforeUnmount(() => {
           {{ loading ? '处理中...' : (isLoginMode ? '登 录' : '注 册') }}
         </button>
 
-        <div class="mt-4 text-center">
+        <div v-if="!adminOnly" class="mt-4 text-center">
           <button type="button" @click="toggleMode" class="text-sm text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 hover:underline">
             {{ switchText }}
           </button>

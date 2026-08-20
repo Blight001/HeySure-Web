@@ -14,6 +14,7 @@ export const useSnapshotHistory = <T,>(
   const future: T[] = []
   let current: T | null = null
   let pending: T | null = null
+  let pendingFactory: (() => T) | null = null
   let timer: number | undefined
 
   const updateAvailability = () => {
@@ -40,12 +41,17 @@ export const useSnapshotHistory = <T,>(
 
   const flush = () => {
     clearTimer()
+    if (pendingFactory) pending = pendingFactory()
+    pendingFactory = null
     if (pending !== null) commit(pending)
     pending = null
   }
 
-  const schedule = (snapshot: T) => {
-    pending = cloneSnapshot(snapshot)
+  // 工厂用于高频交互：只在安静期结束后创建快照，避免每帧深拷贝整张图。
+  const schedule = (snapshot: T | (() => T)) => {
+    pending = null
+    pendingFactory = typeof snapshot === 'function' ? snapshot as () => T : null
+    if (!pendingFactory) pending = cloneSnapshot(snapshot as T)
     clearTimer()
     timer = window.setTimeout(flush, delay)
   }
@@ -53,6 +59,7 @@ export const useSnapshotHistory = <T,>(
   const reset = (snapshot: T) => {
     clearTimer()
     pending = null
+    pendingFactory = null
     past.length = 0
     future.length = 0
     current = cloneSnapshot(snapshot)

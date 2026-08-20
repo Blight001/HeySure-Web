@@ -14,8 +14,9 @@ export function positionFor(
   steps: CanvasStep[],
   positions: Record<string, WorkflowNodePosition>,
 ): WorkflowNodePosition {
+  if (positions[stepId]) return positions[stepId]
   const index = steps.findIndex(step => step.id === stepId)
-  return positions[stepId] || defaultPosition(Math.max(0, index))
+  return defaultPosition(Math.max(0, index))
 }
 
 export function outputPorts(step: CanvasStep): OutputPort[] {
