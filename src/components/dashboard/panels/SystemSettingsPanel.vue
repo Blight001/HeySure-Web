@@ -22,7 +22,6 @@ interface Props {
   aiMessageInquiryReminderSeconds: number
   promptAiMessageInquiryReminder: string
   promptAiMessageReply: string
-  promptAiMessageChitchat: string
   promptAiMessageReplySuccess: string
   promptUserMessageNotice: string
   themeMode: 'light' | 'dark'
@@ -53,7 +52,6 @@ const emit = defineEmits<{
   (e: 'update:aiMessageInquiryReminderSeconds', value: number): void
   (e: 'update:promptAiMessageInquiryReminder', value: string): void
   (e: 'update:promptAiMessageReply', value: string): void
-  (e: 'update:promptAiMessageChitchat', value: string): void
   (e: 'update:promptAiMessageReplySuccess', value: string): void
   (e: 'update:promptUserMessageNotice', value: string): void
   (e: 'update:themeMode', value: 'light' | 'dark'): void

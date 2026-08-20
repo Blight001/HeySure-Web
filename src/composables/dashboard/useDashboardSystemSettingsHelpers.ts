@@ -113,7 +113,6 @@ export type SystemSettingsDraft = {
   aiMessageInquiryReminderSeconds: { value: number }
   promptAiMessageInquiryReminder: { value: string }
   promptAiMessageReply: { value: string }
-  promptAiMessageChitchat: { value: string }
   promptAiMessageReplySuccess: { value: string }
   promptUserMessageNotice: { value: string }
 }
@@ -162,7 +161,6 @@ function applyAiMessagePrefs(raw: Record<string, any>, draft: SystemSettingsDraf
   applyStringPref(raw, 'prompt_ai_message_inquiry', draft.promptAiMessageInquiry)
   applyStringPref(raw, 'prompt_ai_message_inquiry_reminder', draft.promptAiMessageInquiryReminder)
   applyStringPref(raw, 'prompt_ai_message_reply', draft.promptAiMessageReply)
-  applyStringPref(raw, 'prompt_ai_message_chitchat', draft.promptAiMessageChitchat)
   applyStringPref(raw, 'prompt_ai_message_reply_success', draft.promptAiMessageReplySuccess)
   applyStringPref(raw, 'prompt_user_message_notice', draft.promptUserMessageNotice)
   if (hasOwn(raw, 'ai_message_inquiry_reminder_seconds')) {

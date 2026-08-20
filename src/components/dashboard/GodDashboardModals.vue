@@ -113,7 +113,6 @@ const emit = defineEmits<{
     v-model:aiMessageInquiryReminderSeconds="system.aiMessageInquiryReminderSeconds"
     v-model:promptAiMessageInquiryReminder="system.promptAiMessageInquiryReminder"
     v-model:promptAiMessageReply="system.promptAiMessageReply"
-    v-model:promptAiMessageChitchat="system.promptAiMessageChitchat"
     v-model:promptAiMessageReplySuccess="system.promptAiMessageReplySuccess"
     v-model:promptUserMessageNotice="system.promptUserMessageNotice"
     v-model:themeMode="system.themeMode"
