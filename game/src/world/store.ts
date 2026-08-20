@@ -150,6 +150,33 @@ const workshopAiConfigIds = (raw: Record<string, any>): number[] => {
   return [...ids].sort((a, b) => a - b)
 }
 
+const firstText = (...values: unknown[]): string => String(values.find(value => Boolean(value)) ?? '')
+
+const cardToMember = (
+  row: Record<string, any>,
+  runtimeOverride: Map<number, { state: WorldMember['runtimeStatus']; tool: string }>,
+  metaByConfig: Map<number, WorldActorAppearance>,
+): WorldMember => {
+  const id = num(row.id)
+  const override = runtimeOverride.get(id)
+  const taskStatus = String(row.current_task_status || 'idle')
+  const meta = metaByConfig.get(id)
+  return {
+    id, name: firstText(row.name, `AI-${id}`), role: roleOf(row),
+    generation: Math.max(1, num(row.generation, 1)), tokensUsed: num(row.token_used),
+    tokenLimit: num(row.token_limit), lifecycle: normalizeLifecycle(row.lifecycle_status),
+    enabled: Boolean(row.enabled), runtimeStatus: override ? override.state : normalizeRuntime(row.runtime_status),
+    runtimeTool: override ? override.tool : firstText(row.latest_mcp_tool, row.runtime_tool),
+    currentBehavior: String(row.current_behavior ?? ''), latestSpeech: String(row.latest_thinking ?? ''),
+    taskTitle: firstText(row.current_task_title, row.task_current?.title), taskStatus,
+    hasActiveTask: ['running', 'queued'].includes(taskStatus) || Boolean(row.task_current),
+    model: String(row.model ?? ''), projectId: String(row.project_id ?? ''),
+    projectName: String(row.project_name ?? ''), platform: String(row.platform ?? 'Server-Core'),
+    boundAgentIds: [], hasToolbox: false, skin: String(meta?.skin ?? ''), tint: String(meta?.tint ?? ''),
+    scale: meta?.scale ?? 1, aura: String(meta?.aura ?? ''),
+  }
+}
+
 
 export class WorldStore {
   private listeners: Listener[] = []
@@ -393,40 +420,8 @@ export class WorldStore {
   }
 
   private applyCards(cards: Record<string, any>[]) {
-    this.snapshot.members = (Array.isArray(cards) ? cards : []).map((row): WorldMember => {
-      const id = num(row.id)
-      const override = this.runtimeOverride.get(id)
-      const taskTitle = String(row.current_task_title || row.task_current?.title || '')
-      const taskStatus = String(row.current_task_status || 'idle')
-      const meta = this.metaByConfig.get(id)
-      return {
-        id,
-        name: String(row.name || `AI-${id}`),
-        role: roleOf(row),
-        generation: Math.max(1, num(row.generation, 1)),
-        tokensUsed: num(row.token_used),
-        tokenLimit: num(row.token_limit),
-        lifecycle: normalizeLifecycle(row.lifecycle_status),
-        enabled: !!row.enabled,
-        runtimeStatus: override?.state ?? normalizeRuntime(row.runtime_status),
-        runtimeTool: override?.tool || String(row.latest_mcp_tool || row.runtime_tool || ''),
-        currentBehavior: String(row.current_behavior || ''),
-        latestSpeech: String(row.latest_thinking || ''),
-        taskTitle,
-        taskStatus,
-        hasActiveTask: taskStatus === 'running' || taskStatus === 'queued' || !!row.task_current,
-        model: String(row.model || ''),
-        projectId: String(row.project_id || ''),
-        projectName: String(row.project_name || ''),
-        platform: String(row.platform || 'Server-Core'),
-        boundAgentIds: [],
-        hasToolbox: false,
-        skin: meta?.skin || '',
-        tint: meta?.tint || '',
-        scale: meta?.scale ?? 1,
-        aura: meta?.aura || '',
-      }
-    })
+    this.snapshot.members = (Array.isArray(cards) ? cards : [])
+      .map(row => cardToMember(row, this.runtimeOverride, this.metaByConfig))
   }
 
   private applyAgentRows(rows: Record<string, any>[]) {
