@@ -131,7 +131,6 @@ const {
   aiMessageInquiryReminderSeconds,
   promptAiMessageInquiryReminder,
   promptAiMessageReply,
-  promptAiMessageChitchat,
   promptAiMessageReplySuccess,
   promptUserMessageNotice,
   normalizeSystemAutoControl,
@@ -1375,7 +1374,6 @@ onUnmounted(() => {
       v-model:aiMessageInquiryReminderSeconds="aiMessageInquiryReminderSeconds"
       v-model:promptAiMessageInquiryReminder="promptAiMessageInquiryReminder"
       v-model:promptAiMessageReply="promptAiMessageReply"
-      v-model:promptAiMessageChitchat="promptAiMessageChitchat"
       v-model:promptAiMessageReplySuccess="promptAiMessageReplySuccess"
       v-model:promptUserMessageNotice="promptUserMessageNotice"
       v-model:themeMode="themeMode"

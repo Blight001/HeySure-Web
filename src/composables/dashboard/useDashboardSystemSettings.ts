@@ -277,14 +277,6 @@ Rules:
 - 本次答复消息编号: {message_id}
 - 答复内容:
 {content}`)
-  const promptAiMessageChitchat = ref(`[AI 间通信 · 闲聊]
-{from_ai_name} 给你发了一条闲聊消息。
-
-- 收件方（你）: {target_ai_name}（ai_config_id={target_ai_config_id}）
-- 发送方: {from_ai_name}（ai_config_id={from_ai_config_id}）
-- 消息编号: {message_id}
-- 内容:
-{content}`)
   const promptAiMessageReplySuccess = ref('[系统提示] 你对消息 {message_id} 的回复已送达。\n现在请继续你刚才被打断的任务。')
   const promptUserMessageNotice = ref('[系统提示] 你已向用户发出一条消息（{channel}）。\n用户的回复（如有）会通过正常对话渠道返回，请不要重复发送。')
 
@@ -337,7 +329,6 @@ Rules:
         ai_message_inquiry_reminder_seconds: clampReminderSeconds(aiMessageInquiryReminderSeconds.value),
         prompt_ai_message_inquiry_reminder: promptAiMessageInquiryReminder.value,
         prompt_ai_message_reply: promptAiMessageReply.value,
-        prompt_ai_message_chitchat: promptAiMessageChitchat.value,
         prompt_ai_message_reply_success: promptAiMessageReplySuccess.value,
         prompt_user_message_notice: promptUserMessageNotice.value,
         ui_theme_mode: themeMode.value,
@@ -450,9 +441,6 @@ Rules:
       if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_reply')) {
         promptAiMessageReply.value = String(rawUser.prompt_ai_message_reply ?? '')
       }
-      if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_chitchat')) {
-        promptAiMessageChitchat.value = String(rawUser.prompt_ai_message_chitchat ?? '')
-      }
       if (Object.prototype.hasOwnProperty.call(rawUser, 'prompt_ai_message_reply_success')) {
         promptAiMessageReplySuccess.value = String(rawUser.prompt_ai_message_reply_success ?? '')
       }
@@ -497,7 +485,6 @@ Rules:
     aiMessageInquiryReminderSeconds,
     promptAiMessageInquiryReminder,
     promptAiMessageReply,
-    promptAiMessageChitchat,
     promptAiMessageReplySuccess,
     promptUserMessageNotice,
     normalizeSystemAutoControl,
