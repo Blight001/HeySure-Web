@@ -6,6 +6,16 @@ declare const process: {
   env: Record<string, string | undefined>
 }
 
+const backendProxy = {
+  '/api': { target: process.env.SERVER_URL || 'http://localhost:3000', changeOrigin: false, xfwd: true },
+  '/mcp': { target: process.env.SERVER_URL || 'http://localhost:3000', changeOrigin: false, xfwd: true },
+  '/socket.io': { target: process.env.SERVER_URL || 'http://localhost:3000', ws: true, changeOrigin: false, xfwd: true },
+  '/avatars': { target: process.env.SERVER_URL || 'http://localhost:3000', changeOrigin: true },
+  '/ai_avatars': { target: process.env.SERVER_URL || 'http://localhost:3000', changeOrigin: true },
+  '/tmp-images': { target: process.env.SERVER_URL || 'http://localhost:3000', changeOrigin: true },
+  '/device_png': { target: process.env.SERVER_URL || 'http://localhost:3000', changeOrigin: true },
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
@@ -48,46 +58,12 @@ export default defineConfig({
         './src/composables/useMessage.ts',
       ],
     },
-    proxy: {
-      '/api': {
-        target: process.env.SERVER_URL || 'http://localhost:3000',
-        // Keep the browser-facing Host. Auth responses use it to tell desktop
-        // and extension agents where their public Socket.IO endpoint lives.
-        changeOrigin: false,
-        xfwd: true,
-      },
-      '/mcp': {
-        target: process.env.SERVER_URL || 'http://localhost:3000',
-        changeOrigin: false,
-        xfwd: true,
-      },
-      '/socket.io': {
-        target: process.env.SERVER_URL || 'http://localhost:3000',
-        ws: true,
-        changeOrigin: false,
-        xfwd: true,
-      },
-      '/avatars': {
-        target: process.env.SERVER_URL || 'http://localhost:3000',
-        changeOrigin: true
-      },
-      '/ai_avatars': {
-        target: process.env.SERVER_URL || 'http://localhost:3000',
-        changeOrigin: true
-      },
-      '/tmp-images': {
-        target: process.env.SERVER_URL || 'http://localhost:3000',
-        changeOrigin: true
-      },
-      '/device_png': {
-        target: process.env.SERVER_URL || 'http://localhost:3000',
-        changeOrigin: true
-      }
-    }
+    proxy: backendProxy
   },
   preview: {
     allowedHosts: ['web'],
     proxy: {
+      ...backendProxy,
       '/host-rescue': {
         target: process.env.HEYSURE_RESCUE_URL || 'http://127.0.0.1:58152',
         changeOrigin: true,

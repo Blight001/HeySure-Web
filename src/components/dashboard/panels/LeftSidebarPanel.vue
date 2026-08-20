@@ -66,6 +66,7 @@ const emit = defineEmits<{
   (e: 'view-all-mcp'): void
   (e: 'manage-device-tools', payload?: { deviceType?: string }): void
   (e: 'open-device-doc'): void
+  (e: 'install-device'): void
 }>()
 
 const activeTab = ref<'brain' | 'knowledge' | 'device' | 'work'>('brain')
@@ -169,6 +170,7 @@ watch(() => props.deviceFocusSignal, () => {
           :focused-device-id="focusedDeviceId"
           :focus-signal="deviceFocusSignal"
           @open-device-doc="emit('open-device-doc')"
+          @install-device="emit('install-device')"
         />
       </Transition>
     </div>

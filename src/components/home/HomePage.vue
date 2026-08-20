@@ -4,13 +4,11 @@ import heySureLogo from '@/assets/logo/HeySure.png'
 import AmbientBackground from '@/components/common/AmbientBackground.vue'
 import { HOME_MARQUEE_ITEMS as MARQUEE_ITEMS } from '@/constants/home'
 import HomeAdminEntry from './HomeAdminEntry.vue'
-import HomeDeviceHallEntry from './HomeDeviceHallEntry.vue'
 
 const emit = defineEmits<{
   (e: 'login'): void
   (e: 'register'): void
   (e: 'admin'): void
-  (e: 'deviceHall'): void
 }>()
 
 const mockupEl = ref<HTMLElement | null>(null)
@@ -159,7 +157,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <HomeDeviceHallEntry @open="emit('deviceHall')" />
           <HomeAdminEntry @open="emit('admin')" />
           <button
             @click="emit('login')"
@@ -216,7 +213,6 @@ onBeforeUnmount(() => {
           >
             登录控制台
           </button>
-          <HomeDeviceHallEntry prominent @open="emit('deviceHall')" />
         </div>
       </div>
 

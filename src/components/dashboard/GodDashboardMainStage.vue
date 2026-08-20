@@ -41,6 +41,7 @@ const emit = defineEmits<{
   (e: 'view-all-mcp'): void
   (e: 'manage-device-tools', payload?: { deviceType?: string }): void
   (e: 'open-device-doc'): void
+  (e: 'install-device'): void
   (e: 'focus-agent', aiConfigId: number): void
   (e: 'open-knowledge'): void
   (e: 'focus-device', deviceId: string): void
@@ -102,6 +103,7 @@ defineExpose({ getSocialRect })
           @view-all-mcp="emit('view-all-mcp')"
           @manage-device-tools="emit('manage-device-tools', $event)"
           @open-device-doc="emit('open-device-doc')"
+          @install-device="emit('install-device')"
         />
       </div>
     </section>

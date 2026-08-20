@@ -38,7 +38,7 @@ const emit = defineEmits<{
   (e: 'updateProfile'): void
   (e: 'refreshUser', user: User): void
   (e: 'ready'): void
-  (e: 'deviceHall'): void
+  (e: 'installDevice'): void
 }>()
 
 const { isMobile } = useBreakpoint()
@@ -278,7 +278,6 @@ onUnmounted(() => {
     :user-menu-open="ui.userMenuOpen"
     @background-click="ui.closeSettings(); ui.closeUserMenu()"
     @open-admin="adminModalOpen = true"
-    @open-device-hall="emit('deviceHall')"
     @open-maintenance="maintenanceCenterOpen = true"
     @open-settings="ui.settingsOpen = true"
     @toggle-user-menu="ui.userMenuOpen = !ui.userMenuOpen"
@@ -318,6 +317,7 @@ onUnmounted(() => {
       @view-all-mcp="openAllMcpToolsFromSystemSettings"
       @manage-device-tools="onManageDeviceTools"
       @open-device-doc="deviceDocOpen = true"
+      @install-device="emit('installDevice')"
       @focus-agent="onWorldFocusAgent"
       @open-knowledge="onWorldOpenKnowledge"
       @focus-device="onWorldFocusDevice"

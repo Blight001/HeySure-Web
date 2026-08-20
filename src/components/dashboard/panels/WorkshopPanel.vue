@@ -14,6 +14,7 @@ const RemoteControlModal = defineAsyncComponent(() => import('@/components/dashb
 const props = defineProps<WorkshopPanelProps>()
 const emit = defineEmits<{
   (e: 'open-device-doc'): void
+  (e: 'install-device'): void
 }>()
 
 const wp = useWorkshopPanel(props)
@@ -21,17 +22,30 @@ const wp = useWorkshopPanel(props)
 
 <template>
   <div :ref="(el) => { wp.panelRootRef = el as HTMLElement | null }" class="relative flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-    <button
-      type="button"
-      class="flex w-full items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-left text-xs font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100/80 active:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:border-indigo-400/50 dark:hover:bg-indigo-500/15"
-      @click="emit('open-device-doc')"
-    >
-      <span class="flex items-center gap-2">
-        <AppIcon name="book" class="h-4 w-4" />
-        设备端开发文档
-      </span>
-      <span aria-hidden="true" class="text-indigo-400">›</span>
-    </button>
+    <div class="grid grid-cols-2 gap-2">
+      <button
+        type="button"
+        class="flex min-w-0 items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-left text-xs font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100/80 active:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:border-indigo-400/50 dark:hover:bg-indigo-500/15"
+        @click="emit('open-device-doc')"
+      >
+        <span class="flex min-w-0 items-center gap-2">
+          <AppIcon name="book" class="h-4 w-4 shrink-0" />
+          <span class="truncate">设备端开发文档</span>
+        </span>
+        <span aria-hidden="true" class="ml-1 text-indigo-400">›</span>
+      </button>
+      <button
+        type="button"
+        class="flex min-w-0 items-center justify-between rounded-xl border border-indigo-200 bg-indigo-50/70 px-3 py-2.5 text-left text-xs font-semibold text-indigo-700 transition-colors hover:border-indigo-300 hover:bg-indigo-100/80 active:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:border-indigo-400/50 dark:hover:bg-indigo-500/15"
+        @click="emit('install-device')"
+      >
+        <span class="flex min-w-0 items-center gap-2">
+          <AppIcon name="download" class="h-4 w-4 shrink-0" />
+          <span class="truncate">安装设备</span>
+        </span>
+        <span aria-hidden="true" class="ml-1 text-indigo-400">›</span>
+      </button>
+    </div>
 
     <div v-if="wp.orderedDevices.length === 0" class="text-center text-zinc-400 text-xs py-10 dark:text-zinc-500">
       暂无已连接设备。
