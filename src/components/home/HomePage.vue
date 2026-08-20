@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import heySureLogo from '@/assets/logo/HeySure.png'
 import AmbientBackground from '@/components/common/AmbientBackground.vue'
 import { HOME_MARQUEE_ITEMS as MARQUEE_ITEMS } from '@/constants/home'
+import { useHomeRescueEntry } from '@/composables/useHomeRescueEntry'
 import HomeAdminEntry from './HomeAdminEntry.vue'
 
 const emit = defineEmits<{
@@ -15,6 +16,7 @@ const mockupEl = ref<HTMLElement | null>(null)
 const statAgents = ref(0)
 const statTasks = ref(0)
 const statCalls = ref(0)
+const { showAdminRescue } = useHomeRescueEntry()
 
 const cleanups: (() => void)[] = []
 
@@ -157,7 +159,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <HomeAdminEntry @open="emit('admin')" />
+          <HomeAdminEntry v-if="showAdminRescue" @open="emit('admin')" />
           <button
             @click="emit('login')"
             class="px-4 py-1.5 text-sm font-medium text-zinc-300 hover:text-zinc-100 transition-colors rounded-lg hover:bg-zinc-800/60"

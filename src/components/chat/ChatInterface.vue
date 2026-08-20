@@ -55,8 +55,6 @@ const {
   frontPromptAvailableTools,
   frontPromptToolMcpEnabled,
   frontPromptToolSchemaError,
-  externalControlMode,
-  externalControlError,
   isBlankConversation,
   recentNormalSessions,
   recentTaskSessions,
@@ -347,10 +345,6 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
         </svg>
       </button>
 
-      <div v-if="externalControlMode" class="rounded-xl border border-cyan-200 bg-cyan-50/80 px-4 py-2 text-center text-xs text-cyan-700 dark:border-cyan-500/30 dark:bg-cyan-950/20 dark:text-cyan-300">
-        消息将进入外部控制器队列；本机 Codex 领取后，回复会回到当前对话。
-        <span v-if="externalControlError" class="ml-1 text-rose-600 dark:text-rose-300">{{ externalControlError }}</span>
-      </div>
       <ChatInput
         class="relative z-10"
         v-model="chatInput"

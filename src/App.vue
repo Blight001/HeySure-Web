@@ -11,7 +11,7 @@ const LoginModal = defineAsyncComponent(() => import('@/components/common/LoginM
 const ProfileModal = defineAsyncComponent(() => import('@/components/common/ProfileModal.vue'))
 const MessageDialog = defineAsyncComponent(() => import('@/components/common/MessageDialog.vue'))
 const HostRescueModal = defineAsyncComponent(() => import('@/components/home/HostRescueModal.vue'))
-const DeviceHallModal = defineAsyncComponent(() => import('@/components/device-hall/DeviceHallModal.vue'))
+const DeviceInstallPage = defineAsyncComponent(() => import('@/components/device-install/DeviceInstallPage.vue'))
 
 const { user, handleLoginSuccess, updateUser, logout } = useAuth()
 const initialUiPreferences = getInitialUiPreferences()
@@ -22,8 +22,9 @@ const showHostRescue = ref(false)
 const adminLoginRequested = ref(false)
 const openAdminOnDashboard = ref(false)
 const showProfile = ref(false)
-const showDeviceHall = ref(false)
-const deviceHallProductId = ref('')
+const showDeviceInstall = ref(false)
+const deviceInstallProductId = ref('')
+const deviceInstallNavigationPushed = ref(false)
 const showSplash = ref(true)
 const revealContent = ref(false)
 // 登录成功 / 会话恢复后需等待控制台数据就绪，避免直接显示空白界面
@@ -120,11 +121,51 @@ const handleLogout = () => {
   void logout()
 }
 
+const syncDeviceInstallFromLocation = () => {
+  const query = new URLSearchParams(window.location.search)
+  const wasOpen = showDeviceInstall.value
+  showDeviceInstall.value = query.get('install-device') === '1' || query.get('device-hall') === '1'
+  deviceInstallProductId.value = query.get('product') || ''
+  if (wasOpen && !showDeviceInstall.value && user.value) startDashboardLoading()
+}
+
+const openDeviceInstall = () => {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('device-hall')
+  url.searchParams.set('install-device', '1')
+  window.history.pushState({ heysureView: 'install-device' }, '', `${url.pathname}${url.search}${url.hash}`)
+  deviceInstallNavigationPushed.value = true
+  syncDeviceInstallFromLocation()
+}
+
+const closeDeviceInstall = () => {
+  if (deviceInstallNavigationPushed.value) {
+    window.history.back()
+    return
+  }
+  const url = new URL(window.location.href)
+  url.searchParams.delete('install-device')
+  url.searchParams.delete('device-hall')
+  url.searchParams.delete('product')
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  syncDeviceInstallFromLocation()
+}
+
+const handleDeviceInstallPopState = () => {
+  deviceInstallNavigationPushed.value = false
+  syncDeviceInstallFromLocation()
+}
+
+const loginFromDeviceInstall = () => {
+  closeDeviceInstall()
+  openLogin()
+}
+
 // 登录态从无到有时拉起加载遮罩，登出时立即撤下
 watch(
   () => !!user.value,
   (loggedIn) => {
-    if (loggedIn) startDashboardLoading()
+    if (loggedIn && !showDeviceInstall.value) startDashboardLoading()
     else onDashboardReady()
   },
 )
@@ -137,15 +178,19 @@ const onUpdateSuccess = (userData: User) => {
 onMounted(() => {
   const startupQuery = new URLSearchParams(window.location.search)
   if (startupQuery.get('device-hall') === '1') {
-    deviceHallProductId.value = startupQuery.get('product') || ''
-    showDeviceHall.value = true
+    const url = new URL(window.location.href)
+    url.searchParams.delete('device-hall')
+    url.searchParams.set('install-device', '1')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
   }
+  syncDeviceInstallFromLocation()
+  window.addEventListener('popstate', handleDeviceInstallPopState)
   const startedAt = window.__HEYSURE_STARTUP__?.startedAt ?? performance.now()
   startupElapsedTimer = window.setInterval(() => {
     startupElapsed.value = ((performance.now() - startedAt) / 1000).toFixed(1)
   }, 100)
   updateStartup(52, user.value ? '登录状态已恢复，正在准备控制台' : '登录状态检查完成，正在准备首页')
-  if (user.value) startDashboardLoading()
+  if (user.value && !showDeviceInstall.value) startDashboardLoading()
 
   startupFallbackTimer = window.setTimeout(() => {
     hideStaticPreload()
@@ -176,6 +221,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('popstate', handleDeviceInstallPopState)
   removeLoadListener?.()
   if (revealTimer !== undefined) {
     window.clearTimeout(revealTimer)
@@ -207,24 +253,32 @@ onBeforeUnmount(() => {
       class="relative z-[1] min-h-app-viewport"
       :class="revealClass"
     >
-      <HomePage
-        v-if="!user"
-        @login="openLogin()"
-        @register="openLogin()"
-        @admin="showHostRescue = true"
-        @device-hall="showDeviceHall = true"
+      <DeviceInstallPage
+        v-if="showDeviceInstall"
+        :logged-in="!!user"
+        :initial-product-id="deviceInstallProductId"
+        @back="closeDeviceInstall"
+        @login="loginFromDeviceInstall"
       />
-      <GodDashboard
-        v-else
-        :current-user="user"
-        :open-admin-on-mount="openAdminOnDashboard"
-        @login="openLogin()"
-        @logout="handleLogout"
-        @update-profile="showProfile = true"
-        @refresh-user="updateUser"
-        @ready="onDashboardReady"
-        @device-hall="showDeviceHall = true"
-      />
+      <template v-else>
+        <HomePage
+          v-if="!user"
+          @login="openLogin()"
+          @register="openLogin()"
+          @admin="showHostRescue = true"
+        />
+        <GodDashboard
+          v-else
+          :current-user="user"
+          :open-admin-on-mount="openAdminOnDashboard"
+          @login="openLogin()"
+          @logout="handleLogout"
+          @update-profile="showProfile = true"
+          @refresh-user="updateUser"
+          @ready="onDashboardReady"
+          @install-device="openDeviceInstall"
+        />
+      </template>
     </div>
 
     <LoginModal
@@ -250,14 +304,6 @@ onBeforeUnmount(() => {
     />
 
     <MessageDialog />
-
-    <DeviceHallModal
-      :show="showDeviceHall"
-      :logged-in="!!user"
-      :initial-product-id="deviceHallProductId"
-      @close="showDeviceHall = false"
-      @login="showDeviceHall = false; openLogin()"
-    />
 
     <Transition name="startup-splash">
       <div

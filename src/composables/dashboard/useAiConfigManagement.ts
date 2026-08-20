@@ -7,7 +7,6 @@ import {
   deleteAiConfig as apiDeleteAiConfig,
   listAiConfigs,
   updateAiConfig,
-  updateAiConfigFields,
 } from '@/api/ai'
 import {
   applyLoadedConfig,
@@ -99,22 +98,18 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
 
   const saveAiConfig = async () => {
     if (!aiConfigForm.value || !getAuthToken()) return false
-    const { payload, executionMode, selectedPreset } = buildAiConfigPayload(
+    const { payload, selectedPreset } = buildAiConfigPayload(
       aiConfigForm.value,
-      aiConfigMode.value,
       modelPresets.value,
       normalizeSystemAutoControl,
     )
-    if (!selectedPreset && (executionMode === 'internal_model' || aiConfigMode.value === 'create')) {
+    if (!selectedPreset) {
       await alert?.({ title: '保存失败', message: '请先选择一个已保存的服务器模型。', type: 'warning' })
       return false
     }
     try {
       if (aiConfigMode.value === 'create') {
-        const created = await createAiConfig(payload)
-        if (executionMode === 'external_mcp' && Number(created?.id) > 0) {
-          await updateAiConfigFields(Number(created.id), { execution_mode: 'external_mcp' })
-        }
+        await createAiConfig(payload)
       } else if (aiConfigForm.value.id) {
         await updateAiConfig(aiConfigForm.value.id, payload)
       }

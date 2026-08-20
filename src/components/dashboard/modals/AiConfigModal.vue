@@ -6,7 +6,6 @@ import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import { PRESET_AI_AVATARS, resolveAiAvatarUrl } from '@/utils/aiAvatar'
 import AiConfigAppearancePanel from './AiConfigAppearancePanel.vue'
 import AiConfigBotPanel from './AiConfigBotPanel.vue'
-import AiConfigControllerPanel from './AiConfigControllerPanel.vue'
 import AiConfigDevicePanel from './AiConfigDevicePanel.vue'
 
 type SettingsSection = 'mcp' | 'bot' | 'appearance'
@@ -129,17 +128,7 @@ watch(() => props.show, show => {
             <label class="block text-xs text-zinc-500 mb-1">平台</label>
             <input v-model="form.platform" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
           </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs text-zinc-500 mb-1">执行方式</label>
-            <select v-model="form.execution_mode" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100">
-              <option value="internal_model">服务器模型</option>
-              <option value="external_mcp">外部 MCP 控制</option>
-            </select>
-            <div class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-              外部 MCP 模式不调用服务器模型；用户消息进入控制器队列，由外部 Codex 领取并回复。
-            </div>
-          </div>
-          <div v-if="form.execution_mode !== 'external_mcp' && (mode === 'create' || form.ai_role_group !== 'digital_member')">
+          <div v-if="mode === 'create' || form.ai_role_group !== 'digital_member'">
             <label class="block text-xs text-zinc-500 mb-1">模型</label>
             <select v-model="form.model_preset_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" @change="onModelPresetChange">
               <option value="">请选择服务器模型</option>
@@ -172,12 +161,6 @@ watch(() => props.show, show => {
             <textarea v-model="form.prompt" rows="3" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100"></textarea>
           </div>
         </div>
-
-        <AiConfigControllerPanel
-          v-if="form.execution_mode === 'external_mcp'"
-          :editing-config-id="editingConfigId"
-          :execution-mode="form.execution_mode"
-        />
 
         <div class="mt-4 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
           <div class="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-2">AI 设置</div>

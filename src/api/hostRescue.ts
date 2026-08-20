@@ -20,6 +20,12 @@ export interface HostRescueStatus {
   recovery: HostRescueState
 }
 
+export interface HostRescueHealth {
+  ok: boolean
+  auto_recover: boolean
+  all_runtimes_unavailable?: boolean
+}
+
 const configuredUrl = String(import.meta.env.VITE_HEYSURE_RESCUE_URL || '').trim().replace(/\/$/, '')
 
 export const hostRescueBaseUrl = (): string => {
@@ -55,7 +61,7 @@ const rescueRequest = async <T>(path: string, token = '', body?: unknown): Promi
   }
 }
 
-export const checkHostRescue = () => rescueRequest<{ ok: boolean; auto_recover: boolean }>('/health')
+export const checkHostRescue = () => rescueRequest<HostRescueHealth>('/health')
 export const getHostRescueStatus = (token: string) => rescueRequest<HostRescueStatus>('/api/status', token)
 export const recoverHost = (token: string, action: 'restart_gateway' | 'restart_runtimes') => (
   rescueRequest<{ ok: boolean; started: boolean; action: string }>('/api/recover', token, { action })

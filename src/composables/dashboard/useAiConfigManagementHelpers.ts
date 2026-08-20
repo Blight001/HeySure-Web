@@ -76,7 +76,6 @@ export function buildAiForm(_role: 'worker', presets: ModelPreset[]) {
     model_preset_id: presets[0]?.id || '',
     model: presets[0]?.model || '',
     reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
-    execution_mode: 'internal_model' as 'internal_model' | 'external_mcp',
     prompt: '',
     mcp_tools: [] as string[],
     bot_channel: 'feishu' as 'feishu' | 'qq' | 'wechat',
@@ -97,7 +96,6 @@ export function buildEditForm(agent: Agent, presets: ModelPreset[], normalizeSys
     model_preset_id: presetIdForModel(presets, '', agent.model),
     model: agent.model || '',
     reasoning_effort: '' as '' | 'low' | 'medium' | 'high',
-    execution_mode: agent.executionMode === 'external_mcp' ? 'external_mcp' : 'internal_model',
     prompt: '',
     mcp_tools: [] as string[],
     bot_channel: botChannelOf(agent.botChannel),
@@ -125,7 +123,6 @@ export function applyLoadedConfig(
     model_preset_id: presetIdForModel(presets, cfg.model_preset_id, cfg.model),
     model: cfg.model ?? form.model,
     reasoning_effort: ['low', 'medium', 'high'].includes(String(cfg.reasoning_effort || '')) ? cfg.reasoning_effort : '',
-    execution_mode: cfg.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model',
     prompt: cfg.prompt || '',
     mcp_tools: [],
     bot_channel: botChannelOf(cfg.bot_channel),
@@ -149,16 +146,12 @@ export function mapMcpToolRows(data: any): McpToolDefinition[] {
 
 export function buildAiConfigPayload(
   form: any,
-  mode: 'create' | 'edit',
   presets: ModelPreset[],
   normalizeSystemAutoControl: (raw: unknown) => any,
-): { payload: AiConfigUpsertPayload; executionMode: 'internal_model' | 'external_mcp'; selectedPreset?: ModelPreset } {
+): { payload: AiConfigUpsertPayload; selectedPreset?: ModelPreset } {
   const selectedBotChannel = botChannelOf(form.bot_channel)
-  const executionMode = form.execution_mode === 'external_mcp' ? 'external_mcp' : 'internal_model'
   const selectedPreset = presets.find(item => item.id === form.model_preset_id)
-  const usePreset = executionMode === 'internal_model' || mode === 'create'
   return {
-    executionMode,
     selectedPreset,
     payload: {
       name: form.name,
@@ -168,10 +161,9 @@ export function buildAiConfigPayload(
       digital_member_role: form.ai_role_group === 'digital_member' ? normalizeDigitalMemberRole(form.digital_member_role) : 'member',
       platform: form.platform,
       token_limit: Number(form.token_limit) || 10000,
-      execution_mode: executionMode,
-      model: usePreset ? selectedPreset?.model : '',
-      model_preset_id: usePreset ? selectedPreset?.id : '',
-      reasoning_effort: executionMode === 'internal_model' ? form.reasoning_effort : '',
+      model: selectedPreset?.model || '',
+      model_preset_id: selectedPreset?.id || '',
+      reasoning_effort: form.reasoning_effort,
       prompt: form.prompt,
       mcp_tools: '[]',
       bot_channel: selectedBotChannel,

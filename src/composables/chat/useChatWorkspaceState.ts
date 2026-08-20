@@ -1,5 +1,4 @@
 import { computed, ref } from 'vue'
-import type { ExternalControlEvent } from '@/api/ai'
 import type {
   ChatInterfaceProps,
   ChatMessage,
@@ -56,9 +55,6 @@ const createPromptRefs = () => ({
   frontPromptToolMcpEnabled: ref<boolean | null>(null),
   frontPromptToolSchemaError: ref(''),
   uncheckedMcpToolNames: ref<string[]>([]),
-  externalControlMode: ref(false),
-  externalControlEvents: ref<ExternalControlEvent[]>([]),
-  externalControlError: ref(''),
   modelOptions: ref<ChatModelOption[]>([]),
   selectedModelId: ref(''),
   modelSwitching: ref(false),

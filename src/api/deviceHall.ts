@@ -43,7 +43,7 @@ export interface DeviceHallCatalog {
 
 export const getDeviceHallCatalog = () =>
   get<DeviceHallCatalog>('/api/device-hall/catalog', {
-    fallbackError: '设备大厅加载失败',
+    fallbackError: '安装设备页面加载失败',
   })
 
 export interface DeviceReleaseUpload {

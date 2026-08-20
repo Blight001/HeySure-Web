@@ -16,6 +16,12 @@ const backendProxy = {
   '/device_png': { target: process.env.SERVER_URL || 'http://localhost:3000', changeOrigin: true },
 }
 
+const hostRescueProxy = {
+  target: process.env.HEYSURE_RESCUE_URL || 'http://127.0.0.1:58152',
+  changeOrigin: true,
+  rewrite: (path: string) => path.replace(/^\/host-rescue/, ''),
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
@@ -58,17 +64,16 @@ export default defineConfig({
         './src/composables/useMessage.ts',
       ],
     },
-    proxy: backendProxy
+    proxy: {
+      ...backendProxy,
+      '/host-rescue': hostRescueProxy,
+    },
   },
   preview: {
     allowedHosts: ['web'],
     proxy: {
       ...backendProxy,
-      '/host-rescue': {
-        target: process.env.HEYSURE_RESCUE_URL || 'http://127.0.0.1:58152',
-        changeOrigin: true,
-        rewrite: path => path.replace(/^\/host-rescue/, ''),
-      },
+      '/host-rescue': hostRescueProxy,
     },
   }
 })

@@ -44,7 +44,6 @@ const initializeSessions = async (ctx: WorkspaceLifecycleCtx) => {
 
 const onAiOrInitialChange = async (ctx: WorkspaceLifecycleCtx) => {
   ctx.uploads.clearUploadedAttachments()
-  ctx.aiConfig.stopExternalControlPolling()
   ctx.run.resetRunUi()
   ctx.state.chatMessages.value = []
   ctx.state.currentSessionId.value = ''
@@ -90,7 +89,6 @@ const resumeSessionRuntime = (ctx: WorkspaceLifecycleCtx) => {
 const mountWorkspace = async (ctx: WorkspaceLifecycleCtx) => {
   if (ctx.props.currentUserId) ctx.run.connectStream(ctx.props.currentUserId)
   await initializeSessions(ctx)
-  ctx.aiConfig.syncExternalControlPolling()
   ctx.emit('update:currentSessionId', ctx.state.currentSessionId.value || '')
   ctx.emit('taskPlanRefresh', ctx.state.taskPlanRefreshSignal.value)
   await nextTick()
