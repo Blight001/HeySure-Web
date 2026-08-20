@@ -37,6 +37,7 @@ const {
   deleteSession,
   deleteSessions,
   renameSession,
+  setSessionForward,
   pendingQueue,
   removePendingQueueItem,
   updatePendingQueueItem,
@@ -134,6 +135,7 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
           @delete="deleteSession"
           @batch-delete="deleteSessions"
           @rename="renameSession"
+          @forward="setSessionForward"
         />
       </div>
       <div class="flex items-center gap-1 sm:gap-2 shrink-0">

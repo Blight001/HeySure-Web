@@ -8,6 +8,7 @@ interface Session {
   name: string
   totalTokens?: number
   createdAt?: number | string | null
+  forwardToBot?: boolean
 }
 
 interface SessionMeta extends Session {
@@ -27,6 +28,7 @@ const emit = defineEmits<{
   (e: 'delete', sessionId: string): void
   (e: 'batchDelete', sessionIds: string[]): void
   (e: 'rename', payload: { sessionId: string; name: string }): void
+  (e: 'forward', payload: { sessionId: string; enabled: boolean }): void
 }>()
 
 const open = ref(false)
@@ -115,6 +117,8 @@ const editingSession = computed(() =>
     ? props.sessionList.find(session => session.id === editingSessionId.value) || null
     : null,
 )
+const editingSessionMeta = computed(() => editingSession.value ? parseSession(editingSession.value) : null)
+const editingSessionIsBotOwned = computed(() => /^(wechat|feishu|qq)_/.test(editingSession.value?.id || ''))
 
 const openSessionEditor = (sessionId: string) => {
   editingSessionId.value = sessionId
@@ -138,6 +142,12 @@ const deleteEditingSession = () => {
   if (!sessionId) return
   emit('delete', sessionId)
   closeSessionEditor()
+}
+
+const toggleEditingSessionForward = () => {
+  const session = editingSession.value
+  if (!session || editingSessionIsBotOwned.value) return
+  emit('forward', { sessionId: session.id, enabled: !session.forwardToBot })
 }
 
 const toggleSessionSelection = (sessionId: string) => {
@@ -356,6 +366,32 @@ useDismissibleLayer({
             @change="saveEditingSessionName"
             @keydown.enter.prevent="saveEditingSessionName(); ($event.target as HTMLInputElement).blur()"
           />
+        </div>
+
+        <div
+          v-if="editingSessionMeta && !editingSessionMeta.isTask"
+          class="mt-4 flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white/60 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/50"
+        >
+          <div class="min-w-0">
+            <div class="text-xs font-medium text-zinc-700 dark:text-zinc-200">同步 AI 回复到机器人</div>
+            <div class="mt-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+              {{ editingSessionIsBotOwned ? '机器人来源对话会自动回复原联系人' : '开启后，普通对话中的 AI 回复会发送给默认机器人联系人' }}
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            class="relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            :class="editingSession.forwardToBot ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'"
+            :aria-checked="!!editingSession.forwardToBot"
+            :disabled="editingSessionIsBotOwned"
+            @click="toggleEditingSessionForward"
+          >
+            <span
+              class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+              :class="editingSession.forwardToBot ? 'translate-x-5' : 'translate-x-0.5'"
+            />
+          </button>
         </div>
 
         <div class="mt-4 flex justify-end gap-2">

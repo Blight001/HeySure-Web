@@ -13,6 +13,7 @@ const mapSessionRows = (rows: any[]): SessionItem[] =>
     name: String(row?.name || BLANK_SESSION_NAME),
     totalTokens: Number(row?.total_tokens || 0),
     createdAt: row?.created_at ?? row?.createdAt ?? row?.updated_at ?? row?.updatedAt ?? null,
+    forwardToBot: Boolean(row?.forward_to_bot ?? row?.forwardToBot),
   }))
 
 const loadSessions = async (state: ChatWorkspaceState) => {
@@ -95,6 +96,21 @@ const renameSession = async (
   await loadSessions(ctx.state)
 }
 
+const setSessionForward = async (
+  ctx: { state: ChatWorkspaceState; dialogs: ChatDialogFns },
+  payload: { sessionId: string; enabled: boolean },
+) => {
+  const sid = String(payload?.sessionId || '').trim()
+  if (!sid || !getAuthToken()) return
+  try {
+    const result = await chatApi.setSessionForwardToBot(ctx.state.chatCtx.value, sid, payload.enabled)
+    await loadSessions(ctx.state)
+    if (result.warning) await ctx.dialogs.alert({ message: result.warning, type: 'warning' })
+  } catch {
+    await ctx.dialogs.alert({ message: '设置机器人同步失败', type: 'error' })
+  }
+}
+
 const deleteSessions = async (
   ctx: { state: ChatWorkspaceState; dialogs: ChatDialogFns },
   sessionIds: string[],
@@ -169,6 +185,7 @@ export const useChatSessions = (
       maybeAutoTitleSession(state, sessionId, firstMessage),
     deleteSession: (sid: string) => deleteSession({ state, drafts, dialogs }, sid),
     renameSession: (payload: { sessionId: string; name: string }) => renameSession(dialogCtx, payload),
+    setSessionForward: (payload: { sessionId: string; enabled: boolean }) => setSessionForward(dialogCtx, payload),
     deleteSessions: (sessionIds: string[]) => deleteSessions(dialogCtx, sessionIds),
     loadTotalTokens: (sessionId?: string) => loadTotalTokens({ state, emit, tokenEpoch }, sessionId),
   }

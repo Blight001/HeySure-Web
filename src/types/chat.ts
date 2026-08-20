@@ -45,6 +45,7 @@ export interface SessionItem {
   name: string
   totalTokens?: number
   createdAt?: number | string | null
+  forwardToBot?: boolean
 }
 
 export interface PersistedBlockState {
