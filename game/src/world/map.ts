@@ -93,9 +93,9 @@ export const WORKSHOP_STREET_LAMPS: Point[] = Array.from({ length: WORKSHOP_COLS
 }).flat()
 
 export const NIGHT_GLOW_SOURCES: NightGlowSource[] = [
-  { x: LIBRARY_DEVICE_POS.x, y: LIBRARY_DEVICE_POS.y + 8, color: 0xffb866, scaleX: 6, base: 0.35 },
-  { x: 194, y: 732, color: 0x7fd8ff, scaleX: 4.4, scaleY: 3.2, base: 0.42, pulse: 0.18 },
-  { x: 194, y: 764, color: 0x9df7d6, scaleX: 7.8, scaleY: 2.2, base: 0.2, pulse: 0.08 },
+  { x: LIBRARY_DEVICE_POS.x, y: LIBRARY_DEVICE_POS.y + 8, color: 0xffd8a3, scaleX: 5.2, base: 0.24 },
+  { x: 194, y: 732, color: 0xb9e9ff, scaleX: 4, scaleY: 3, base: 0.3, pulse: 0.1 },
+  { x: 194, y: 764, color: 0xbfffe8, scaleX: 6.2, scaleY: 2, base: 0.12, pulse: 0.05 },
 ]
 
 export const SIGNPOST_POS: Point = { x: 236, y: 764 }

@@ -46,14 +46,16 @@ const updateActors = (scene: WorldSceneHost, time: number, delta: number) => {
 
 const updateWorkshopTaskGlows = (scene: WorldSceneHost, time: number) => {
   for (const view of scene.workshops.values()) {
-    if (!view.taskActive || view.offlineSince !== null) {
+    if (view.offlineSince !== null) {
       view.taskGlow.setAlpha(0)
       continue
     }
     const pulse = 0.5 + 0.5 * Math.sin(time / 230 + view.glowPhase)
-    const nightBoost = scene.nightness * 0.08
-    view.taskGlow.setAlpha(0.18 + pulse * 0.2 + nightBoost)
-    view.taskGlow.setScale(6.4 + pulse * 1.2, 4.9 + pulse * 0.9)
+    const buildingLight = scene.nightness * (0.1 + pulse * 0.025)
+    const taskLight = view.taskActive ? 0.18 + pulse * 0.2 : 0
+    view.taskGlow.setAlpha(buildingLight + taskLight)
+    const taskScale = view.taskActive ? pulse : 0
+    view.taskGlow.setScale(5.4 + taskScale * 1.2, 4.1 + taskScale * 0.9)
   }
 }
 

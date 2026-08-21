@@ -15,7 +15,7 @@ import WorkflowCanvasEditor from './WorkflowCanvasEditor.vue'
 import AutomationEditorSettings from './AutomationEditorSettings.vue'
 import AutomationStepInspector from './AutomationStepInspector.vue'
 import AutomationVersionCompare from './AutomationVersionCompare.vue'
-import { blankEditorDraft, createBlankEditorSteps, useAutomationCardNavigation } from './automationEditorApply'
+import { blankEditorDraft, createBlankEditorSteps, useAutomationCardNavigation, useAutomationCardSettings } from './automationEditorApply'
 import {
   applyBranchTarget,
   clearStepTarget,
@@ -24,7 +24,7 @@ import {
   pasteClipboardStep,
   resolveEditorShortcut,
 } from './automationEditorClipboard'
-import { buildWorkflowDefinition, createEmptyStep, parseJson } from './automationDefinition'
+import { buildWorkflowDefinition, createEmptyStep, isTerminalStep, parseJson } from './automationDefinition'
 import {
   buildCardSaveBody,
   downloadExportedCard,
@@ -69,11 +69,11 @@ const notice = ref('')
 const busy = ref(false)
 let stepClipboard: StepClipboard | null = null
 let deviceToolsRequestId = 0
-let cardSettingsSnapshot = ''
 let deviceSettingsSnapshot = { ids: [] as string[], defaultId: '' }
 
 const onlineDevices = computed(() => (props.devices || []).filter(device => device.online !== false))
 const selectedStep = computed(() => editorSteps.value.find(step => step.id === selectedStepId.value) || null)
+const selectedStepTerminal = computed(() => Boolean(selectedStep.value && isTerminalStep(selectedStep.value, editorSteps.value)))
 const aiMemberOptions = computed(() => (props.agents || [])
   .filter(agent => Number.isFinite(Number(agent.aiConfigId)) && Number(agent.aiConfigId) > 0)
   .map(agent => ({
@@ -160,7 +160,7 @@ const openEdit = async (card: WorkflowCard) => {
 }
 
 const addStep = (type: WorkflowStepType, position: WorkflowNodePosition = { x: 48, y: 48 }) => {
-  let suffix = editorSteps.value.length + 1
+  let suffix = editorSteps.value.filter(step => step.type !== 'end').length + 1
   let step = createEmptyStep(type, suffix)
   while (editorSteps.value.some(item => item.id === step.id)) {
     suffix += 1
@@ -168,7 +168,7 @@ const addStep = (type: WorkflowStepType, position: WorkflowNodePosition = { x: 4
   }
   editorSteps.value.push(step)
   canvasPositions.value = { ...canvasPositions.value, [step.id]: position }
-  if (!editor.startStepId) editor.startStepId = step.id
+  if (!editor.startStepId || editorSteps.value.find(item => item.id === editor.startStepId)?.type === 'end') editor.startStepId = step.id
   selectedStepId.value = step.id
 }
 
@@ -180,8 +180,9 @@ const removeStep = (index: number) => {
   const positions = { ...canvasPositions.value }
   delete positions[removed.id]
   canvasPositions.value = positions
-  if (editor.startStepId === removed.id) editor.startStepId = editorSteps.value[0]?.id || ''
-  selectedStepId.value = editorSteps.value[Math.min(index, editorSteps.value.length - 1)]?.id || ''
+  const visibleSteps = editorSteps.value.filter(step => step.type !== 'end')
+  if (editor.startStepId === removed.id) editor.startStepId = visibleSteps[0]?.id || editorSteps.value[0]?.id || ''
+  selectedStepId.value = visibleSteps[Math.min(index, visibleSteps.length - 1)]?.id || ''
 }
 
 const removeSelectedStep = () => {
@@ -359,14 +360,10 @@ const previewVersion = async (version: WorkflowCardVersion) => {
   comparisonOpen.value = true
 }
 
-const openCardSettings = () => {
-  cardSettingsSnapshot = JSON.stringify({ ...editor, allowedAiConfigIds: [...editor.allowedAiConfigIds] })
-  cardSettingsOpen.value = true
-}
-const closeCardSettings = (save: boolean) => {
-  if (!save && cardSettingsSnapshot) Object.assign(editor, JSON.parse(cardSettingsSnapshot))
-  cardSettingsOpen.value = false
-}
+const { openCardSettings, closeCardSettings } = useAutomationCardSettings({
+  editingId, editor, ownerTags, open: cardSettingsOpen, busy, setNotice, setError,
+  changed: () => emit('changed'),
+})
 const openDeviceSettings = () => {
   deviceSettingsSnapshot = { ids: [...publishDeviceIds.value], defaultId: defaultDeviceId.value }
   deviceSettingsOpen.value = true
@@ -414,7 +411,6 @@ defineExpose({ openNew, openEdit })
 
         <AutomationEditorSettings
           :editor="editor"
-          :editor-steps="editorSteps"
           :owner-ids="ownerIds"
           :access-member-options="accessMemberOptions"
           :ai-member-options="aiMemberOptions"
@@ -452,6 +448,10 @@ defineExpose({ openNew, openEdit })
             <template #inspector>
               <AutomationStepInspector
                 :selected-step="selectedStep"
+                :start-step-id="editor.startStepId"
+                v-model:input-schema-text="editor.inputSchemaText"
+                v-model:output-text="editor.outputText"
+                :terminal="selectedStepTerminal"
                 :online-devices="onlineDevices"
                 :device-scopes="deviceScopes"
                 :device-tools-loading="deviceToolsLoading"

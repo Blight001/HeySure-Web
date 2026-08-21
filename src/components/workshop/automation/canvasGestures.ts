@@ -22,8 +22,8 @@ export function draggedNodePosition(
   scale: number,
 ): WorkflowNodePosition {
   return {
-    x: Math.max(0, initial.x + (next.x - start.x) / scale),
-    y: Math.max(0, initial.y + (next.y - start.y) / scale),
+    x: initial.x + (next.x - start.x) / scale,
+    y: initial.y + (next.y - start.y) / scale,
   }
 }
 
@@ -41,6 +41,20 @@ export function clampZoom(next: number) {
 
 export function roundedZoom(next: number) {
   return Math.round(clampZoom(next) * 10) / 10
+}
+
+export function zoomAroundPoint(
+  next: number,
+  current: number,
+  offset: WorkflowNodePosition,
+  anchor: WorkflowNodePosition,
+) {
+  const scale = roundedZoom(next)
+  const world = { x: (anchor.x - offset.x) / current, y: (anchor.y - offset.y) / current }
+  return {
+    scale,
+    offset: { x: anchor.x - world.x * scale, y: anchor.y - world.y * scale },
+  }
 }
 
 export function inspectorStyleFor(
@@ -152,8 +166,8 @@ export function applyTouchDelta(
       node: {
         stepId: gesture.stepId,
         position: {
-          x: Math.max(0, gesture.position.x + delta.x / scale),
-          y: Math.max(0, gesture.position.y + delta.y / scale),
+          x: gesture.position.x + delta.x / scale,
+          y: gesture.position.y + delta.y / scale,
         },
       },
     }

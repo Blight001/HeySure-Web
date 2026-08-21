@@ -15,6 +15,7 @@ import {
   computeAutoLayout,
   edgePathFromPoints,
   edgePoints as edgePointsOf,
+  isTerminalStep,
   nodeMeta,
   outputPorts,
   portY,
@@ -31,9 +32,9 @@ import {
   inspectorStyleFor,
   pannedOffset,
   resolveTouchTarget,
-  roundedZoom,
   touchClientPoint,
   trackWindowPointer,
+  zoomAroundPoint,
 } from './canvasGestures'
 
 const props = defineProps<{
@@ -66,13 +67,14 @@ let touchGesture: TouchGesture | null = null
 let positionFrame = 0
 let pendingPosition: { stepId: string; position: WorkflowNodePosition } | null = null
 
-const positionFor = (stepId: string) => locatePosition(stepId, props.steps, props.positions)
-const edges = computed(() => buildCanvasEdges(props.steps))
+const visibleSteps = computed(() => props.steps.filter(step => step.type !== 'end'))
+const positionFor = (stepId: string) => locatePosition(stepId, visibleSteps.value, props.positions)
+const edges = computed(() => buildCanvasEdges(visibleSteps.value))
 const renderedEdges = computed(() => edges.value.map((edge) => {
-  const points = edgePointsOf(edge, props.steps, props.positions)
+  const points = edgePointsOf(edge, visibleSteps.value, props.positions)
   return { ...edge, path: edgePathFromPoints(points.from, points.to, points.fromPlacement), points }
 }))
-const renderedNodes = computed(() => props.steps.map((step, index) => {
+const renderedNodes = computed(() => visibleSteps.value.map((step, index) => {
   const position = positionFor(step.id)
   return {
     step,
@@ -84,9 +86,10 @@ const renderedNodes = computed(() => props.steps.map((step, index) => {
     status: props.nodeStatuses?.[step.id] || '',
     selected: props.selectedStepId === step.id,
     start: props.startStepId === step.id,
+    terminal: isTerminalStep(step, props.steps),
   }
 }))
-const previewPath = computed(() => previewEdgePath(connection.value, previewPoint.value, props.steps, props.positions))
+const previewPath = computed(() => previewEdgePath(connection.value, previewPoint.value, visibleSteps.value, props.positions))
 
 const updatePosition = (stepId: string, position: WorkflowNodePosition) => {
   pendingPosition = { stepId, position }
@@ -154,7 +157,13 @@ const startPan = (event: PointerEvent) => {
   trackWindowPointer((next) => { offset.value = pannedOffset(initial, start, next) }, () => {})
 }
 
-const setZoom = (next: number) => { scale.value = roundedZoom(next) }
+const setZoom = (next: number) => {
+  const canvas = canvasRef.value
+  const anchor = { x: (canvas?.clientWidth || 0) / 2, y: (canvas?.clientHeight || 0) / 2 }
+  const applied = zoomAroundPoint(next, scale.value, offset.value, anchor)
+  scale.value = applied.scale
+  offset.value = applied.offset
+}
 const resetView = () => { scale.value = 1; offset.value = { x: 24, y: 24 } }
 const inspectorStyle = computed(() => inspectorStyleFor(
   props.selectedStepId ? positionFor(props.selectedStepId) : null,
@@ -245,7 +254,7 @@ const finishCanvasTouch = (event: TouchEvent) => {
 }
 
 const autoLayout = () => {
-  emit('update:positions', computeAutoLayout(props.steps, edges.value, props.startStepId))
+  emit('update:positions', computeAutoLayout(visibleSteps.value, edges.value, props.startStepId))
   resetView()
 }
 
@@ -259,7 +268,7 @@ const activateNode = (step: CanvasStep) => {
 
 const addStep = (type: WorkflowStepType, position?: WorkflowNodePosition) => {
   if (props.readonly) return
-  emit('add', type, position || defaultPosition(props.steps.length))
+  emit('add', type, position || defaultPosition(visibleSteps.value.length))
 }
 
 const onDrop = (event: DragEvent) => {
@@ -362,7 +371,7 @@ onBeforeUnmount(() => {
           data-node
           :data-node-step="node.step.id"
           class="workflow-node"
-          :class="[`type-${node.step.type}`, node.status ? `diff-${node.status}` : '', { selected: node.selected, 'is-start': node.start, 'is-end': node.step.type === 'end' }]"
+          :class="[`type-${node.step.type}`, node.status ? `diff-${node.status}` : '', { selected: node.selected, 'is-start': node.start, 'is-terminal': node.terminal }]"
           :style="{ left: `${node.x}px`, top: `${node.y}px` }"
           @pointerdown="startNodeDrag($event, node.step)"
           @click.stop="emit('select', node.step.id); selectedEdgeId = ''"
@@ -397,7 +406,7 @@ onBeforeUnmount(() => {
           </div>
         </article>
       </div>
-      <div v-if="steps.length === 0" class="absolute inset-0 grid place-items-center text-xs text-slate-400">从上方添加第一个流程节点</div>
+      <div v-if="renderedNodes.length === 0" class="absolute inset-0 grid place-items-center text-xs text-slate-400">从上方添加第一个流程节点</div>
       <div v-if="!readonly" class="canvas-bottom-left" @pointerdown.stop @touchstart.stop @touchmove.stop @touchend.stop>
         <slot name="bottom-left" />
       </div>

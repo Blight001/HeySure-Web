@@ -3,6 +3,7 @@ import { createEmptyStep, stepEditorFromDefinition } from './automationDefinitio
 import type { EditorDraft, StepEditor, WorkflowNodePosition } from './automationTypes'
 
 export { useAutomationCardNavigation } from './useAutomationCardNavigation'
+export { useAutomationCardSettings } from './useAutomationCardSettings'
 
 export function blankEditorDraft(): EditorDraft {
   return {
@@ -14,7 +15,7 @@ export function blankEditorDraft(): EditorDraft {
     riskLevel: 'read_only',
     inputSchemaText: '{\n  "type": "object",\n  "properties": {},\n  "required": []\n}',
     outputText: '{}',
-    timeoutSeconds: 300,
+    timeoutSeconds: 24 * 60 * 60,
     maxTransitions: 100,
     startStepId: 'finish',
   }
@@ -31,7 +32,7 @@ export function applyCardToEditor(full: WorkflowCard) {
     riskLevel: full.risk_level,
     inputSchemaText: JSON.stringify(full.definition.inputSchema || { type: 'object' }, null, 2),
     outputText: JSON.stringify(full.definition.output || {}, null, 2),
-    timeoutSeconds: Number(full.definition.limits?.timeoutSeconds || 300),
+    timeoutSeconds: Number(full.definition.limits?.timeoutSeconds || 24 * 60 * 60),
     maxTransitions: Number(full.definition.limits?.maxTransitions || 100),
     startStepId: String(full.definition.startStepId || ''),
   }

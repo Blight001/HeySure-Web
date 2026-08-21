@@ -5,6 +5,10 @@ import type { DeviceLike, StepEditor } from './automationTypes'
 
 defineProps<{
   selectedStep: StepEditor | null
+  startStepId: string
+  inputSchemaText: string
+  outputText: string
+  terminal: boolean
   onlineDevices: DeviceLike[]
   deviceScopes: Record<string, DeviceMcpScope>
   deviceToolsLoading: boolean
@@ -15,6 +19,8 @@ defineProps<{
 
 const emit = defineEmits<{
   (e: 'set-start', id: string): void
+  (e: 'update:input-schema-text', value: string): void
+  (e: 'update:output-text', value: string): void
   (e: 'remove'): void
   (e: 'change-device', step: StepEditor): void
   (e: 'scaffold', step: StepEditor): void
@@ -33,7 +39,7 @@ const argumentValue = (row: StepEditor, name: string) => {
     return ''
   }
 }
-const stepKinds = ['mcp', 'condition', 'delay', 'ai', 'card', 'end'] as WorkflowStepType[]
+const stepKinds = ['mcp', 'condition', 'delay', 'ai', 'card'] as WorkflowStepType[]
 const selectCard = (row: StepEditor, event: Event, cards: WorkflowCard[]) => {
   const id = (event.target as HTMLSelectElement).value
   const card = cards.find(item => item.id === id)
@@ -57,6 +63,14 @@ const selectCard = (row: StepEditor, event: Event, cards: WorkflowCard[]) => {
       <div class="mt-3 grid gap-2">
         <label class="text-[9px] text-zinc-500">步骤标题<input v-model="selectedStep.title" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
         <label class="text-[9px] text-zinc-500">类型<select v-model="selectedStep.type" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950"><option v-for="kind in stepKinds" :key="kind">{{ kind }}</option></select></label>
+        <label v-if="selectedStep.id === startStepId" class="text-[9px] text-zinc-500">
+          流程输入 JSON Schema
+          <textarea :value="inputSchemaText" rows="6" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @input="emit('update:input-schema-text', ($event.target as HTMLTextAreaElement).value)" />
+        </label>
+        <label v-if="terminal" class="text-[9px] text-zinc-500">
+          流程输出映射
+          <textarea :value="outputText" rows="6" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @input="emit('update:output-text', ($event.target as HTMLTextAreaElement).value)" />
+        </label>
 
         <template v-if="selectedStep.type === 'mcp'">
           <label class="text-[9px] text-zinc-500">节点执行设备<select v-model="selectedStep.deviceId" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="emit('change-device', selectedStep)"><option value="">选择任意可用设备</option><option v-for="device in onlineDevices" :key="device.id" :value="device.id">{{ device.name || '未命名设备' }} · {{ device.id }} · {{ device.deviceType || device.platform }}</option></select></label>
@@ -102,7 +116,6 @@ const selectCard = (row: StepEditor, event: Event, cards: WorkflowCard[]) => {
           <label class="text-[9px] text-zinc-500">返回结果保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="child_result" /></label>
           <div class="rounded bg-indigo-50 p-2 text-[9px] text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">双击画布中的引用节点可进入该卡片；父卡片会固定当前所选版本。</div>
         </template>
-        <div v-else class="rounded-lg bg-emerald-50 p-3 text-[10px] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">结束节点会生成卡片输出并终止运行。</div>
       </div>
     </template>
   </aside>

@@ -52,7 +52,6 @@ export const palette: Array<{ type: WorkflowStepType; label: string }> = [
   { type: 'delay', label: '等待' },
   { type: 'ai', label: 'AI 审核' },
   { type: 'card', label: '引用卡片' },
-  { type: 'end', label: '结束' },
 ]
 
 export const defaultPosition = (index: number): WorkflowNodePosition => ({

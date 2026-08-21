@@ -19,14 +19,16 @@
 .workflow-node.selected { outline: 2px solid rgb(196 181 253 / 0.9); outline-offset: 3px; }
 .workflow-node.type-mcp { border-color: #60a5fa; background: rgb(37 99 235 / 0.22); }
 .workflow-node.type-condition { border-color: #f59e0b; background: rgb(245 158 11 / 0.2); }
-.workflow-node.type-delay { border-color: #2dd4bf; background: rgb(13 148 136 / 0.2); }
+.workflow-node.type-delay { border-color: #e2e8f0; color: #0f172a; background: rgb(248 250 252 / 0.72); }
 .workflow-node.type-confirm { border-color: #e879f9; background: rgb(192 38 211 / 0.2); }
-.workflow-node.type-ai { border-color: #38bdf8; background: rgb(14 165 233 / 0.2); }
-.workflow-node.type-card { border-color: #a78bfa; background: rgb(124 58 237 / 0.22); }
-.workflow-node.type-end { border-color: #60a5fa; background: rgb(37 99 235 / 0.2); }
+.workflow-node.type-ai { border-color: #c084fc; background: rgb(126 34 206 / 0.42); }
+.workflow-node.type-card { border-color: #facc15; background: rgb(161 98 7 / 0.48); }
+.workflow-node.type-delay .text-slate-100 { color: #0f172a; }
+.workflow-node.type-delay .text-slate-400 { color: #475569; }
+.workflow-node.type-delay .port-label { color: #334155; text-shadow: none; }
 .workflow-node.is-start { border-color: #4ade80; box-shadow: 0 0 0 2px rgb(74 222 128 / 0.42), 0 0 22px rgb(34 197 94 / 0.5), 0 10px 24px rgb(0 0 0 / 0.28); }
-.workflow-node.is-end { border-color: #60a5fa; box-shadow: 0 0 0 2px rgb(96 165 250 / 0.42), 0 0 22px rgb(59 130 246 / 0.52), 0 10px 24px rgb(0 0 0 / 0.28); }
-.workflow-node.is-start.is-end { box-shadow: 0 0 0 2px rgb(74 222 128 / 0.48), 0 0 18px rgb(34 197 94 / 0.45), 0 0 30px rgb(59 130 246 / 0.42), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.is-terminal { border-color: #fb7185; box-shadow: 0 0 0 2px rgb(251 113 133 / 0.42), 0 0 22px rgb(225 29 72 / 0.52), 0 10px 24px rgb(0 0 0 / 0.28); }
+.workflow-node.is-start.is-terminal { box-shadow: 0 0 0 2px rgb(74 222 128 / 0.48), 0 0 18px rgb(34 197 94 / 0.45), 0 0 30px rgb(225 29 72 / 0.42), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.diff-added { border-color: #22c55e; box-shadow: 0 0 0 2px rgb(34 197 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.diff-removed { border-color: #f43f5e; box-shadow: 0 0 0 2px rgb(244 63 94 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.diff-changed { border-color: #f59e0b; box-shadow: 0 0 0 2px rgb(245 158 11 / 0.25), 0 10px 24px rgb(0 0 0 / 0.28); }
@@ -43,13 +45,13 @@
 .tone-danger { border-color: #fb7185; color: #fda4af; }
 @media (max-width: 900px) { .workflow-canvas { height: 480px; } .canvas-view-controls { right: 8px; bottom: 8px; max-width: calc(100% - 16px); } .canvas-view-controls .canvas-button { padding: 6px 8px; } }
 @media (hover: none) and (pointer: coarse) {
-  .workflow-node { background: #1e293b; box-shadow: none; backdrop-filter: none; }
-  .workflow-node.type-mcp, .workflow-node.type-end { background: #1e3a5f; }
-  .workflow-node.type-condition { background: #4a3415; }
-  .workflow-node.type-delay { background: #123f3b; }
-  .workflow-node.type-confirm { background: #482050; }
-  .workflow-node.type-ai { background: #173f52; }
-  .workflow-node.type-card { background: #35245f; }
-  .workflow-node.is-start, .workflow-node.is-end, .workflow-node.is-start.is-end { box-shadow: 0 0 0 2px currentColor; }
+  .workflow-node { background: rgb(30 41 59 / 0.9); box-shadow: none; backdrop-filter: none; }
+  .workflow-node.type-mcp { background: rgb(30 58 95 / 0.86); }
+  .workflow-node.type-condition { background: rgb(74 52 21 / 0.86); }
+  .workflow-node.type-delay { background: rgb(248 250 252 / 0.76); }
+  .workflow-node.type-confirm { background: rgb(72 32 80 / 0.86); }
+  .workflow-node.type-ai { background: rgb(88 28 135 / 0.82); }
+  .workflow-node.type-card { background: rgb(133 77 14 / 0.82); }
+  .workflow-node.is-start, .workflow-node.is-terminal, .workflow-node.is-start.is-terminal { box-shadow: 0 0 0 2px currentColor; }
   .canvas-view-controls, .canvas-inspector { backdrop-filter: none; }
 }

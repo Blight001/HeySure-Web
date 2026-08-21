@@ -60,9 +60,9 @@
   background: #c7d2fe;
 }
 
-.automation-editor-section {
+:global(.automation-editor-section) {
   border-color: #c7d2fe !important;
-  background: rgb(238 242 255 / 0.52);
+  background: rgb(238 242 255 / 0.92);
 }
 
 .automation-editor-inspector {
@@ -220,7 +220,7 @@
 
 :global(.dark .automation-editor-section) {
   border-color: #373e68 !important;
-  background: rgb(49 46 129 / 0.13);
+  background: rgb(17 24 39 / 0.92);
 }
 
 :global(.dark .automation-editor-modal .text-zinc-400),

@@ -246,8 +246,9 @@ export const createDayNight = (scene: WorldSceneHost) => {
 
 const applyDayNight = (scene: WorldSceneHost) => {
   const WHITE = Phaser.Display.Color.ValueToColor(0xffffff)
-  const DUSK = Phaser.Display.Color.ValueToColor(0xf0a860)
-  const NIGHT = Phaser.Display.Color.ValueToColor(0x3d4d82)
+  const DUSK = Phaser.Display.Color.ValueToColor(0xf3bc82)
+  // 乘法调色的最低亮度直接决定深夜细节是否仍然可辨。
+  const NIGHT = Phaser.Display.Color.ValueToColor(0x7b8cba)
   scene.worldHour = resolveWorldHour(window.location.search)
   scene.nightness = Phaser.Math.Clamp(nightnessForHour(scene.worldHour), 0, 1)
   const mix = scene.nightness < 0.5

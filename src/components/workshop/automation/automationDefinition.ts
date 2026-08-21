@@ -1,5 +1,6 @@
 import type { WorkflowDefinition, WorkflowStepType } from '@/api/workflowCards'
 import { DEFAULT_STEP_TITLES, type EditorDraft, type StepEditor, type WorkflowNodePosition } from './automationTypes'
+export { isTerminalStep } from './canvasGraph'
 
 export function parseJson<T>(raw: string, label: string): T {
   try {
@@ -111,6 +112,7 @@ function buildMcpStep(
   row: StepEditor,
   extra: Record<string, any>,
   toolDefs: Record<string, any>,
+  endId: string,
 ) {
   const id = row.id.trim()
   if (!row.deviceId.trim()) throw new Error(`步骤 ${id}：请先选择此节点绑定的契约设备`)
@@ -124,7 +126,7 @@ function buildMcpStep(
     arguments: parseJson(row.argumentsText, `步骤 ${id} 参数`),
     saveAs: row.saveAs.trim(),
     timeoutSeconds: Number(row.timeoutSeconds),
-    next: row.next.trim(),
+    next: row.next.trim() || endId,
     onError: row.onError.trim() || 'fail',
   }
   const projection = row.projection.split(',').map(item => item.trim()).filter(Boolean)
@@ -141,20 +143,20 @@ function buildMcpStep(
   return step
 }
 
-function buildTypedStep(row: StepEditor, extra: Record<string, any>, toolDefs: Record<string, any>) {
+function buildTypedStep(row: StepEditor, extra: Record<string, any>, toolDefs: Record<string, any>, endId: string) {
   const id = row.id.trim()
-  if (row.type === 'mcp') return buildMcpStep(row, extra, toolDefs)
+  if (row.type === 'mcp') return buildMcpStep(row, extra, toolDefs, endId)
   if (row.type === 'condition') {
     return {
       ...extra,
       type: 'condition',
       expression: parseJson(row.expressionText, `步骤 ${id} 条件`),
-      onTrue: row.onTrue.trim(),
-      onFalse: row.onFalse.trim(),
+      onTrue: row.onTrue.trim() || endId,
+      onFalse: row.onFalse.trim() || endId,
     }
   }
   if (row.type === 'delay') {
-    return { ...extra, type: 'delay', delaySeconds: Number(row.delaySeconds), next: row.next.trim() }
+    return { ...extra, type: 'delay', delaySeconds: Number(row.delaySeconds), next: row.next.trim() || endId }
   }
   if (row.type === 'ai') {
     return {
@@ -163,7 +165,7 @@ function buildTypedStep(row: StepEditor, extra: Record<string, any>, toolDefs: R
       prompt: row.message,
       saveAs: row.saveAs.trim(),
       timeoutSeconds: Number(row.timeoutSeconds),
-      next: row.next.trim(),
+      next: row.next.trim() || endId,
       onError: row.onDenied.trim() || 'fail',
     }
   }
@@ -179,7 +181,7 @@ function buildTypedStep(row: StepEditor, extra: Record<string, any>, toolDefs: R
       },
       input: parseJson(row.cardInputText, `步骤 ${id} 子卡片输入`),
       saveAs: row.saveAs.trim(),
-      next: row.next.trim(),
+      next: row.next.trim() || endId,
       onError: row.onError.trim() || 'fail',
     }
   }
@@ -196,12 +198,16 @@ export function buildWorkflowDefinition(options: {
   const { steps: editorSteps, editor, editorCompatibility, canvasPositions, toolDefsForStep } = options
   assertUniqueStepIds(editorSteps)
   const steps: Record<string, Record<string, any>> = {}
+  const explicitEnd = editorSteps.find(row => row.type === 'end')
+  let endId = explicitEnd?.id.trim() || 'finish'
+  while (!explicitEnd && editorSteps.some(row => row.id.trim() === endId)) endId = `_${endId}`
   for (const row of editorSteps) {
     const id = row.id.trim()
     const extra = parseJson<Record<string, any>>(row.extraText || '{}', `步骤 ${id} 扩展配置`)
-    steps[id] = buildTypedStep(row, extra, toolDefsForStep(row))
+    steps[id] = buildTypedStep(row, extra, toolDefsForStep(row), endId)
     steps[id].title = row.title.trim() || id
   }
+  if (!explicitEnd) steps[endId] = { type: 'end', title: '结束' }
   return {
     schemaVersion: 1,
     name: editor.name.trim(),

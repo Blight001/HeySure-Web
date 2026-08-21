@@ -272,8 +272,9 @@ export const createWorkshopBayDecor = (scene: WorldSceneHost) => {
 }
 
 export const addStreetLampGlow = (scene: WorldSceneHost, lamp: Phaser.GameObjects.Image) => {
-  addNightGlow(scene, { x: lamp.x, y: lamp.y - 44, color: 0xffd477, scaleX: 4.4, base: 0.62 })
-  addNightGlow(scene, { x: lamp.x, y: lamp.y - 2, color: 0xffbd5b, scaleX: 12.5, base: 0.38, scaleY: 4.5, pulse: 0.02 })
+  // 灯芯保持明亮，但收窄、压低路面泛光，避免大面积 ADD 暖色覆盖场景本色。
+  addNightGlow(scene, { x: lamp.x, y: lamp.y - 44, color: 0xffe2a3, scaleX: 3.2, base: 0.38, pulse: 0.05 })
+  addNightGlow(scene, { x: lamp.x, y: lamp.y - 2, color: 0xffd18a, scaleX: 7.2, base: 0.13, scaleY: 3, pulse: 0.015 })
 }
 
 export const addNightGlow = (scene: WorldSceneHost, spec: NightGlowSpec) => {

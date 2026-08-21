@@ -48,6 +48,15 @@ export function branchTarget(step: CanvasStep, branch: WorkflowCanvasConnection[
   return step.next || ''
 }
 
+export function isTerminalStep(step: CanvasStep, steps: CanvasStep[]) {
+  if (step.type === 'end') return false
+  const endIds = new Set(steps.filter(item => item.type === 'end').map(item => item.id))
+  return outputPorts(step).every(port => {
+    const target = branchTarget(step, port.branch)
+    return !target || endIds.has(target)
+  })
+}
+
 export function buildCanvasEdges(steps: CanvasStep[]): CanvasEdge[] {
   const ids = new Set(steps.map(step => step.id))
   return steps.flatMap(step => outputPorts(step).flatMap(port => {

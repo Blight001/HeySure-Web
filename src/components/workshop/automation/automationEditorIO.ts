@@ -18,16 +18,29 @@ export function buildCardSaveBody(
   inferredDeviceIds: string[],
 ) {
   return {
+    ...buildCardMetadataBody(editor, ownerTags),
+    definition,
+    default_device_id: defaultDeviceId || inferredDeviceIds[0] || undefined,
+    device_ids: inferredDeviceIds,
+  }
+}
+
+export function buildCardMetadataBody(editor: EditorDraft, ownerTags: string[]) {
+  return {
     name: editor.name.trim(),
     description: editor.description.trim(),
     tags: [...editor.tags.split(',').map(item => item.trim()).filter(Boolean), ...ownerTags],
     access_scope: editor.accessScope,
     allowed_ai_config_ids: editor.accessScope === 'selected' ? [...editor.allowedAiConfigIds] : [],
     risk_level: editor.riskLevel,
-    definition,
-    default_device_id: defaultDeviceId || inferredDeviceIds[0] || undefined,
-    device_ids: inferredDeviceIds,
   }
+}
+
+export async function persistWorkflowCardMetadata(
+  editingId: string,
+  body: ReturnType<typeof buildCardMetadataBody>,
+) {
+  return updateWorkflowCard(editingId, body)
 }
 
 export function inferredMcpDeviceIds(steps: StepEditor[]) {
