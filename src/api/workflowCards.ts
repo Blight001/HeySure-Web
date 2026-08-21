@@ -1,7 +1,7 @@
-import { del, get, patch, post } from './http'
+import { del, get, patch, post, put } from './http'
 
 export type WorkflowCardStatus = 'active' | 'deprecated' | 'draft' | 'validated' | 'published'
-export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'ai' | 'end'
+export type WorkflowStepType = 'mcp' | 'condition' | 'delay' | 'ai' | 'card' | 'end'
 
 export interface WorkflowDefinition {
   schemaVersion: 1
@@ -28,6 +28,7 @@ export interface WorkflowCard {
   access_scope: 'all' | 'owner' | 'selected'
   allowed_ai_config_ids: number[]
   definition: WorkflowDefinition
+  editor_layout?: { positions?: Record<string, { x: number; y: number }> }
   latest_version_id: string | null
   default_device_id: string
   created_at: number
@@ -78,6 +79,11 @@ export const importWorkflowCard = (body: WorkflowCardInput) =>
 
 export const updateWorkflowCard = (cardId: string, body: Partial<WorkflowCardInput>) =>
   patch<WorkflowCard>(`/api/workflow-cards/${encodeURIComponent(cardId)}`, body, { fallbackError: '卡片保存失败' })
+
+export const saveWorkflowCardLayout = (cardId: string, positions: Record<string, { x: number; y: number }>) =>
+  put<WorkflowCard>(`/api/workflow-cards/${encodeURIComponent(cardId)}/layout`, { positions }, {
+    fallbackError: '卡片布局保存失败',
+  })
 
 export const patchWorkflowCardDefinition = (
   cardId: string,

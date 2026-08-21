@@ -22,6 +22,7 @@
 .workflow-node.type-delay { border-color: #2dd4bf; background: rgb(13 148 136 / 0.2); }
 .workflow-node.type-confirm { border-color: #e879f9; background: rgb(192 38 211 / 0.2); }
 .workflow-node.type-ai { border-color: #38bdf8; background: rgb(14 165 233 / 0.2); }
+.workflow-node.type-card { border-color: #a78bfa; background: rgb(124 58 237 / 0.22); }
 .workflow-node.type-end { border-color: #60a5fa; background: rgb(37 99 235 / 0.2); }
 .workflow-node.is-start { border-color: #4ade80; box-shadow: 0 0 0 2px rgb(74 222 128 / 0.42), 0 0 22px rgb(34 197 94 / 0.5), 0 10px 24px rgb(0 0 0 / 0.28); }
 .workflow-node.is-end { border-color: #60a5fa; box-shadow: 0 0 0 2px rgb(96 165 250 / 0.42), 0 0 22px rgb(59 130 246 / 0.52), 0 10px 24px rgb(0 0 0 / 0.28); }
@@ -48,6 +49,7 @@
   .workflow-node.type-delay { background: #123f3b; }
   .workflow-node.type-confirm { background: #482050; }
   .workflow-node.type-ai { background: #173f52; }
+  .workflow-node.type-card { background: #35245f; }
   .workflow-node.is-start, .workflow-node.is-end, .workflow-node.is-start.is-end { box-shadow: 0 0 0 2px currentColor; }
   .canvas-view-controls, .canvas-inspector { backdrop-filter: none; }
 }

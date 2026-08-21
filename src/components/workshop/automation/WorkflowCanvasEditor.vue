@@ -51,6 +51,8 @@ const emit = defineEmits<{
   (event: 'connect', connection: WorkflowCanvasConnection): void
   (event: 'disconnect', connection: Omit<WorkflowCanvasConnection, 'to'>): void
   (event: 'set-start', stepId: string): void
+  (event: 'open-card', cardId: string): void
+  (event: 'save-layout', positions: Record<string, WorkflowNodePosition>): void
   (event: 'update:positions', positions: Record<string, WorkflowNodePosition>): void
 }>()
 
@@ -247,6 +249,14 @@ const autoLayout = () => {
   resetView()
 }
 
+const activateNode = (step: CanvasStep) => {
+  if (step.type === 'card' && step.cardId) {
+    emit('open-card', step.cardId)
+    return
+  }
+  emit('set-start', step.id)
+}
+
 const addStep = (type: WorkflowStepType, position?: WorkflowNodePosition) => {
   if (props.readonly) return
   emit('add', type, position || defaultPosition(props.steps.length))
@@ -356,7 +366,7 @@ onBeforeUnmount(() => {
           :style="{ left: `${node.x}px`, top: `${node.y}px` }"
           @pointerdown="startNodeDrag($event, node.step)"
           @click.stop="emit('select', node.step.id); selectedEdgeId = ''"
-          @dblclick.stop="emit('set-start', node.step.id)"
+          @dblclick.stop="activateNode(node.step)"
         >
           <button data-port :data-input-step="node.step.id" class="node-port input-port" type="button" aria-label="输入端点" />
           <div class="flex items-center justify-between text-[9px] text-slate-400">
@@ -396,6 +406,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="canvas-view-controls" @pointerdown.stop @touchstart.stop @touchmove.stop @touchend.stop>
         <button v-if="!readonly" class="canvas-button" type="button" @click="autoLayout">自动排版</button>
+        <button v-if="!readonly" class="canvas-button" type="button" @click="emit('save-layout', positions)">保存布局</button>
         <button class="canvas-button" type="button" aria-label="缩小画布" @click="setZoom(scale - 0.1)">−</button>
         <button class="canvas-button min-w-12" type="button" title="重置画布视图" @click="resetView">{{ Math.round(scale * 100) }}%</button>
         <button class="canvas-button" type="button" aria-label="放大画布" @click="setZoom(scale + 0.1)">＋</button>

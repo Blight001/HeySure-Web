@@ -15,6 +15,8 @@ export type CanvasStep = {
   onDenied?: string
   delaySeconds?: number
   message?: string
+  cardId?: string
+  cardName?: string
 }
 
 export type CanvasEdge = WorkflowCanvasConnection & { id: string; label: string }
@@ -41,7 +43,7 @@ export const NODE_WIDTH = 184
 export const NODE_HEIGHT = 92
 
 export const typeLabels: Record<WorkflowStepType, string> = {
-  mcp: '设备 MCP', condition: '判断分支', delay: '等待', ai: 'AI 审核', end: '结束',
+  mcp: '设备 MCP', condition: '判断分支', delay: '等待', ai: 'AI 审核', card: '引用卡片', end: '结束',
 }
 
 export const palette: Array<{ type: WorkflowStepType; label: string }> = [
@@ -49,6 +51,7 @@ export const palette: Array<{ type: WorkflowStepType; label: string }> = [
   { type: 'condition', label: '判断分支' },
   { type: 'delay', label: '等待' },
   { type: 'ai', label: 'AI 审核' },
+  { type: 'card', label: '引用卡片' },
   { type: 'end', label: '结束' },
 ]
 

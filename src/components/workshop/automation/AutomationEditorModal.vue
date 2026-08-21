@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
-  getWorkflowCard,
   getWorkflowCardVersion,
-  listWorkflowCardVersions,
   type WorkflowCard,
   type WorkflowCardVersion,
   type WorkflowDefinition,
@@ -17,7 +15,7 @@ import WorkflowCanvasEditor from './WorkflowCanvasEditor.vue'
 import AutomationEditorSettings from './AutomationEditorSettings.vue'
 import AutomationStepInspector from './AutomationStepInspector.vue'
 import AutomationVersionCompare from './AutomationVersionCompare.vue'
-import { applyCardToEditor, blankEditorDraft, createBlankEditorSteps } from './automationEditorApply'
+import { blankEditorDraft, createBlankEditorSteps, useAutomationCardNavigation } from './automationEditorApply'
 import {
   applyBranchTarget,
   clearStepTarget,
@@ -40,7 +38,7 @@ import {
 } from './automationEditorIO'
 import type { AiMemberLike, DeviceLike, StepClipboard, StepEditor, WorkflowCanvasConnection, WorkflowNodePosition } from './automationTypes'
 
-const props = defineProps<{ devices: DeviceLike[]; agents: AiMemberLike[] }>()
+const props = defineProps<{ devices: DeviceLike[]; agents: AiMemberLike[]; cards: WorkflowCard[] }>()
 const emit = defineEmits<{ (e: 'changed'): void; (e: 'notice', message: string): void; (e: 'error', message: string): void }>()
 const { confirm } = useMessage()
 
@@ -112,12 +110,17 @@ const restoreEditorSnapshot = (snapshot: WorkflowEditorSnapshot) => {
   Object.assign(editor, snapshot.editor)
   editorSteps.value = JSON.parse(JSON.stringify(snapshot.steps)) as StepEditor[]
   canvasPositions.value = JSON.parse(JSON.stringify(snapshot.positions)) as Record<string, WorkflowNodePosition>
-  if (!editorSteps.value.some(step => step.id === selectedStepId.value)) {
-    selectedStepId.value = editor.startStepId || editorSteps.value[0]?.id || ''
+  if (selectedStepId.value && !editorSteps.value.some(step => step.id === selectedStepId.value)) {
+    selectedStepId.value = ''
   }
 }
 const editorHistory = useSnapshotHistory<WorkflowEditorSnapshot>(restoreEditorSnapshot, { limit: 100, delay: 220 })
 const resetEditorHistory = () => editorHistory.reset(captureEditorSnapshot())
+const { navigationStack, loadCard, openReferencedCard, returnToParentCard, saveLayout } = useAutomationCardNavigation({
+  editingId, editor, editorSteps, selectedStepId, canvasPositions, editorCompatibility,
+  ownerTags, versions, publishDeviceIds, defaultDeviceId, versionPreview, busy,
+  resetMessages, setError, setNotice, resetEditorHistory,
+})
 
 const detachClipboardFromSource = () => {
   if (!stepClipboard) return
@@ -129,12 +132,13 @@ const detachClipboardFromSource = () => {
 const openNew = () => {
   detachClipboardFromSource()
   resetMessages()
+  navigationStack.value = []
   editingId.value = ''
   Object.assign(editor, blankEditorDraft())
   ownerTags.value = []
   const blank = createBlankEditorSteps()
   editorSteps.value = blank.steps
-  selectedStepId.value = blank.startStepId
+  selectedStepId.value = ''
   canvasPositions.value = blank.positions
   editorCompatibility.value = {}
   editor.startStepId = blank.startStepId
@@ -150,20 +154,9 @@ const openNew = () => {
 const openEdit = async (card: WorkflowCard) => {
   detachClipboardFromSource()
   resetMessages()
-  const applied = applyCardToEditor(await getWorkflowCard(card.id))
-  editingId.value = card.id
-  Object.assign(editor, applied.editor)
-  ownerTags.value = applied.ownerTags
-  editorSteps.value = applied.steps
-  selectedStepId.value = applied.startStepId
-  editorCompatibility.value = applied.compatibility
-  canvasPositions.value = applied.positions
-  versions.value = (await listWorkflowCardVersions(card.id)).items
-  publishDeviceIds.value = [...(versions.value[0]?.contract_device_ids || [])]
-  defaultDeviceId.value = versions.value[0]?.default_device_id || publishDeviceIds.value[0] || ''
-  versionPreview.value = null
+  navigationStack.value = []
+  await loadCard(card.id)
   editorOpen.value = true
-  resetEditorHistory()
 }
 
 const addStep = (type: WorkflowStepType, position: WorkflowNodePosition = { x: 48, y: 48 }) => {
@@ -404,7 +397,13 @@ defineExpose({ openNew, openEdit })
     <div v-if="editorOpen" class="fixed inset-0 flex justify-center overflow-y-auto bg-zinc-950/45 backdrop-blur-sm" :class="editorFullscreen ? 'p-0' : 'p-3'" :style="{ zIndex: editorZIndex }" @click.self="editorOpen = false">
       <div class="automation-editor-modal w-full border p-4 shadow-2xl" :class="editorFullscreen ? 'is-fullscreen min-h-app-viewport max-w-none rounded-none' : 'my-auto max-w-[1500px] rounded-xl'">
         <div class="automation-editor-header flex items-center justify-between gap-3">
-          <div class="automation-editor-title text-sm font-semibold">{{ editingId ? '编辑自动化卡片' : '新建自动化卡片' }}</div>
+          <div class="flex min-w-0 items-center gap-2">
+            <button v-if="navigationStack.length" type="button" class="rounded border px-2 py-1 text-xs text-indigo-600 dark:border-zinc-700 dark:text-indigo-300" @click="returnToParentCard">← 返回</button>
+            <div class="min-w-0">
+              <div class="automation-editor-title truncate text-sm font-semibold">{{ editingId ? `编辑自动化卡片 · ${editor.name}` : '新建自动化卡片' }}</div>
+              <div v-if="navigationStack.length" class="truncate text-[10px] text-zinc-400">来自 {{ navigationStack[navigationStack.length - 1]?.cardName }}</div>
+            </div>
+          </div>
           <div class="flex items-center gap-1">
             <button class="automation-editor-close" :aria-label="editorFullscreen ? '退出全屏编辑' : '全屏编辑'" :title="editorFullscreen ? '退出全屏' : '全屏编辑'" @click="editorFullscreen = !editorFullscreen">{{ editorFullscreen ? '↙' : '⛶' }}</button>
             <button class="automation-editor-close" aria-label="关闭自动化卡片编辑器" title="关闭" @click="editorOpen = false">✕</button>
@@ -442,6 +441,8 @@ defineExpose({ openNew, openEdit })
             @connect="connectSteps"
             @disconnect="disconnectStep"
             @set-start="editor.startStepId = $event"
+            @open-card="openReferencedCard"
+            @save-layout="saveLayout"
             @update:positions="canvasPositions = $event"
           >
             <template #bottom-left>
@@ -455,6 +456,8 @@ defineExpose({ openNew, openEdit })
                 :device-scopes="deviceScopes"
                 :device-tools-loading="deviceToolsLoading"
                 :device-tools-error="deviceToolsError"
+                :cards="cards"
+                :current-card-id="editingId"
                 @set-start="editor.startStepId = $event"
                 @remove="removeSelectedStep"
                 @change-device="changeStepDevice"

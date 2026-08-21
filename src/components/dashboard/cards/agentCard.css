@@ -2,6 +2,12 @@
   isolation: isolate;
 }
 
+@property --agent-chat-orbit-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 18deg;
+}
+
 .agent-card-avatar-layer {
   opacity: 0.15;
 }
@@ -42,6 +48,56 @@
   animation-duration: 2.2s;
 }
 
+.agent-card-user-chat-active {
+  animation: agent-card-chat-breathe 6.4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  box-shadow:
+    0 0 0 2px var(--agent-glow-color, rgba(34, 211, 238, 0.58)),
+    0 18px 42px rgba(14, 165, 233, 0.24),
+    0 0 34px var(--agent-glow-color, rgba(34, 211, 238, 0.58)) !important;
+}
+
+.agent-card-user-chat-active::before {
+  inset: -7px;
+  opacity: 0.96;
+  filter: blur(11px);
+  border-width: 3px;
+  box-shadow:
+    0 0 22px var(--agent-glow-color, rgba(34, 211, 238, 0.58)),
+    0 0 42px var(--agent-glow-color, rgba(34, 211, 238, 0.42));
+  animation: agent-card-chat-glow 1.9s ease-in-out infinite;
+}
+
+.agent-card-user-chat-active::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  z-index: -1;
+  padding: 7px;
+  border-radius: calc(1rem + 8px);
+  background: conic-gradient(
+    from var(--agent-chat-orbit-angle),
+    transparent 0deg 18deg,
+    var(--agent-glow-color, rgba(34, 211, 238, 0.58)) 34deg 61deg,
+    transparent 82deg 137deg,
+    var(--agent-glow-color, rgba(34, 211, 238, 0.58)) 158deg 223deg,
+    transparent 248deg 292deg,
+    var(--agent-glow-color, rgba(34, 211, 238, 0.58)) 312deg 337deg,
+    transparent 354deg 360deg
+  );
+  filter: blur(7px);
+  opacity: 0.92;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: agent-card-chat-edge-flow 4.8s linear infinite;
+}
+
 .agent-card-glow-manager {
   --agent-glow-color: rgba(245, 158, 11, 0.5);
 }
@@ -72,8 +128,50 @@
   }
 }
 
+@keyframes agent-card-chat-breathe {
+  0%, 100% { scale: 1; }
+  34% { scale: 1.025; }
+  61% { scale: 1.012; }
+  82% { scale: 1.035; }
+}
+
+@keyframes agent-card-chat-glow {
+  0%, 100% { opacity: 0.72; transform: scale(0.99); }
+  42% { opacity: 1; transform: scale(1.035); }
+  73% { opacity: 0.84; transform: scale(1.012); }
+}
+
+@keyframes agent-card-chat-edge-flow {
+  0% {
+    --agent-chat-orbit-angle: 18deg;
+    opacity: 0.72;
+    animation-timing-function: cubic-bezier(0.42, 0, 0.78, 0.58);
+  }
+  24% {
+    --agent-chat-orbit-angle: 76deg;
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.22, 0.72, 0.36, 1);
+  }
+  53% {
+    --agent-chat-orbit-angle: 212deg;
+    opacity: 0.82;
+    animation-timing-function: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+  }
+  76% {
+    --agent-chat-orbit-angle: 274deg;
+    opacity: 0.96;
+    animation-timing-function: cubic-bezier(0.12, 0.65, 0.3, 1);
+  }
+  100% {
+    --agent-chat-orbit-angle: 378deg;
+    opacity: 0.72;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .agent-card-shell::before {
+  .agent-card-shell,
+  .agent-card-shell::before,
+  .agent-card-shell::after {
     animation: none;
   }
 }
@@ -87,13 +185,23 @@
   }
 
   .agent-card-shell::before,
-  .agent-card-world-focus::before {
+  .agent-card-world-focus::before,
+  .agent-card-user-chat-active::after {
     inset: -1px;
     animation: none;
     filter: none;
     box-shadow: none;
     opacity: 0.5;
     transform: none;
+  }
+
+  .agent-card-user-chat-active {
+    animation: none;
+    scale: 1;
+  }
+
+  .agent-card-user-chat-active::after {
+    display: none;
   }
 
   .agent-card-avatar-layer {

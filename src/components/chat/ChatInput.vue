@@ -186,6 +186,13 @@ const handlePrimaryAction = () => {
   if (canSend.value) emit('send')
 }
 
+const focusEditor = async () => {
+  await nextTick()
+  editorRef.value?.focus()
+}
+
+defineExpose({ focusEditor })
+
 const handleInput = (e: Event) => {
   mentionDismissed.value = false
   activeMentionIndex.value = 0

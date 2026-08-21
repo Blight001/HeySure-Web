@@ -31,6 +31,10 @@ export function createEmptyStep(type: WorkflowStepType = 'mcp', index = 1): Step
     delaySeconds: 1,
     message: type === 'ai' ? '请核对此前完整运行过程，完成本节点任务并返回继续执行所需的参数' : '',
     onDenied: '',
+    cardId: '',
+    cardVersionId: '',
+    cardName: '',
+    cardInputText: '{}',
     extraText: '{}',
   }
 }
@@ -38,7 +42,7 @@ export function createEmptyStep(type: WorkflowStepType = 'mcp', index = 1): Step
 const KNOWN_STEP_KEYS = new Set([
   'type', 'title', 'toolRef', 'arguments', 'saveAs', 'next', 'onError', 'timeoutSeconds',
   'resultProjection', 'retryPolicy', 'expression', 'onTrue', 'onFalse', 'delaySeconds',
-  'seconds', 'prompt',
+  'seconds', 'prompt', 'cardRef', 'input',
 ])
 
 function extraFromStep(step: Record<string, any>) {
@@ -79,7 +83,16 @@ function branchFields(step: Record<string, any>, isAi: boolean) {
 }
 
 function routingFields(id: string, step: Record<string, any>, isAi: boolean) {
-  return { id, title: String(step.title || id), ...toolFields(step, isAi), ...branchFields(step, isAi) }
+  return {
+    id,
+    title: String(step.title || id),
+    ...toolFields(step, isAi),
+    ...branchFields(step, isAi),
+    cardId: String(step.cardRef?.id || ''),
+    cardVersionId: String(step.cardRef?.versionId || ''),
+    cardName: String(step.cardRef?.name || ''),
+    cardInputText: JSON.stringify(step.input || {}, null, 2),
+  }
 }
 
 export function stepEditorFromDefinition(id: string, step: Record<string, any>): StepEditor {
@@ -152,6 +165,22 @@ function buildTypedStep(row: StepEditor, extra: Record<string, any>, toolDefs: R
       timeoutSeconds: Number(row.timeoutSeconds),
       next: row.next.trim(),
       onError: row.onDenied.trim() || 'fail',
+    }
+  }
+  if (row.type === 'card') {
+    if (!row.cardId.trim()) throw new Error(`步骤 ${id}：请选择要引用的自动化卡片`)
+    return {
+      ...extra,
+      type: 'card',
+      cardRef: {
+        id: row.cardId.trim(),
+        versionId: row.cardVersionId.trim(),
+        name: row.cardName.trim(),
+      },
+      input: parseJson(row.cardInputText, `步骤 ${id} 子卡片输入`),
+      saveAs: row.saveAs.trim(),
+      next: row.next.trim(),
+      onError: row.onError.trim() || 'fail',
     }
   }
   return { ...extra, type: 'end' }

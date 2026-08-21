@@ -7,8 +7,9 @@ import { PRESET_AI_AVATARS, resolveAiAvatarUrl } from '@/utils/aiAvatar'
 import AiConfigAppearancePanel from './AiConfigAppearancePanel.vue'
 import AiConfigBotPanel from './AiConfigBotPanel.vue'
 import AiConfigDevicePanel from './AiConfigDevicePanel.vue'
+import AiConfigExternalMcpPanel from './AiConfigExternalMcpPanel.vue'
 
-type SettingsSection = 'mcp' | 'bot' | 'appearance'
+type SettingsSection = 'mcp' | 'bot' | 'appearance' | 'external-mcp'
 
 interface Props {
   show: boolean
@@ -35,6 +36,7 @@ const settingsSectionTitle: Record<SettingsSection, string> = {
   mcp: '设备绑定',
   bot: '机器人配置',
   appearance: '数字社会人物显示',
+  'external-mcp': '外部 MCP',
 }
 
 const editingConfigId = computed(() => {
@@ -128,7 +130,7 @@ watch(() => props.show, show => {
             <label class="block text-xs text-zinc-500 mb-1">平台</label>
             <input v-model="form.platform" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" />
           </div>
-          <div v-if="mode === 'create' || form.ai_role_group !== 'digital_member'">
+          <div>
             <label class="block text-xs text-zinc-500 mb-1">模型</label>
             <select v-model="form.model_preset_id" class="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:bg-zinc-800/60 dark:border-zinc-700 dark:text-zinc-100" @change="onModelPresetChange">
               <option value="">请选择服务器模型</option>
@@ -177,6 +179,10 @@ watch(() => props.show, show => {
               <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">数字社会人物</span>
               <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">人物显示、皮肤、调色、体型与光环</span>
             </button>
+            <button v-if="editingConfigId && form.ai_role_group === 'digital_member'" type="button" class="text-left px-3 py-2.5 rounded-lg border border-zinc-200 bg-zinc-50/70 hover:border-indigo-300 hover:bg-white dark:border-zinc-700 dark:bg-zinc-800/40 dark:hover:border-indigo-500/50 dark:hover:bg-zinc-800" @click="openSettingsSection('external-mcp')">
+              <span class="block text-xs font-medium text-zinc-700 dark:text-zinc-200">外部 MCP</span>
+              <span class="mt-1 block text-[11px] text-zinc-500 dark:text-zinc-400">向 Codex 或其他 AI 开放成员工具</span>
+            </button>
           </div>
         </div>
 
@@ -221,6 +227,11 @@ watch(() => props.show, show => {
                 v-else-if="settingsSection === 'appearance'"
                 :editing-config-id="editingConfigId"
                 :role-group="form.ai_role_group"
+              />
+              <AiConfigExternalMcpPanel
+                v-else-if="settingsSection === 'external-mcp'"
+                :editing-config-id="editingConfigId"
+                :active="settingsSection === 'external-mcp'"
               />
             </div>
           </div>

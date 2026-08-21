@@ -89,7 +89,7 @@ const memberLearning = (id: number) => props.members.get(id)?.status === 'learni
         <h4 class="text-sm font-bold text-zinc-700 dark:text-zinc-200 truncate">{{ displayName() }}</h4>
       </div>
       <div class="flex items-center gap-1 shrink-0">
-        <span class="shrink-0 text-[9px] px-1 py-0.5 rounded border font-medium" :class="memberStatusBadgeClass(device, display)">
+        <span class="shrink-0 rounded border px-1.5 py-0.5 text-xs font-medium" :class="memberStatusBadgeClass(device, display)">
           {{ memberStatusLabel(device, display, members) }}
         </span>
         <button
@@ -107,7 +107,7 @@ const memberLearning = (id: number) => props.members.get(id)?.status === 'learni
           type="button"
           :disabled="busy"
           title="删除该离线设备的记录"
-          class="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-rose-200 text-rose-600 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+          class="shrink-0 rounded border border-rose-200 px-1.5 py-0.5 text-xs text-rose-600 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
           @click="emit('delete')"
         >
           删除记录
@@ -115,10 +115,10 @@ const memberLearning = (id: number) => props.members.get(id)?.status === 'learni
       </div>
     </div>
     <div class="mt-1 flex items-center justify-between gap-2 min-w-0">
-      <div class="min-w-0 text-[10px] text-zinc-400 dark:text-zinc-500 truncate" :title="`${deviceTypeLabel(device)} · ${device.platform || 'unknown'} · ${device.id}`">
+      <div class="min-w-0 truncate text-xs text-zinc-400 dark:text-zinc-500" :title="`${deviceTypeLabel(device)} · ${device.platform || 'unknown'} · ${device.id}`">
         {{ deviceTypeLabel(device) }} · {{ device.platform || 'unknown' }} · {{ device.id }}
       </div>
-      <span class="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
+      <span class="shrink-0 rounded bg-zinc-100/60 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-300">
         {{ lifecycleLabel(device.lifecycle) }}
       </span>
     </div>
@@ -127,7 +127,7 @@ const memberLearning = (id: number) => props.members.get(id)?.status === 'learni
       <button
         v-if="canRemoteControl(device) && !isOffline(device)"
         type="button"
-        class="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
+        class="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:bg-sky-100 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
         @click="emit('remote')"
       >
         <AppIcon name="monitor" class="w-3.5 h-3.5" /> {{ remoteControlLabel(device) }}
@@ -136,11 +136,11 @@ const memberLearning = (id: number) => props.members.get(id)?.status === 'learni
 
     <div v-if="boundIds().length || error" class="mt-2 rounded-lg border p-2" :class="memberPanelClass(device, display)">
       <div v-if="boundIds().length" class="space-y-1">
-        <div class="text-[9px] text-zinc-500 dark:text-zinc-400">已分配 AI 成员（权限互相独立）</div>
+        <div class="text-xs text-zinc-500 dark:text-zinc-400">已分配 AI 成员（权限互相独立）</div>
         <div
           v-for="mid in boundIds()"
           :key="mid"
-          class="flex items-center justify-between gap-2 rounded-md bg-white/60 px-2 py-1 text-[10px] dark:bg-zinc-800/60"
+          class="flex items-center justify-between gap-2 rounded-md bg-white/60 px-2 py-1.5 text-xs dark:bg-zinc-800/60"
         >
           <span class="min-w-0 truncate">
             {{ memberName(mid) }}
@@ -153,24 +153,24 @@ const memberLearning = (id: number) => props.members.get(id)?.status === 'learni
               :ai-config-id="mid"
               :refresh-key="`${mid}-${device.lifecycle ?? ''}`"
             />
-            <span v-else class="text-[9px] text-zinc-400">离线</span>
+            <span v-else class="text-xs text-zinc-400">离线</span>
             <button
               type="button"
               :disabled="busy"
-              class="rounded border border-rose-200 px-1 py-0.5 text-[9px] text-rose-600 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+              class="rounded border border-rose-200 px-1.5 py-0.5 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
               @click="emit('unbind', mid)"
             >解除</button>
           </span>
         </div>
       </div>
-      <div v-if="error" class="mt-1 text-[10px] text-rose-500">{{ error }}</div>
+      <div v-if="error" class="mt-1 text-xs text-rose-500">{{ error }}</div>
     </div>
 
     <div v-if="isEndpointDevice(device) || isToolboxDevice(device)" class="mt-2 flex gap-1">
       <button
         type="button"
         :disabled="busy"
-        class="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+        class="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
         @click="emit('assign')"
       >
         {{ busy ? '...' : '分配 AI 成员' }}
@@ -180,13 +180,13 @@ const memberLearning = (id: number) => props.members.get(id)?.status === 'learni
       <span
         v-for="cap in device.capabilities"
         :key="cap"
-        class="text-[9px] px-1 py-0.5 rounded bg-zinc-100/60 text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400"
+        class="rounded bg-zinc-100/60 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400"
       >
         {{ cap }}
       </span>
     </div>
 
-    <div v-if="device.lastError" class="mt-2 text-[10px] text-rose-500 truncate" :title="device.lastError">
+    <div v-if="device.lastError" class="mt-2 truncate text-xs text-rose-500" :title="device.lastError">
       错误: {{ device.lastError }}
     </div>
     </div>

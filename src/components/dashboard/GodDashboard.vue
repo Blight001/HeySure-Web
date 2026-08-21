@@ -160,8 +160,8 @@ const saveAiConfigAndRefresh = async () => {
 }
 
 const deleteAiConfigAndRefresh = async () => {
-  await ai.deleteAiConfig()
-  await refreshDashboardAfterSave()
+  const deleted = await ai.deleteAiConfig()
+  if (deleted) await refreshDashboardAfterSave()
 }
 
 const openAllMcpToolsFromSystemSettings = async () => {

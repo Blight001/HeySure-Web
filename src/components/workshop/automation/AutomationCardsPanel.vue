@@ -179,47 +179,47 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
     <header class="flex items-center justify-between gap-2">
       <div class="min-w-0 text-left">
         <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">自动化卡片</div>
-        <div class="text-[10px] text-zinc-500">服务器确定性编排设备 MCP，不逐步调用模型</div>
+        <div class="text-xs text-zinc-500">服务器确定性编排设备 MCP，不逐步调用模型</div>
       </div>
-      <span class="rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-zinc-900/50">{{ cards.length }} 张</span>
+      <span class="rounded-full bg-white/70 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-900/50">{{ cards.length }} 张</span>
     </header>
 
     <div class="mt-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex rounded-lg bg-white/70 p-0.5 text-xs dark:bg-zinc-900/50">
+        <div class="flex rounded-lg bg-white/70 p-0.5 text-sm dark:bg-zinc-900/50">
           <button class="rounded-md px-3 py-1" :class="tab === 'cards' ? 'bg-indigo-600 text-white' : 'text-zinc-500'" @click="tab = 'cards'">卡片</button>
           <button class="rounded-md px-3 py-1" :class="tab === 'runs' ? 'bg-indigo-600 text-white' : 'text-zinc-500'" @click="tab = 'runs'">运行历史</button>
         </div>
         <div v-if="tab === 'cards'" class="flex gap-1">
-          <input v-model="cardSearch" class="w-36 rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60" placeholder="搜索名称或标签" />
-          <select v-model="cardStatus" class="rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] dark:border-zinc-700 dark:bg-zinc-900/60"><option value="">全部状态</option><option value="active">可执行</option><option value="deprecated">旧版本</option></select>
-          <label class="cursor-pointer rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
+          <input v-model="cardSearch" class="w-36 rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900/60" placeholder="搜索名称或标签" />
+          <select v-model="cardStatus" class="rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900/60"><option value="">全部状态</option><option value="active">可执行</option><option value="deprecated">旧版本</option></select>
+          <label class="cursor-pointer whitespace-nowrap rounded-lg border border-zinc-200 bg-white/70 px-2 py-1 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300">
             导入<input type="file" accept="application/json,.json" class="hidden" @change="importFile" />
           </label>
-          <button class="rounded-lg bg-indigo-600 px-2 py-1 text-[11px] text-white" @click="editorRef?.openNew()">新建卡片</button>
+          <button class="whitespace-nowrap rounded-lg bg-indigo-600 px-2 py-1 text-sm text-white" @click="editorRef?.openNew()">新建卡片</button>
         </div>
       </div>
 
-      <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
-      <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
+      <div v-if="error" class="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-xs text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ error }}</div>
+      <div v-if="notice" class="mt-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-xs text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">{{ notice }}</div>
 
       <div v-if="tab === 'cards'" class="mt-3 grid grid-cols-1 gap-2">
         <div v-if="!loading && filteredCards.length === 0" class="col-span-full py-6 text-center text-xs text-zinc-400">暂无匹配卡片。</div>
         <article v-for="card in filteredCards" :key="card.id" class="rounded-lg border border-zinc-200 bg-white/75 p-2.5 dark:border-zinc-700 dark:bg-zinc-900/55">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <div class="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100">{{ card.name }}</div>
-              <div class="mt-0.5 line-clamp-2 text-[10px] text-zinc-500">{{ card.description || '暂无说明' }}</div>
+              <div class="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{{ card.name }}</div>
+              <div class="mt-0.5 line-clamp-2 text-xs leading-relaxed text-zinc-500">{{ card.description || '暂无说明' }}</div>
             </div>
-            <span class="shrink-0 rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(card.status)">{{ statusLabel(card.status) }}</span>
+            <span class="shrink-0 rounded px-1.5 py-0.5 text-xs" :class="statusClass(card.status)">{{ statusLabel(card.status) }}</span>
           </div>
           <div class="mt-2 flex flex-wrap gap-1">
-            <span v-for="tag in visibleCardTags(card)" :key="tag" class="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-800">{{ tag }}</span>
-            <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-[9px] text-zinc-500 dark:bg-zinc-800">{{ card.risk_level }}</span>
-            <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">{{ accessScopeSummary(card) }}</span>
+            <span v-for="tag in visibleCardTags(card)" :key="tag" class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800">{{ tag }}</span>
+            <span class="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800">{{ card.risk_level }}</span>
+            <span class="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300">{{ accessScopeSummary(card) }}</span>
           </div>
-          <div class="mt-1 text-[9px] text-zinc-400">成功率 {{ cardRunSummary(runs, card.id).rate }} · 最近运行 {{ cardRunSummary(runs, card.id).latest }}</div>
-          <div class="mt-2 flex flex-wrap gap-1 text-[10px]">
+          <div class="mt-1 text-xs text-zinc-400">成功率 {{ cardRunSummary(runs, card.id).rate }} · 最近运行 {{ cardRunSummary(runs, card.id).latest }}</div>
+          <div class="mt-2 flex flex-wrap gap-1 text-xs">
             <button class="rounded border px-2 py-0.5 hover:bg-zinc-100 dark:hover:bg-zinc-800" @click="editorRef?.openEdit(card)">编辑</button>
             <button :disabled="!['active', 'published', 'deprecated'].includes(card.status)" class="rounded border border-indigo-200 px-2 py-0.5 text-indigo-600 disabled:opacity-40 dark:border-indigo-500/30 dark:text-indigo-300" @click="openRun(card)">运行</button>
           </div>
@@ -230,10 +230,10 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
         <div class="space-y-1.5">
           <button v-for="run in runs" :key="run.id" class="w-full rounded-lg border border-zinc-200 bg-white/75 p-2 text-left dark:border-zinc-700 dark:bg-zinc-900/55" @click="loadRunDetail(run)">
             <div class="flex items-center justify-between gap-2">
-              <span class="truncate text-[11px] font-medium">{{ cards.find(card => card.id === run.card_id)?.name || run.card_id }}</span>
-              <span class="rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(run.output?.status === 'manual_required' ? 'failed' : run.status)">{{ runStatusLabel(run) }}</span>
+              <span class="truncate text-sm font-medium">{{ cards.find(card => card.id === run.card_id)?.name || run.card_id }}</span>
+              <span class="rounded px-1.5 py-0.5 text-xs" :class="statusClass(run.output?.status === 'manual_required' ? 'failed' : run.status)">{{ runStatusLabel(run) }}</span>
             </div>
-            <div class="mt-1 text-[9px] text-zinc-400">{{ run.device_id }} · {{ run.current_step_id || '完成' }} · {{ new Date(run.created_at * 1000).toLocaleString() }}</div>
+            <div class="mt-1 text-xs text-zinc-400">{{ run.device_id }} · {{ run.current_step_id || '完成' }} · {{ new Date(run.created_at * 1000).toLocaleString() }}</div>
           </button>
           <div v-if="runs.length === 0" class="py-6 text-center text-xs text-zinc-400">暂无运行记录</div>
         </div>
@@ -242,22 +242,22 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
           <template v-else>
             <div class="flex items-center justify-between">
               <div class="text-xs font-semibold">运行详情</div>
-              <span class="rounded px-1.5 py-0.5 text-[9px]" :class="statusClass(selectedRun.output?.status === 'manual_required' ? 'failed' : selectedRun.status)">{{ runStatusLabel(selectedRun) }}</span>
+              <span class="rounded px-1.5 py-0.5 text-xs" :class="statusClass(selectedRun.output?.status === 'manual_required' ? 'failed' : selectedRun.status)">{{ runStatusLabel(selectedRun) }}</span>
             </div>
-            <div class="mt-1 break-all text-[9px] text-zinc-400">{{ selectedRun.id }}</div>
-            <div v-if="selectedRun.error" class="mt-2 rounded bg-rose-50 p-2 text-[10px] text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ selectedRun.error.code }}：{{ selectedRun.error.message }}</div>
-            <pre v-if="selectedRun.output" class="mt-2 max-h-36 overflow-auto rounded bg-zinc-950 p-2 text-[9px] text-emerald-300">{{ JSON.stringify(selectedRun.output, null, 2) }}</pre>
-            <div class="mt-2 flex gap-1 text-[10px]">
+            <div class="mt-1 break-all text-xs text-zinc-400">{{ selectedRun.id }}</div>
+            <div v-if="selectedRun.error" class="mt-2 rounded bg-rose-50 p-2 text-xs text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">{{ selectedRun.error.code }}：{{ selectedRun.error.message }}</div>
+            <pre v-if="selectedRun.output" class="mt-2 max-h-36 overflow-auto rounded bg-zinc-950 p-2 text-xs text-emerald-300">{{ JSON.stringify(selectedRun.output, null, 2) }}</pre>
+            <div class="mt-2 flex gap-1 text-xs">
               <button v-if="ACTIVE_RUN_STATUSES.has(selectedRun.status)" class="rounded border border-rose-200 px-2 py-1 text-rose-500" @click="cancelRun(selectedRun)">取消</button>
               <button v-if="['failed', 'timed_out', 'cancelled'].includes(selectedRun.status)" class="rounded border border-indigo-200 px-2 py-1 text-indigo-600" @click="retryRun(selectedRun)">新运行重试</button>
             </div>
             <div v-for="review in aiReviews.filter(item => item.status === 'pending')" :key="review.id" class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
-              <div class="text-[10px] font-medium text-amber-700 dark:text-amber-200">AI 节点任务：{{ review.risk_summary }}</div>
-              <div class="mt-1 text-[9px] text-amber-600/80 dark:text-amber-200/70">{{ review.notified_at ? 'AI 已收到此前运行轨迹，正在处理' : '正在把此前完整运行过程交给负责本次运行的 AI' }}</div>
+              <div class="text-xs font-medium text-amber-700 dark:text-amber-200">AI 节点任务：{{ review.risk_summary }}</div>
+              <div class="mt-1 text-xs text-amber-600/80 dark:text-amber-200/70">{{ review.notified_at ? 'AI 已收到此前运行轨迹，正在处理' : '正在把此前完整运行过程交给负责本次运行的 AI' }}</div>
             </div>
-            <div class="mt-3 text-[10px] font-semibold text-zinc-500">步骤</div>
+            <div class="mt-3 text-xs font-semibold text-zinc-500">步骤</div>
             <div class="mt-1 space-y-1">
-              <div v-for="step in selectedSteps" :key="step.id" class="rounded border border-zinc-200 p-1.5 text-[9px] dark:border-zinc-700">
+              <div v-for="step in selectedSteps" :key="step.id" class="rounded border border-zinc-200 p-1.5 text-xs dark:border-zinc-700">
                 <div class="flex justify-between"><span>{{ step.step_id }} · {{ step.tool_name || '控制步骤' }} · #{{ step.attempt }}</span><span>{{ statusLabel(step.status) }}</span></div>
                 <div v-if="step.error" class="mt-1 text-rose-500">{{ step.error.code }}：{{ step.error.message }}</div>
                 <pre v-if="step.result" class="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-zinc-500">{{ JSON.stringify(step.result, null, 2) }}</pre>
@@ -272,6 +272,7 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
       ref="editorRef"
       :devices="devices"
       :agents="agents"
+      :cards="cards"
       @changed="loadCards"
       @notice="onEditorNotice"
       @error="onEditorError"

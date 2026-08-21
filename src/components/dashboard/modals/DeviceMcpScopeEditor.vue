@@ -183,18 +183,18 @@ const startTestTool = (tool: string) => {
     <button
       v-if="!loading && capabilities.length"
       type="button"
-      class="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+      class="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
       @click="openDetail"
     >
       配置MCP权限范围 {{ selected.size }} / {{ capabilities.length }}
     </button>
-    <div v-else-if="loading" class="text-[10px] text-zinc-400 text-center py-1">加载中…</div>
-    <div v-else-if="error" class="text-[10px] text-rose-500">{{ error }}</div>
-    <div v-else-if="capabilities.length === 0" class="text-[10px] text-zinc-400 text-center py-1">
+    <div v-else-if="loading" class="py-1 text-center text-xs text-zinc-400">加载中…</div>
+    <div v-else-if="error" class="text-xs text-rose-500">{{ error }}</div>
+    <div v-else-if="capabilities.length === 0" class="py-1 text-center text-xs text-zinc-400">
       该设备未上报任何工具。
     </div>
 
-    <div v-if="notice && !loading" class="mt-1.5 text-[10px] text-emerald-600 dark:text-emerald-300">{{ notice }}</div>
+    <div v-if="notice && !loading" class="mt-1.5 text-xs text-emerald-600 dark:text-emerald-300">{{ notice }}</div>
 
     <Teleport to="body">
       <Transition name="fade">
@@ -211,13 +211,13 @@ const startTestTool = (tool: string) => {
             <div class="flex items-center justify-between gap-3 border-b border-zinc-200 px-5 py-3 dark:border-zinc-700">
               <div class="min-w-0">
                 <div class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">设置 MCP 权限范围</div>
-                <div class="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
+                <div class="truncate text-xs text-zinc-400 dark:text-zinc-500">
                   {{ scope?.agentName || deviceId }} · {{ capabilities.length }} 个工具 · 悬浮预览，点击固定详情
                 </div>
               </div>
               <button
                 type="button"
-                class="rounded border border-zinc-200 px-2 py-1 text-[10px] text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                class="rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 @click="closeDetail"
               >
                 关闭
@@ -246,20 +246,20 @@ const startTestTool = (tool: string) => {
             />
 
             <div class="border-t border-zinc-200 px-5 py-3 dark:border-zinc-700">
-              <div v-if="remoteUpdatePending" class="mb-2 text-[10px] text-amber-600 dark:text-amber-300">
+              <div v-if="remoteUpdatePending" class="mb-2 text-xs text-amber-600 dark:text-amber-300">
                 设备状态已刷新，当前未保存的勾选已保留
               </div>
               <div class="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   :disabled="!canSave || saving || !dirty"
-                  class="text-[10px] px-2 py-0.5 rounded bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-40"
+                  class="rounded bg-indigo-500 px-3 py-1 text-xs text-white hover:bg-indigo-600 disabled:opacity-40"
                   @click="save"
                 >
                   {{ saving ? '...' : '保存' }}
                 </button>
               </div>
-              <div v-if="notice" class="mt-2 text-[10px] text-emerald-600 dark:text-emerald-300">{{ notice }}</div>
+              <div v-if="notice" class="mt-2 text-xs text-emerald-600 dark:text-emerald-300">{{ notice }}</div>
             </div>
           </div>
         </div>

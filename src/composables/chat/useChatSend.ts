@@ -178,12 +178,37 @@ const removePendingQueueItem = (deps: ChatSendDeps, itemId: string) => {
   persistPendingQueue(deps)
 }
 
-const updatePendingQueueItem = (deps: ChatSendDeps, itemId: string, content: string) => {
-  const nextContent = content.trim()
-  if (!nextContent) return
-  deps.state.pendingQueue.value = deps.state.pendingQueue.value.map(item =>
-    item.id === itemId ? { ...item, content: nextContent } : item)
+const movePendingQueueItemUp = (deps: ChatSendDeps, itemId: string) => {
+  const index = deps.state.pendingQueue.value.findIndex(item => item.id === itemId)
+  if (index <= 0) return
+  const next = [...deps.state.pendingQueue.value]
+  ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
+  deps.state.pendingQueue.value = next
   persistPendingQueue(deps)
+}
+
+const movePendingQueueItemToFront = (deps: ChatSendDeps, itemId: string) => {
+  const item = deps.state.pendingQueue.value.find(entry => entry.id === itemId)
+  if (!item || deps.state.pendingQueue.value[0]?.id === itemId) return
+  deps.state.pendingQueue.value = [item, ...deps.state.pendingQueue.value.filter(entry => entry.id !== itemId)]
+  persistPendingQueue(deps)
+}
+
+const restoreQueuedItemToComposer = (deps: ChatSendDeps, itemId: string) => {
+  const item = deps.state.pendingQueue.value.find(entry => entry.id === itemId)
+  if (!item) return false
+  removePendingQueueItem(deps, itemId)
+  deps.state.chatInput.value = item.content
+  deps.state.chatMentions.value = [...item.mentions]
+  deps.uploads.clearUploadedAttachments()
+  deps.uploads.uploadedAttachments.value = item.attachments.map(attachment => ({ ...attachment }))
+  deps.emit('update:selectedFiles', [...item.selectedFiles])
+  const selectedTools = new Set(item.selectedMcpToolNames)
+  deps.state.uncheckedMcpToolNames.value = deps.prompt.attachableToolGroups.value
+    .flatMap(group => group.tools.map(tool => String(tool.name || '').trim()))
+    .filter(name => name && !selectedTools.has(name))
+  deps.prompt.loadEffectiveSystemPromptPreview()
+  return true
 }
 
 interface PreparedSend {
@@ -402,7 +427,7 @@ const drainPendingQueue = async (
   deps: ChatSendDeps,
   sendQueued: (item: QueuedChatMessage) => Promise<boolean>,
 ) => {
-  if (deps.state.isSubmitting.value || deps.state.isTyping.value || deps.state.isRunActive.value) return
+  if (deps.state.isTyping.value || deps.state.isRunActive.value) return
   const next = deps.state.pendingQueue.value[0]
   if (next) await sendQueued(next)
 }
@@ -431,13 +456,31 @@ export const useChatSend = (deps: ChatSendDeps) => {
     removePendingQueueItem(deps, itemId)
     if (!deps.state.isRunActive.value && deps.state.pendingQueue.value.length > 0) void drain()
   }
+  const sendQueuedNow = async (itemId: string) => {
+    if (deps.state.isSubmitting.value) return false
+    const item = deps.state.pendingQueue.value.find(entry => entry.id === itemId)
+    if (!item) return false
+    if (deps.state.isRunActive.value) {
+      movePendingQueueItemToFront(deps, itemId)
+      await deps.run.stopCurrentRun()
+      return true
+    }
+    deps.state.isSubmitting.value = true
+    try {
+      return await sendQueuedItem(deps, item)
+    } finally {
+      deps.state.isSubmitting.value = false
+    }
+  }
   return {
     pendingQueue: deps.state.pendingQueue,
     sendChat: send,
     restorePendingQueue: () => restorePendingQueue(deps),
     drainPendingQueue: drain,
     removePendingQueueItem: removeQueued,
-    updatePendingQueueItem: (itemId: string, content: string) => updatePendingQueueItem(deps, itemId, content),
+    sendPendingQueueItemNow: sendQueuedNow,
+    editPendingQueueItem: (itemId: string) => restoreQueuedItemToComposer(deps, itemId),
+    movePendingQueueItemUp: (itemId: string) => movePendingQueueItemUp(deps, itemId),
     findQueuedSessionId: (sessionIds: string[]) => findQueuedSessionId(deps, sessionIds),
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DeviceMcpScope } from '@/api/devices'
-import type { WorkflowStepType } from '@/api/workflowCards'
+import type { WorkflowCard, WorkflowStepType } from '@/api/workflowCards'
 import type { DeviceLike, StepEditor } from './automationTypes'
 
 defineProps<{
@@ -9,6 +9,8 @@ defineProps<{
   deviceScopes: Record<string, DeviceMcpScope>
   deviceToolsLoading: boolean
   deviceToolsError: string
+  cards: WorkflowCard[]
+  currentCardId: string
 }>()
 
 const emit = defineEmits<{
@@ -31,7 +33,15 @@ const argumentValue = (row: StepEditor, name: string) => {
     return ''
   }
 }
-const stepKinds = ['mcp', 'condition', 'delay', 'ai', 'end'] as WorkflowStepType[]
+const stepKinds = ['mcp', 'condition', 'delay', 'ai', 'card', 'end'] as WorkflowStepType[]
+const selectCard = (row: StepEditor, event: Event, cards: WorkflowCard[]) => {
+  const id = (event.target as HTMLSelectElement).value
+  const card = cards.find(item => item.id === id)
+  row.cardId = id
+  row.cardVersionId = card?.latest_version_id || ''
+  row.cardName = card?.name || ''
+  if (card && (!row.title || row.title.startsWith('引用卡片'))) row.title = card.name
+}
 </script>
 
 <template>
@@ -80,6 +90,17 @@ const stepKinds = ['mcp', 'condition', 'delay', 'ai', 'end'] as WorkflowStepType
           <label class="text-[9px] text-zinc-500">AI 返回参数保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="ai_review" /></label>
           <label class="text-[9px] text-zinc-500">AI 处理超时<input v-model.number="selectedStep.timeoutSeconds" type="number" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" /></label>
           <div class="rounded bg-sky-50 p-2 text-[9px] text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">运行到此节点会暂停，并把此前完整步骤轨迹和本节点任务交给 AI；AI 完成后返回的参数可在后续节点中用 ${steps.保存名.result.字段} 引用。</div>
+        </template>
+        <template v-else-if="selectedStep.type === 'card'">
+          <label class="text-[9px] text-zinc-500">引用卡片
+            <select :value="selectedStep.cardId" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" @change="selectCard(selectedStep, $event, cards)">
+              <option value="">请选择卡片</option>
+              <option v-for="card in cards.filter(item => item.id !== currentCardId)" :key="card.id" :value="card.id">{{ card.name }}</option>
+            </select>
+          </label>
+          <label class="text-[9px] text-zinc-500">输入映射<textarea v-model="selectedStep.cardInputText" rows="5" class="mt-1 w-full rounded border p-1.5 font-mono text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder='{"value":"${input.value}"}' /></label>
+          <label class="text-[9px] text-zinc-500">返回结果保存为<input v-model="selectedStep.saveAs" class="mt-1 w-full rounded border p-1.5 text-[10px] dark:border-zinc-700 dark:bg-zinc-950" placeholder="child_result" /></label>
+          <div class="rounded bg-indigo-50 p-2 text-[9px] text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">双击画布中的引用节点可进入该卡片；父卡片会固定当前所选版本。</div>
         </template>
         <div v-else class="rounded-lg bg-emerald-50 p-3 text-[10px] text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">结束节点会生成卡片输出并终止运行。</div>
       </div>

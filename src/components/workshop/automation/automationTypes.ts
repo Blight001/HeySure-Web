@@ -38,6 +38,10 @@ export type StepEditor = {
   delaySeconds: number
   message: string
   onDenied: string
+  cardId: string
+  cardVersionId: string
+  cardName: string
+  cardInputText: string
   extraText: string
 }
 
@@ -78,6 +82,7 @@ export const DEFAULT_STEP_TITLES: Record<WorkflowStepType, string> = {
   condition: '判断分支',
   delay: '等待',
   ai: 'AI 审核',
+  card: '引用卡片',
   end: '结束',
 }
 

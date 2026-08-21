@@ -16,7 +16,7 @@ import {
   mapMcpToolRows,
 } from './useAiConfigManagementHelpers'
 
-type SettingsSection = 'mcp' | 'bot' | 'appearance'
+type SettingsSection = 'mcp' | 'bot' | 'appearance' | 'external-mcp'
 
 interface UseAiConfigManagementOptions {
   defaultMcpTools: string[]
@@ -25,6 +25,22 @@ interface UseAiConfigManagementOptions {
   normalizeSystemAutoControl: (raw: unknown) => any
   alert?: (options: { title?: string; message: string; type?: 'info' | 'success' | 'warning' | 'error' }) => Promise<void>
   onReloadAgents: () => Promise<void>
+}
+
+type Alert = UseAiConfigManagementOptions['alert']
+
+async function requestAiConfigDeletion(configId: number, alert?: Alert) {
+  try {
+    await apiDeleteAiConfig(configId)
+    return true
+  } catch (err) {
+    await alert?.({
+      title: '删除失败',
+      message: (err as Error)?.message || 'AI 删除失败，请稍后重试。',
+      type: 'error',
+    })
+    return false
+  }
 }
 
 export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => {
@@ -124,11 +140,13 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
   }
 
   const deleteAiConfig = async () => {
-    if (!aiConfigForm.value?.id || !getAuthToken()) return
-    try { await apiDeleteAiConfig(aiConfigForm.value.id) } catch { /* best-effort */ }
+    if (!aiConfigForm.value?.id || !getAuthToken()) return false
+    if (!await requestAiConfigDeletion(aiConfigForm.value.id, alert)) return false
     aiConfigModalOpen.value = false
     aiConfigDeleteConfirm.value = false
     await onReloadAgents()
+    await alert?.({ title: '删除成功', message: 'AI 已删除。', type: 'success' })
+    return true
   }
 
   watch(modelPresets, presets => {

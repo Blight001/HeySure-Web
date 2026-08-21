@@ -326,6 +326,22 @@ const pollRunLive = async (ctl: RunCtl, epoch: number) => {
   }
 }
 
+const pollRunTerminalStatus = async (ctl: RunCtl, epoch: number) => {
+  if (epoch !== ctl.runPollEpoch || !ctl.deps.state.currentRunId.value || !getAuthToken()) return
+  try {
+    const run = await chatApi.getRunStatus(ctl.deps.state.currentRunId.value, ctl.deps.live.liveCursor.value)
+    if (isTerminalRunStatus(String(run.status || ''))) {
+      await finishRun(ctl, ctl.deps.state.currentRunId.value, String(run.status), String(run.error_message || ''))
+      return
+    }
+  } catch {
+    // Socket.IO remains the primary channel; retry this terminal-state safeguard.
+  }
+  if (epoch === ctl.runPollEpoch && ctl.deps.state.isRunActive.value) {
+    ctl.runLivePollTimer = window.setTimeout(() => { void pollRunTerminalStatus(ctl, epoch) }, 800)
+  }
+}
+
 const startRunPolling = (ctl: RunCtl) => {
   stopRunPolling(ctl)
   ctl.lastFinishedRunId = ''
@@ -333,6 +349,7 @@ const startRunPolling = (ctl: RunCtl) => {
   const epoch = ctl.runPollEpoch
   ctl.deps.live.liveCursor.value = ctl.deps.live.liveTargetText.value.length
   if (!ctl.streamConnected.value || ctl.deps.state.currentRunIsExternal.value) void pollRunLive(ctl, epoch)
+  else void pollRunTerminalStatus(ctl, epoch)
   void pollRunHistory(ctl, epoch)
 }
 

@@ -120,7 +120,7 @@ export const setDeviceMcpScope = (deviceId: string, aiConfigId: number, tools: s
     { fallbackError: 'Agent MCP 权限保存失败' },
   )
 
-// 设备开发手册（设备栏目"设备端开发文档"弹窗）：默认内容随服务端打包，
+// 设备开发手册（设备栏目“开发文档”弹窗）：默认内容随服务端打包，
 // 房主编辑后持久化；保存空内容 = 恢复默认。
 export interface DeviceDevManual {
   content: string
@@ -130,12 +130,12 @@ export interface DeviceDevManual {
 
 export const getDeviceDevManual = () =>
   get<DeviceDevManual>('/api/devices/dev-manual', {
-    fallbackError: '设备端开发文档加载失败',
+    fallbackError: '开发文档加载失败',
   })
 
 export const saveDeviceDevManual = (content: string) =>
   put<DeviceDevManual>('/api/devices/dev-manual', { content }, {
-    fallbackError: '设备端开发文档保存失败',
+    fallbackError: '开发文档保存失败',
   })
 
 export interface BuiltinDeviceItem {

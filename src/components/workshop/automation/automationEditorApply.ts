@@ -2,6 +2,8 @@ import type { WorkflowCard } from '@/api/workflowCards'
 import { createEmptyStep, stepEditorFromDefinition } from './automationDefinition'
 import type { EditorDraft, StepEditor, WorkflowNodePosition } from './automationTypes'
 
+export { useAutomationCardNavigation } from './useAutomationCardNavigation'
+
 export function blankEditorDraft(): EditorDraft {
   return {
     name: '新自动化卡片',
@@ -36,7 +38,7 @@ export function applyCardToEditor(full: WorkflowCard) {
   const steps: StepEditor[] = Object.entries(full.definition.steps || {}).map(([id, step]) => (
     stepEditorFromDefinition(id, step)
   ))
-  const savedPositions = full.definition.compatibility?.editorLayout?.positions
+  const savedPositions = savedEditorPositions(full)
   const positions: Record<string, WorkflowNodePosition> = savedPositions && typeof savedPositions === 'object'
     ? { ...savedPositions }
     : {}
@@ -48,6 +50,11 @@ export function applyCardToEditor(full: WorkflowCard) {
     compatibility: { ...(full.definition.compatibility || {}) },
     startStepId: editor.startStepId || steps[0]?.id || '',
   }
+}
+
+function savedEditorPositions(full: WorkflowCard) {
+  if (full.editor_layout?.positions) return full.editor_layout.positions
+  return full.definition.compatibility?.editorLayout?.positions
 }
 
 export function createBlankEditorSteps() {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
 import { useMessage } from '@/composables/useMessage'
 import { useChatWorkspace } from '@/composables/chat/useChatWorkspace'
 import type { ChatInterfaceProps } from '@/types/chat'
@@ -40,7 +40,9 @@ const {
   setSessionForward,
   pendingQueue,
   removePendingQueueItem,
-  updatePendingQueueItem,
+  sendPendingQueueItemNow,
+  editPendingQueueItem,
+  movePendingQueueItemUp,
   frontPromptUsesPortal,
   openFrontPromptPopup,
   scheduleFrontPromptPopupClose,
@@ -121,6 +123,13 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
   currentMcpDeviceId.value,
   chatMessages.value,
 ))
+const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
+
+const editQueuedItem = async (itemId: string) => {
+  if (!editPendingQueueItem(itemId)) return
+  await nextTick()
+  await chatInputRef.value?.focusEditor()
+}
 </script>
 
 <template>
@@ -345,14 +354,19 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
       </button>
 
       <ChatQueuePanel
-        class="relative z-10"
+        class="relative z-10 -mb-2 w-[calc(100%_-_1rem)] self-center"
         :items="pendingQueue"
-        @update="updatePendingQueueItem"
+        :run-active="isRunActive"
+        @send-now="sendPendingQueueItemNow"
+        @edit="editQueuedItem"
+        @move-up="movePendingQueueItemUp"
         @delete="removePendingQueueItem"
       />
 
       <ChatInput
+        ref="chatInputRef"
         class="relative z-10"
+        :class="{ '!pt-1': pendingQueue.length > 0 }"
         v-model="chatInput"
         :isTyping="isTyping"
         :isSubmitting="isSubmitting"

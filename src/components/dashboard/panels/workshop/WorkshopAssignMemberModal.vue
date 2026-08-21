@@ -30,7 +30,7 @@ const emit = defineEmits<{
             </div>
             <button class="text-zinc-400 hover:text-zinc-600" @click="emit('close')">✕</button>
           </div>
-          <div v-if="members.length === 0" class="text-xs text-zinc-500 py-4 text-center">
+          <div v-if="members.length === 0" class="py-4 text-center text-sm text-zinc-500">
             暂无可分配成员
           </div>
           <div v-else class="max-h-64 overflow-auto divide-y divide-zinc-100 dark:divide-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700">
@@ -47,13 +47,13 @@ const emit = defineEmits<{
                 >{{ draftIds.includes(m.aiConfigId) ? '✓' : '' }}</span>
                 {{ m.name }}
               </span>
-              <span class="text-[10px] text-zinc-500">ID: {{ m.aiConfigId }}</span>
+              <span class="text-xs text-zinc-500">ID: {{ m.aiConfigId }}</span>
             </button>
           </div>
           <div class="mt-2 flex items-center justify-between gap-2">
             <button
               type="button"
-              class="text-xs px-3 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300"
+              class="rounded border border-rose-200 px-3 py-1 text-sm text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300"
               @click="emit('clear')"
             >
               清空选择
@@ -61,7 +61,7 @@ const emit = defineEmits<{
             <div class="flex gap-2">
             <button
               type="button"
-              class="text-xs px-3 py-1 rounded border border-zinc-200 hover:bg-zinc-100 dark:border-zinc-700"
+              class="rounded border border-zinc-200 px-3 py-1 text-sm hover:bg-zinc-100 dark:border-zinc-700"
               @click="emit('close')"
             >
               取消
@@ -69,7 +69,7 @@ const emit = defineEmits<{
             <button
               type="button"
               :disabled="busy"
-              class="text-xs px-3 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200"
+              class="rounded border border-indigo-200 bg-indigo-50 px-3 py-1 text-sm text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200"
               @click="emit('save')"
             >
               {{ busy ? '保存中...' : `保存（${draftIds.length}）` }}

@@ -32,6 +32,10 @@ export function outputPorts(step: CanvasStep): OutputPort[] {
     { branch: 'next', label: '批准', tone: 'success', placement: 'right' },
     { branch: 'denied', label: '拒绝', tone: 'danger', placement: 'right' },
   ]
+  if (step.type === 'card') return [
+    { branch: 'next', label: '完成', tone: 'success', placement: 'right' },
+    { branch: 'error', label: '失败', tone: 'danger', placement: 'bottom' },
+  ]
   if (step.type === 'delay') return [{ branch: 'next', label: '继续', tone: 'normal', placement: 'right' }]
   return []
 }
@@ -138,6 +142,7 @@ export function nodeMeta(step: CanvasStep) {
   if (step.type === 'condition') return 'true / false 双分支'
   if (step.type === 'delay') return `${Number(step.delaySeconds || 0)} 秒`
   if (step.type === 'ai') return step.message || '暂停并等待 AI 完成节点任务'
+  if (step.type === 'card') return step.cardName || '请选择要引用的卡片'
   return '生成输出并结束'
 }
 
