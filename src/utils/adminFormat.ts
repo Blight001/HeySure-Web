@@ -1,6 +1,5 @@
 import { formatDateTime } from '@/utils/datetime'
 import type { DbValue } from '@/api/admin'
-import type { AdminMcpParamRow } from '@/types/admin'
 
 export const formatOptionalDateTime = (ts: number | null | undefined): string => formatDateTime(ts, '—')
 
@@ -40,37 +39,4 @@ export const dbValueToString = (value: DbValue): string => {
 export const dbValuePreview = (value: DbValue): string => {
   const text = dbValueToString(value)
   return text.length > 80 ? `${text.slice(0, 80)}…` : text
-}
-
-export const sampleMcpValueForType = (type: string): unknown => {
-  if (type.includes('integer') || type.includes('number')) return 0
-  if (type.includes('boolean')) return false
-  if (type.includes('array')) return []
-  if (type.includes('object')) return {}
-  return ''
-}
-
-export const buildMcpParamRows = (inputSchema: unknown): AdminMcpParamRow[] => {
-  if (!inputSchema || typeof inputSchema !== 'object') return []
-
-  const schema = inputSchema as { properties?: unknown; required?: unknown }
-  const props = schema.properties && typeof schema.properties === 'object'
-    ? schema.properties as Record<string, { type?: unknown; description?: unknown }>
-    : null
-  if (!props) return []
-
-  const required = Array.isArray(schema.required)
-    ? schema.required.map(String)
-    : []
-
-  return Object.entries(props).map(([name, cfg]) => {
-    const rawType = cfg?.type
-    const type = Array.isArray(rawType) ? rawType.map(String).join(' | ') : String(rawType || 'any')
-    return {
-      name,
-      type,
-      required: required.includes(name),
-      description: String(cfg?.description || ''),
-    }
-  })
 }

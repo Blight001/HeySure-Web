@@ -1,5 +1,5 @@
 /**
- * Admin service monitoring, tasks, RTC settings, and diagnostics.
+ * Admin service monitoring, tasks, and RTC settings.
  */
 import { get, post, put } from './http'
 
@@ -121,52 +121,3 @@ export const getRtcSettings = () =>
 
 export const updateRtcSettings = (payload: RtcSettingsPayload) =>
   put<RtcSettings>('/api/admin/rtc-settings', payload, { fallbackError: '保存远程控制设置失败' })
-
-export interface DiagnosticCheck {
-  id: string
-  label: string
-  ok: boolean
-  detail: string
-  latency_ms?: number
-  skipped?: boolean
-}
-
-export interface DiagnosticGroup {
-  module: string
-  label: string
-  checks: DiagnosticCheck[]
-}
-
-export interface SelfTestResult {
-  ok: boolean
-  summary: { total: number; passed: number; failed: number }
-  groups: DiagnosticGroup[]
-  ran_at: number
-}
-
-export const runSelfTest = () =>
-  get<SelfTestResult>('/api/diagnostics/selftest', {
-    fallbackError: '系统自检失败',
-  })
-
-export interface ModelProbe {
-  name: string
-  model: string
-  base_url?: string
-  ok: boolean
-  latency_ms?: number
-  reply?: string
-  detail?: string
-}
-
-export const runModelTests = (payload: { prompt?: string; ai_config_id?: number } = {}) =>
-  post<{ ok: boolean; models: ModelProbe[]; detail?: string }>('/api/diagnostics/models', payload, {
-    fallbackError: '模型连通性测试失败',
-  })
-
-export const reseedMcpDocs = () =>
-  post<{ ok: boolean; regenerated: number; failed: string[]; detail: string }>(
-    '/api/diagnostics/reseed-mcp-docs',
-    {},
-    { fallbackError: '重新生成工具说明失败' },
-  )

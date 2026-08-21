@@ -5,6 +5,7 @@ import * as adminApi from '@/api/admin'
 import type { ServiceInfo } from '@/api/admin'
 import { ADMIN_STATUS_META } from '@/constants/admin'
 import { serviceDetailRows } from '@/utils/adminServiceDetails'
+import AdminHostInfo from './AdminHostInfo.vue'
 import AdminServiceLogs from './AdminServiceLogs.vue'
 import AdminServiceTasks from './AdminServiceTasks.vue'
 
@@ -29,8 +30,10 @@ const SERVICE_GROUPS: Array<{ key: ServiceInfo['group']; label: string }> = [
 
 const groupedServices = computed(() => SERVICE_GROUPS.map(group => ({
   ...group,
-  services: services.value.filter(service => service.group === group.key),
+  services: services.value.filter(service => service.group === group.key && service.key !== 'host'),
 })).filter(group => group.services.length > 0))
+
+const hostService = computed(() => services.value.find(service => service.key === 'host') || null)
 
 const loadServices = async () => {
   servicesLoading.value = true
@@ -134,6 +137,8 @@ defineExpose({ tick })
 
 <template>
   <div class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-5">
+    <AdminHostInfo v-if="hostService" :service="hostService" />
+
     <section>
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-400">子服务运行状态</h3>

@@ -7,7 +7,6 @@ export type AdminModalTab =
   | 'files'
   | 'database'
   | 'audit'
-  | 'diagnostics'
   | 'deviceReleases'
   | 'update'
 
@@ -19,11 +18,4 @@ export interface AdminStatusMeta {
 export interface AdminRoleOption {
   value: UserRole
   label: string
-}
-
-export interface AdminMcpParamRow {
-  name: string
-  type: string
-  required: boolean
-  description: string
 }

@@ -18,6 +18,9 @@ const RESTART_STEP_LABELS: Record<string, string> = {
 export const REPO_ACTIVE_PHASES = new Set([
   'checking',
   'pulling',
+  'queued_rollback',
+  'backing_up',
+  'rolling_back',
   'queued_restart',
   'rebuilding',
   'restarting',
@@ -82,6 +85,14 @@ const pushMetaLines = (
   if (state.remote?.short && state.behind > 0) {
     pushLine(lines, 'remote', `远端版本：${state.remote.short} ${state.remote.subject || ''}`.trim(), 'warn')
   }
+  if (state.rollback_target?.short) {
+    pushLine(
+      lines,
+      'rollback-target',
+      `回退目标：${state.rollback_target.short} ${state.rollback_target.subject || ''}`.trim(),
+      'warn',
+    )
+  }
 }
 
 const pushAheadBehind = (lines: RepoProgressLine[], state: RepoUpdateState) => {
@@ -100,7 +111,10 @@ const pushAheadBehind = (lines: RepoProgressLine[], state: RepoUpdateState) => {
 
 const pushDoneOrError = (lines: RepoProgressLine[], state: RepoUpdateState) => {
   if (state.phase === 'done') {
-    pushLine(lines, 'done', '更新流程已完成，服务已启动。', 'ok')
+    const text = state.trigger === 'rollback'
+      ? '版本回退已完成，服务已启动，自动更新保持关闭。'
+      : '更新流程已完成，服务已启动。'
+    pushLine(lines, 'done', text, 'ok')
   }
   if (state.phase === 'error' && state.last_error) {
     pushLine(lines, 'error', state.last_error, 'error')

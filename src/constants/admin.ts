@@ -8,7 +8,6 @@ export const ADMIN_TAB_ORDER: AdminModalTab[] = [
   'files',
   'database',
   'audit',
-  'diagnostics',
   'deviceReleases',
   'update',
 ]
@@ -20,7 +19,6 @@ export const ADMIN_TAB_LABELS: Record<AdminModalTab, string> = {
   files: '文件管理',
   database: '数据库',
   audit: '操作审计',
-  diagnostics: '系统测试',
   deviceReleases: '设备版本',
   update: '版本更新',
 }
@@ -76,6 +74,7 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   restart_service: '重启服务',
   restart_all_services: '全部重启',
   rebuild_all_services: '重构全部容器',
+  repo_update_rollback: '版本回退',
   stop_task: '停止子任务',
   file_write: '保存文件',
   file_mkdir: '新建文件夹',
@@ -93,6 +92,9 @@ export const ADMIN_REPO_PHASE_META: Record<string, AdminStatusMeta> = {
   up_to_date: { label: '已是最新', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' },
   update_available: { label: '发现新版本', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
   pulling: { label: '拉取中', cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' },
+  queued_rollback: { label: '等待回退', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
+  backing_up: { label: '数据库备份中', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
+  rolling_back: { label: '正在回退', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' },
   queued_restart: { label: '等待重建', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
   rebuilding: { label: '构建镜像', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },
   restarting: { label: '重建容器', cls: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' },

@@ -24,6 +24,9 @@ export type RepoUpdatePhase =
   | 'up_to_date'
   | 'update_available'
   | 'pulling'
+  | 'queued_rollback'
+  | 'backing_up'
+  | 'rolling_back'
   | 'queued_restart'
   | 'rebuilding'
   | 'restarting'
@@ -33,7 +36,7 @@ export type RepoUpdatePhase =
 export type RepoStepStatus = 'pending' | 'active' | 'done' | 'error' | 'skipped'
 
 export interface RepoUpdateStep {
-  key: 'check' | 'pull' | 'restart'
+  key: 'check' | 'pull' | 'rollback' | 'restart'
   label: string
   status: RepoStepStatus
 }
@@ -49,6 +52,7 @@ export interface RepoUpdateState {
   behind: number
   current: RepoCommitInfo | null
   remote: RepoCommitInfo | null
+  rollback_target?: RepoCommitInfo | null
   last_check_at: number | null
   last_error: string
   logs: string[]
@@ -78,6 +82,30 @@ export interface RepoUpdateStatus {
   limits: { min_interval: number; max_interval: number }
 }
 
+export interface RepoVersionEntry extends RepoCommitInfo {
+  is_current: boolean
+  rollback_eligible: boolean
+  disabled_reason?: string | null
+}
+
+export interface RepoVersionsResponse {
+  versions: RepoVersionEntry[]
+  current_sha: string | null
+  limit: number
+  max_limit: number
+  rollback_warning: string
+}
+
+export interface RepoRollbackResult {
+  ok: boolean
+  started: boolean
+  target_sha: string
+  auto_update_disabled: boolean
+  warning: string
+  config: RepoUpdateConfig
+  state: RepoUpdateState
+}
+
 export const getRepoUpdateStatus = () =>
   get<RepoUpdateStatus>('/api/admin/repo-update/status', { fallbackError: '获取版本更新状态失败' })
 
@@ -89,4 +117,17 @@ export const checkRepoUpdate = (apply = true) =>
     '/api/admin/repo-update/check',
     { apply },
     { fallbackError: '检测更新失败' },
+  )
+
+export const getRepoVersions = (limit = 20) =>
+  get<RepoVersionsResponse>('/api/admin/repo-update/versions', {
+    query: { limit },
+    fallbackError: '获取历史版本失败',
+  })
+
+export const rollbackRepoVersion = (targetSha: string) =>
+  post<RepoRollbackResult>(
+    '/api/admin/repo-update/rollback',
+    { target_sha: targetSha },
+    { fallbackError: '发起版本回退失败' },
   )
