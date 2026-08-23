@@ -1,4 +1,5 @@
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
+import { remoteControlAvailability } from '@/utils/remoteControlCapabilities'
 
 export const isToolboxDevice = (device: ConnectedDevice) =>
   String(device.id || '').startsWith('toolbox_builtin_')
@@ -33,8 +34,10 @@ export const isBrowserDevice = (device: ConnectedDevice) => {
   return !!device.isBrowserExtension || platform.includes('browser')
 }
 
-export const canRemoteControl = (device: ConnectedDevice) =>
-  isSoftwareDevice(device) || isAndroidDevice(device) || isBrowserDevice(device)
+export const canRemoteControl = (device: ConnectedDevice) => {
+  if (device.capabilities?.length) return remoteControlAvailability(remoteControlMode(device), device.capabilities).canOpen
+  return isSoftwareDevice(device) || isAndroidDevice(device) || isBrowserDevice(device)
+}
 
 export const isEndpointDevice = (device: ConnectedDevice) => {
   const platform = String(device.platform || '').toLowerCase()
@@ -81,6 +84,8 @@ export function remoteControlMode(device: ConnectedDevice): 'android' | 'desktop
 }
 
 export function remoteControlLabel(device: ConnectedDevice) {
+  const availability = remoteControlAvailability(remoteControlMode(device), device.capabilities)
+  if (!availability.screenAvailable && availability.terminalAvailable) return '远程终端'
   if (isAndroidDevice(device)) return '远程控制'
   if (isBrowserDevice(device)) return '浏览器控制'
   return '桌面控制'

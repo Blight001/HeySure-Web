@@ -1,77 +1,48 @@
-import type { RemoteControllerPreset } from '@/types/remoteController'
+import type { RemoteControllerAction, RemoteControllerControl, RemoteControllerTemplate } from '@/types/remoteController'
 
-export const REMOTE_CONTROLLER_PRESETS: RemoteControllerPreset[] = [
+const button = (id: string, label: string, action: RemoteControllerAction, tone: RemoteControllerControl['tone'] = 'default'): RemoteControllerControl =>
+  ({ id, kind: 'button', label, action, tone })
+
+export const BUILTIN_REMOTE_CONTROLLER_TEMPLATES: RemoteControllerTemplate[] = [
   {
-    id: 'direction',
-    label: '方向遥控器',
-    modes: ['android', 'desktop', 'browser'],
-    sections: [{
-      kind: 'dpad',
-      id: 'direction-pad',
-      buttons: [
-        { id: 'up', label: '↑', command: 'dpad.up' },
-        { id: 'left', label: '←', command: 'dpad.left' },
-        { id: 'ok', label: '确定', command: 'dpad.ok', tone: 'primary' },
-        { id: 'right', label: '→', command: 'dpad.right' },
-        { id: 'down', label: '↓', command: 'dpad.down' },
-      ],
-    }, {
-      kind: 'grid',
-      id: 'navigation',
-      columns: 2,
-      buttons: [
-        { id: 'back', label: '返回', command: 'nav.back' },
-        { id: 'home', label: '主页', command: 'nav.home' },
-      ],
-    }],
+    schema: 'remote_controller_template.v1', id: 'direction', name: '方向遥控器', revision: 1,
+    builtin: true, deviceTypes: ['desktop', 'android', 'browser'], requiredCapabilities: ['remote_control'],
+    layout: { columns: 3, gap: 'sm' },
+    controls: [
+      button('up', '上', { type: 'key', key: 'ArrowUp' }), button('left', '左', { type: 'key', key: 'ArrowLeft' }),
+      button('ok', '确定', { type: 'key', key: 'Enter' }), button('right', '右', { type: 'key', key: 'ArrowRight' }),
+      button('down', '下', { type: 'key', key: 'ArrowDown' }), button('back', '返回', { type: 'key', key: 'Escape' }),
+    ],
   },
   {
-    id: 'media',
-    label: '媒体',
-    modes: ['android', 'desktop', 'browser'],
-    sections: [{
-      kind: 'grid',
-      id: 'media-playback',
-      columns: 3,
-      buttons: [
-        { id: 'previous', label: '上一首', command: 'media.previous' },
-        { id: 'play', label: '播放/暂停', command: 'media.play_pause', tone: 'primary' },
-        { id: 'next', label: '下一首', command: 'media.next' },
-        { id: 'volume-down', label: '音量 −', command: 'media.volume_down' },
-        { id: 'mute', label: '静音', command: 'media.mute' },
-        { id: 'volume-up', label: '音量 ＋', command: 'media.volume_up' },
-      ],
-    }],
+    schema: 'remote_controller_template.v1', id: 'media', name: '媒体遥控器', revision: 1,
+    builtin: true, deviceTypes: ['desktop', 'android'], requiredCapabilities: ['remote_control'],
+    layout: { columns: 3, gap: 'sm' },
+    controls: [
+      button('previous', '上一首', { type: 'key', key: 'MediaTrackPrevious' }),
+      button('play-pause', '播放/暂停', { type: 'key', key: 'MediaPlayPause' }),
+      button('next', '下一首', { type: 'key', key: 'MediaTrackNext' }),
+      button('volume-down', '音量-', { type: 'key', key: 'AudioVolumeDown' }),
+      button('mute', '静音', { type: 'key', key: 'AudioVolumeMute' }),
+      button('volume-up', '音量+', { type: 'key', key: 'AudioVolumeUp' }),
+    ],
   },
   {
-    id: 'presentation',
-    label: '演示',
-    modes: ['desktop', 'browser'],
-    sections: [{
-      kind: 'grid',
-      id: 'presentation-control',
-      columns: 2,
-      buttons: [
-        { id: 'previous', label: '上一页', command: 'presentation.previous' },
-        { id: 'next', label: '下一页', command: 'presentation.next', tone: 'primary' },
-        { id: 'start', label: '开始放映', command: 'presentation.start' },
-        { id: 'exit', label: '退出放映', command: 'presentation.exit', tone: 'danger' },
-      ],
-    }],
+    schema: 'remote_controller_template.v1', id: 'presentation', name: '演示遥控器', revision: 1,
+    builtin: true, deviceTypes: ['desktop'], requiredCapabilities: ['remote_control'],
+    layout: { columns: 3, gap: 'sm' },
+    controls: [
+      button('previous', '上一页', { type: 'key', key: 'PageUp' }), button('next', '下一页', { type: 'key', key: 'PageDown' }),
+      button('start', '开始', { type: 'key', key: 'F5' }), button('exit', '退出', { type: 'key', key: 'Escape' }),
+    ],
   },
   {
-    id: 'browser',
-    label: '浏览器',
-    modes: ['browser'],
-    sections: [{
-      kind: 'grid',
-      id: 'browser-navigation',
-      columns: 3,
-      buttons: [
-        { id: 'back', label: '后退', command: 'browser.back' },
-        { id: 'reload', label: '刷新', command: 'browser.reload', tone: 'primary' },
-        { id: 'forward', label: '前进', command: 'browser.forward' },
-      ],
-    }],
+    schema: 'remote_controller_template.v1', id: 'browser', name: '浏览器遥控器', revision: 1,
+    builtin: true, deviceTypes: ['browser'], requiredCapabilities: ['remote_control'],
+    layout: { columns: 3, gap: 'sm' },
+    controls: [
+      button('back', '后退', { type: 'browser', action: 'back' }), button('reload', '刷新', { type: 'browser', action: 'reload' }, 'primary'),
+      button('forward', '前进', { type: 'browser', action: 'forward' }),
+    ],
   },
 ]

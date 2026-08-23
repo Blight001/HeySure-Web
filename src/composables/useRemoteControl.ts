@@ -48,6 +48,33 @@ export type RcBrowserCommand =
   | { action: 'navigate' | 'new-tab'; url?: string }
   | { action: 'switch-tab' | 'close-tab'; tabId: number }
 
+export const sendDataChannelJson = (channel: RTCDataChannel | null, payload: unknown, maxBufferedAmount: number) => {
+  if (channel?.readyState !== 'open' || channel.bufferedAmount > maxBufferedAmount) return false
+  try { channel.send(JSON.stringify(payload)); return true }
+  catch { return false }
+}
+
+export const createFastChannelJsonSender = (getChannel: () => RTCDataChannel | null) => {
+  let backpressured = false
+  return {
+    send(payload: unknown) {
+      const channel = getChannel()
+      if (channel?.readyState !== 'open') {
+        backpressured = false
+        return false
+      }
+      if (backpressured && channel.bufferedAmount > 16 * 1024) return false
+      if (backpressured) backpressured = false
+      if (channel.bufferedAmount > 64 * 1024) {
+        backpressured = true
+        return false
+      }
+      return sendDataChannelJson(channel, payload, 64 * 1024)
+    },
+    reset() { backpressured = false },
+  }
+}
+
 export const useRemoteControl = () => {
   const status = ref<RcStatus>('idle')
   const errorMessage = ref('')
@@ -57,6 +84,9 @@ export const useRemoteControl = () => {
   const controlReady = ref(false)
   const connectionState = ref<RTCPeerConnectionState>('new')
   const browserState = ref<RcBrowserState | null>(null)
+  const webStateReady = ref(false)
+  const webResourceReady = ref(false)
+  const controllerFastReady = ref(false)
   const session: RemoteControlCtx = {
     status,
     errorMessage,
@@ -66,25 +96,29 @@ export const useRemoteControl = () => {
     controlReady,
     connectionState,
     browserState,
+    webStateReady,
+    webResourceReady,
+    controllerFastReady,
     ...emptyRemoteControlState(),
   }
+  const fastSender = createFastChannelJsonSender(() => session.controllerFastChannel)
 
-  const start = (deviceId: string, options?: { qualityPreset?: RcQualityPreset }) => {
+  const start = (deviceId: string, options?: { qualityPreset?: RcQualityPreset; requestWebMirror?: boolean }) => {
     if (status.value === 'connecting' || status.value === 'streaming') return
     session.requestedQualityPreset = options?.qualityPreset || 'balanced'
+    session.requestWebMirror = options?.requestWebMirror === true
     status.value = 'connecting'
     errorMessage.value = ''
     attachSocketHandlers(session, deviceId)
   }
 
-  const sendJson = (payload: unknown) => {
-    if (session.controlChannel?.readyState === 'open') {
-      session.controlChannel.send(JSON.stringify(payload))
-    }
-  }
+  const sendJson = (payload: unknown, maxBufferedAmount = 512 * 1024) => sendDataChannelJson(session.controlChannel, payload, maxBufferedAmount)
+  const sendFastJson = (payload: unknown) => fastSender.send(payload)
+  const sendWebStateJson = (payload: unknown) => sendDataChannelJson(session.webStateChannel, payload, 256 * 1024)
 
   const stop = () => {
     teardownSession(session, true)
+    fastSender.reset()
     status.value = 'idle'
   }
 
@@ -97,6 +131,9 @@ export const useRemoteControl = () => {
     controlReady,
     connectionState,
     browserState,
+    webStateReady,
+    webResourceReady,
+    controllerFastReady,
     start,
     stop,
     sendInput: (input: RcInput) => sendJson(input),
@@ -104,6 +141,19 @@ export const useRemoteControl = () => {
     setQualityPreset: (preset: RcQualityPreset) => {
       session.requestedQualityPreset = preset
       sendJson({ kind: 'quality', preset })
+    },
+    getSessionId: () => session.sessionId,
+    sendControlJson: sendJson,
+    sendFastJson,
+    sendWebStateJson,
+    setRemoteChannelHandlers: (handlers: {
+      control?: (data: unknown) => void
+      webState?: (data: unknown) => void
+      webResource?: (data: unknown) => void
+    }) => {
+      session.controlMessageHandler = handlers.control || null
+      session.webStateHandler = handlers.webState || null
+      session.webResourceHandler = handlers.webResource || null
     },
   }
 }

@@ -1,25 +1,43 @@
-export type RemoteControllerCommand =
-  | 'dpad.up' | 'dpad.down' | 'dpad.left' | 'dpad.right' | 'dpad.ok'
-  | 'nav.back' | 'nav.home'
-  | 'media.play_pause' | 'media.previous' | 'media.next'
-  | 'media.volume_down' | 'media.volume_up' | 'media.mute'
-  | 'presentation.previous' | 'presentation.next' | 'presentation.start' | 'presentation.exit'
-  | 'browser.back' | 'browser.forward' | 'browser.reload'
+export type RemoteControllerKind = 'button' | 'dpad' | 'keypad' | 'slider' | 'joystick' | 'textInput'
+export type RemoteControllerPhase = 'trigger' | 'start' | 'update' | 'end'
+export type RemoteControllerAction =
+  | { type: 'key'; key: string }
+  | { type: 'browser'; action: 'back' | 'forward' | 'reload' }
+  | { type: 'emit'; event: string }
 
-export interface RemoteControllerButton {
+export interface RemoteControllerControl {
   id: string
+  kind: RemoteControllerKind
   label: string
-  command: RemoteControllerCommand
   tone?: 'default' | 'primary' | 'danger'
+  action: RemoteControllerAction
+  min?: number
+  max?: number
+  step?: number
+  deadZone?: number
+  maxLength?: number
 }
 
-export type RemoteControllerSection =
-  | { kind: 'dpad'; id: string; buttons: RemoteControllerButton[] }
-  | { kind: 'grid'; id: string; columns: 2 | 3; buttons: RemoteControllerButton[] }
+export interface RemoteControllerTemplate {
+  schema: 'remote_controller_template.v1'
+  id: string
+  name: string
+  revision: number
+  builtin?: boolean
+  deviceTypes: Array<'android' | 'desktop' | 'browser'>
+  requiredCapabilities: string[]
+  layout: { columns: number; gap: 'xs' | 'sm' | 'md' | 'lg' }
+  controls: RemoteControllerControl[]
+}
 
-export interface RemoteControllerPreset {
-  id: 'direction' | 'media' | 'presentation' | 'browser'
-  label: string
-  modes: Array<'android' | 'desktop' | 'browser'>
-  sections: RemoteControllerSection[]
+export interface RemoteControllerActionEnvelope {
+  kind: 'controller-action'
+  v: 1
+  templateId: string
+  controlId: string
+  seq: number
+  phase: RemoteControllerPhase
+  event: string
+  value?: null | number | string | { x: number; y: number }
+  ts: number
 }

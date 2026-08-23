@@ -4,8 +4,9 @@ import { useRemoteControl, type RcMode, type RcQualityPreset } from '@/composabl
 import RemoteControlChrome from './RemoteControlChrome.vue'
 import RemoteControlSurface from './RemoteControlSurface.vue'
 import RemoteControllerPanel from './RemoteControllerPanel.vue'
-import { dispatchRemoteControllerAction } from '@/utils/remoteControllerAction'
-import type { RemoteControllerCommand } from '@/types/remoteController'
+import type { RwmSurfacePreference } from '@/types/rwm'
+import type { RwmTransport } from '@/composables/useRemoteWebMirror'
+import { normalizeRemoteCapabilities, remoteControlAvailability } from '@/utils/remoteControlCapabilities'
 import {
   fitPanelToOrientation,
   isDesktopLikeMode,
@@ -24,17 +25,23 @@ const props = withDefaults(defineProps<{
 }>(), { mode: 'android' })
 const emit = defineEmits<{ (e: 'close'): void }>()
 const RemoteTerminalPane = defineAsyncComponent(() => import('./RemoteTerminalPane.vue'))
+const RemoteWebMirrorPane = defineAsyncComponent(() => import('./RemoteWebMirrorPane.vue'))
 
 const isDesktopLike = computed(() => isDesktopLikeMode(props.mode))
 const modeLabel = computed(() => remoteModeLabel(props.mode))
 const panelRef = ref<HTMLElement | null>(null)
 const surfaceRef = ref<{ resetZoom: () => void } | null>(null)
 const panelConstraints = computed(() => panelConstraintsStyle(isDesktopLike.value))
-const activeSurface = ref<'screen' | 'terminal'>('screen')
-const normalizedCapabilities = computed(() => new Set((props.capabilities || []).map(item => item.toLowerCase().replace('.', '_'))))
-const terminalAvailable = computed(() => props.mode === 'desktop' && (
-  normalizedCapabilities.value.size === 0 || normalizedCapabilities.value.has('remote_terminal')
-))
+const availability = computed(() => remoteControlAvailability(props.mode, props.capabilities))
+const screenAvailable = computed(() => availability.value.screenAvailable)
+const terminalAvailable = computed(() => availability.value.terminalAvailable)
+const activeSurface = ref<'screen' | 'terminal'>(availability.value.initialSurface)
+const normalizedCapabilities = computed(() => normalizeRemoteCapabilities(props.capabilities))
+const webMirrorAvailable = computed(() => screenAvailable.value && normalizedCapabilities.value.has('remote_web_mirror'))
+const savedSurface = window.localStorage.getItem('heysure.remoteControl.webSurface')
+const surfacePreference = ref<RwmSurfacePreference>(savedSurface === 'dom' || savedSurface === 'video' ? savedSurface : 'auto')
+const webFallbackReason = ref('')
+const webAttemptKey = ref(0)
 
 const {
   status,
@@ -50,7 +57,14 @@ const {
   sendInput,
   sendBrowserCommand,
   setQualityPreset,
+  getSessionId,
+  sendControlJson,
+  sendFastJson,
+  controllerFastReady,
+  sendWebStateJson,
+  setRemoteChannelHandlers,
 } = useRemoteControl()
+const rwmTransport: RwmTransport = { getSessionId, sendControlJson, sendWebStateJson, setRemoteChannelHandlers }
 
 const QUALITY_STORAGE_KEY = 'heysure.remoteControl.desktopQuality'
 const savedQuality = window.localStorage.getItem(QUALITY_STORAGE_KEY)
@@ -61,6 +75,18 @@ watch(qualityPreset, (preset) => {
   window.localStorage.setItem(QUALITY_STORAGE_KEY, preset)
   setQualityPreset(preset)
 })
+watch(surfacePreference, (preference) => {
+  window.localStorage.setItem('heysure.remoteControl.webSurface', preference)
+  webFallbackReason.value = ''
+  webAttemptKey.value += 1
+})
+const renderWebMirror = computed(() => webMirrorAvailable.value
+  && surfacePreference.value !== 'video'
+  && !webFallbackReason.value)
+const retryWebMirror = () => {
+  webFallbackReason.value = ''
+  webAttemptKey.value += 1
+}
 
 const isBrowser = computed(() => props.mode === 'browser')
 const addressInput = ref('')
@@ -92,10 +118,6 @@ const sendText = () => {
   sendInput({ type: 'text', text })
   typing.value = ''
 }
-const sendControllerCommand = (command: RemoteControllerCommand) => {
-  dispatchRemoteControllerAction(command, props.mode, sendInput, sendBrowserCommand)
-}
-
 const effectiveWidth = computed(() => deviceWidth.value || videoNaturalWidth.value)
 const effectiveHeight = computed(() => deviceHeight.value || videoNaturalHeight.value)
 const isPortrait = computed(() => isRemotePortrait(effectiveWidth.value, effectiveHeight.value, isDesktopLike.value))
@@ -139,7 +161,10 @@ onMounted(() => {
   window.addEventListener('resize', onViewportResize)
   window.addEventListener('orientationchange', onViewportResize)
   window.visualViewport?.addEventListener('resize', onViewportResize)
-  if (props.deviceId) start(props.deviceId, { qualityPreset: qualityPreset.value })
+  if (props.deviceId && screenAvailable.value) start(props.deviceId, {
+    qualityPreset: qualityPreset.value,
+    requestWebMirror: webMirrorAvailable.value,
+  })
 })
 
 onBeforeUnmount(() => {
@@ -193,13 +218,23 @@ onBeforeUnmount(() => {
           @send-key="sendKey"
         >
           <template #navigation>
-            <div class="flex items-center gap-1 border-b border-zinc-800 bg-zinc-950/70 px-3 py-2">
-              <button type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'screen' ? 'bg-indigo-500/20 text-indigo-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'screen'">画面</button>
+            <div class="flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-950/70 px-3 py-2">
+              <button v-if="screenAvailable" type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'screen' ? 'bg-indigo-500/20 text-indigo-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'screen'">远控</button>
               <button v-if="terminalAvailable" type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'terminal' ? 'bg-emerald-500/20 text-emerald-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'terminal'">终端</button>
+              <label v-if="activeSurface === 'screen' && webMirrorAvailable" class="ml-auto flex items-center gap-1.5 text-xs text-zinc-400">
+                显示
+                <select v-model="surfacePreference" class="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200">
+                  <option value="auto">自动</option><option value="dom">网页原生</option><option value="video">视频流</option>
+                </select>
+              </label>
+              <div v-if="activeSurface === 'screen' && webFallbackReason" class="flex w-full items-center justify-between gap-3 rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-200">
+                <span class="truncate">{{ webFallbackReason }}</span>
+                <button type="button" class="shrink-0 rounded border border-amber-400/40 px-2 py-0.5 hover:bg-amber-400/10" @click="retryWebMirror">重试网页原生</button>
+              </div>
             </div>
           </template>
           <RemoteControlSurface
-            v-if="activeSurface === 'screen'"
+            v-if="screenAvailable && activeSurface === 'screen' && !renderWebMirror"
             ref="surfaceRef"
             :is-maximized="isMaximized"
             :is-desktop-like="isDesktopLike"
@@ -218,13 +253,24 @@ onBeforeUnmount(() => {
             @natural-size="onNaturalSize"
             @close="close"
           />
+          <RemoteWebMirrorPane
+            v-else-if="screenAvailable && activeSurface === 'screen' && renderWebMirror"
+            :key="webAttemptKey"
+            :transport="rwmTransport"
+            @fallback="webFallbackReason = $event"
+          />
           <RemoteTerminalPane v-else-if="terminalAvailable" :device-id="deviceId" />
         </RemoteControlChrome>
         <RemoteControllerPanel
-          v-if="activeSurface === 'screen' && !isMaximized"
+          v-if="screenAvailable && activeSurface === 'screen' && !isMaximized"
           :mode="mode"
+          :capabilities="capabilities"
           :disabled="!controlReady"
-          @command="sendControllerCommand"
+          :send-input="sendInput"
+          :send-browser-command="sendBrowserCommand"
+          :send-control-json="sendControlJson"
+          :send-fast-json="sendFastJson"
+          :controller-fast-ready="controllerFastReady"
         />
       </div>
     </div>

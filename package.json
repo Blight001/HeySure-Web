@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "guardrails": "node scripts/check_guardrails.mjs",
     "typecheck": "vue-tsc -b --pretty false",
+    "test": "vitest run",
     "verify": "node scripts/verify_web.mjs"
   },
   "dependencies": {
@@ -25,10 +26,12 @@
     "@types/qrcode": "^1.5.5",
     "@vitejs/plugin-vue": "^5.0.4",
     "autoprefixer": "^10.4.19",
+    "jsdom": "^25.0.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.2.2",
     "vite": "^5.2.0",
+    "vitest": "^2.1.9",
     "vue-tsc": "^2.0.6"
   }
 }

@@ -18,6 +18,7 @@ export interface RemoteTerminalContext {
   socket: Socket | null
   sessionId: string
   output: ((bytes: Uint8Array) => void) | null
+  readyTimer: ReturnType<typeof setTimeout> | null
 }
 
 const encoder = new TextEncoder()
@@ -46,18 +47,36 @@ export const encodeTerminalInput = (value: string) => bytesToBase64(encoder.enco
 export const createRemoteTerminalContext = (
   status: Ref<RtStatus>,
   errorMessage: Ref<string>,
-): RemoteTerminalContext => ({ status, errorMessage, socket: null, sessionId: '', output: null })
+): RemoteTerminalContext => ({ status, errorMessage, socket: null, sessionId: '', output: null, readyTimer: null })
 
 const matchesSession = (ctx: RemoteTerminalContext, data?: { sessionId?: string }) =>
   !!ctx.sessionId && data?.sessionId === ctx.sessionId
 
 export const teardownRemoteTerminal = (ctx: RemoteTerminalContext, notifyServer: boolean) => {
+  if (ctx.readyTimer) clearTimeout(ctx.readyTimer)
+  ctx.readyTimer = null
   if (notifyServer && ctx.socket && ctx.sessionId) ctx.socket.emit('rt:close', { sessionId: ctx.sessionId })
   ctx.socket?.off()
   ctx.socket?.disconnect()
   ctx.socket = null
   ctx.sessionId = ''
   ctx.output = null
+}
+
+export const acceptTerminalOpened = (ctx: RemoteTerminalContext, data?: { sessionId?: string }) => {
+  if (!data?.sessionId || ctx.sessionId) return
+  ctx.sessionId = data.sessionId
+  ctx.readyTimer = setTimeout(() => {
+    ctx.readyTimer = null
+    if (matchesSession(ctx, data) && ctx.status.value === 'connecting') ctx.status.value = 'streaming'
+  }, 500)
+}
+
+export const acceptTerminalReady = (ctx: RemoteTerminalContext, data?: { sessionId?: string }) => {
+  if (!matchesSession(ctx, data)) return
+  if (ctx.readyTimer) clearTimeout(ctx.readyTimer)
+  ctx.readyTimer = null
+  ctx.status.value = 'streaming'
 }
 
 const failTerminal = (ctx: RemoteTerminalContext, message: string) => {
@@ -102,10 +121,9 @@ export const attachRemoteTerminalSocket = (
   }))
   ctx.socket.on('connect_error', () => failTerminal(ctx, '终端通道连接失败'))
   ctx.socket.on('rt:opened', (data: { sessionId?: string }) => {
-    if (!data?.sessionId || ctx.sessionId) return
-    ctx.sessionId = data.sessionId
-    ctx.status.value = 'streaming'
+    acceptTerminalOpened(ctx, data)
   })
+  ctx.socket.on('rt:ready', (data: { sessionId?: string }) => acceptTerminalReady(ctx, data))
   ctx.socket.on('rt:error', (data: { sessionId?: string; message?: string }) => {
     if (ctx.sessionId && !matchesSession(ctx, data)) return
     failTerminal(ctx, data?.message || '命令行远程启动失败')
