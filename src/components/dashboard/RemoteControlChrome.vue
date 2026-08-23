@@ -15,6 +15,7 @@ defineProps<{
   addressInput: string
   typing: string
   mode: string
+  activeSurface: 'screen' | 'terminal'
 }>()
 
 const emit = defineEmits<{
@@ -41,13 +42,13 @@ const emit = defineEmits<{
   <div v-if="!isMaximized" class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
     <div class="min-w-0">
       <div class="text-sm font-semibold text-zinc-100 truncate">远程控制{{ modeLabel }} · {{ deviceName || deviceId }}</div>
-      <div class="text-xs mt-0.5 flex items-center gap-1.5" :class="status === 'streaming' ? 'text-emerald-400' : status === 'error' ? 'text-rose-400' : 'text-amber-400'">
+      <div v-if="activeSurface === 'screen'" class="text-xs mt-0.5 flex items-center gap-1.5" :class="status === 'streaming' ? 'text-emerald-400' : status === 'error' ? 'text-rose-400' : 'text-amber-400'">
         <span class="inline-block w-1.5 h-1.5 rounded-full" :class="status === 'streaming' ? 'bg-emerald-400 animate-pulse' : status === 'error' ? 'bg-rose-400' : 'bg-amber-400 animate-pulse'"></span>
         {{ statusText }}
       </div>
     </div>
     <div class="flex items-center gap-1 shrink-0">
-      <label v-if="mode === 'desktop'" class="mr-1 flex items-center gap-1.5 text-xs text-zinc-400">
+      <label v-if="activeSurface === 'screen' && mode === 'desktop'" class="mr-1 flex items-center gap-1.5 text-xs text-zinc-400">
         <span class="hidden sm:inline">画面</span>
         <select :value="qualityPreset" class="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500" title="流畅度与画质；切换后立即生效" @change="emit('update:qualityPreset', ($event.target as HTMLSelectElement).value as RcQualityPreset)">
           <option value="smooth">流畅优先</option>
@@ -67,7 +68,9 @@ const emit = defineEmits<{
     </div>
   </div>
 
-  <div v-if="isBrowser && !isMaximized" class="border-b border-zinc-800 bg-zinc-950/60">
+  <slot name="navigation" />
+
+  <div v-if="activeSurface === 'screen' && isBrowser && !isMaximized" class="border-b border-zinc-800 bg-zinc-950/60">
     <div class="flex items-end gap-1 px-2 pt-2 overflow-x-auto rc-tabstrip">
       <button
         v-for="tab in browserState?.tabs || []"
@@ -104,16 +107,16 @@ const emit = defineEmits<{
 
   <slot />
 
-  <div v-if="!isDesktopLike && !isMaximized" class="flex items-center gap-2 px-3 py-2 border-t border-zinc-800">
+  <div v-if="activeSurface === 'screen' && !isDesktopLike && !isMaximized" class="flex items-center gap-2 px-3 py-2 border-t border-zinc-800">
     <input :value="typing" type="text" placeholder="向聚焦输入框发送文本…" class="flex-1 min-w-0 rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-1.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500" :disabled="status !== 'streaming'" @input="emit('update:typing', ($event.target as HTMLInputElement).value)" @keyup.enter="emit('send-text')" @keydown.stop />
     <button class="shrink-0 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm px-3 py-1.5 transition-colors" :disabled="status !== 'streaming' || !typing" @click="emit('send-text')">发送</button>
   </div>
-  <div v-if="!isDesktopLike && !isMaximized" class="grid grid-cols-3 gap-2 px-3 py-3 border-t border-zinc-800">
+  <div v-if="activeSurface === 'screen' && !isDesktopLike && !isMaximized" class="grid grid-cols-3 gap-2 px-3 py-3 border-t border-zinc-800">
     <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="emit('send-key', 'back')">返回</button>
     <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="emit('send-key', 'home')">主页</button>
     <button class="rc-navbtn" :disabled="status !== 'streaming'" @click="emit('send-key', 'recents')">最近</button>
   </div>
-  <div v-else-if="!isMaximized" class="px-3 py-2 border-t border-zinc-800 text-[11px] text-zinc-500 leading-relaxed">
+  <div v-else-if="activeSurface === 'screen' && !isMaximized" class="px-3 py-2 border-t border-zinc-800 text-[11px] text-zinc-500 leading-relaxed">
     左键点击/拖拽 · 右键、中键 · 滚轮滚动 · 点击画面后直接用键盘输入（支持 Ctrl/Alt 组合键与中文输入法）
   </div>
 </template>

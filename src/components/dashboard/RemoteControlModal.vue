@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRemoteControl, type RcMode, type RcQualityPreset } from '@/composables/useRemoteControl'
 import RemoteControlChrome from './RemoteControlChrome.vue'
 import RemoteControlSurface from './RemoteControlSurface.vue'
+import RemoteControllerPanel from './RemoteControllerPanel.vue'
+import { dispatchRemoteControllerAction } from '@/utils/remoteControllerAction'
+import type { RemoteControllerCommand } from '@/types/remoteController'
 import {
   fitPanelToOrientation,
   isDesktopLikeMode,
@@ -17,14 +20,21 @@ const props = withDefaults(defineProps<{
   deviceId: string
   deviceName?: string
   mode?: RcMode
+  capabilities?: string[]
 }>(), { mode: 'android' })
 const emit = defineEmits<{ (e: 'close'): void }>()
+const RemoteTerminalPane = defineAsyncComponent(() => import('./RemoteTerminalPane.vue'))
 
 const isDesktopLike = computed(() => isDesktopLikeMode(props.mode))
 const modeLabel = computed(() => remoteModeLabel(props.mode))
 const panelRef = ref<HTMLElement | null>(null)
 const surfaceRef = ref<{ resetZoom: () => void } | null>(null)
 const panelConstraints = computed(() => panelConstraintsStyle(isDesktopLike.value))
+const activeSurface = ref<'screen' | 'terminal'>('screen')
+const normalizedCapabilities = computed(() => new Set((props.capabilities || []).map(item => item.toLowerCase().replace('.', '_'))))
+const terminalAvailable = computed(() => props.mode === 'desktop' && (
+  normalizedCapabilities.value.size === 0 || normalizedCapabilities.value.has('remote_terminal')
+))
 
 const {
   status,
@@ -81,6 +91,9 @@ const sendText = () => {
   if (!text) return
   sendInput({ type: 'text', text })
   typing.value = ''
+}
+const sendControllerCommand = (command: RemoteControllerCommand) => {
+  dispatchRemoteControllerAction(command, props.mode, sendInput, sendBrowserCommand)
 }
 
 const effectiveWidth = computed(() => deviceWidth.value || videoNaturalWidth.value)
@@ -161,6 +174,7 @@ onBeforeUnmount(() => {
           :address-input="addressInput"
           :typing="typing"
           :mode="mode"
+          :active-surface="activeSurface"
           @update:quality-preset="qualityPreset = $event"
           @update:address-input="addressInput = $event"
           @update:typing="typing = $event"
@@ -178,7 +192,14 @@ onBeforeUnmount(() => {
           @send-text="sendText"
           @send-key="sendKey"
         >
+          <template #navigation>
+            <div class="flex items-center gap-1 border-b border-zinc-800 bg-zinc-950/70 px-3 py-2">
+              <button type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'screen' ? 'bg-indigo-500/20 text-indigo-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'screen'">画面</button>
+              <button v-if="terminalAvailable" type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'terminal' ? 'bg-emerald-500/20 text-emerald-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'terminal'">终端</button>
+            </div>
+          </template>
           <RemoteControlSurface
+            v-if="activeSurface === 'screen'"
             ref="surfaceRef"
             :is-maximized="isMaximized"
             :is-desktop-like="isDesktopLike"
@@ -197,7 +218,14 @@ onBeforeUnmount(() => {
             @natural-size="onNaturalSize"
             @close="close"
           />
+          <RemoteTerminalPane v-else-if="terminalAvailable" :device-id="deviceId" />
         </RemoteControlChrome>
+        <RemoteControllerPanel
+          v-if="activeSurface === 'screen' && !isMaximized"
+          :mode="mode"
+          :disabled="!controlReady"
+          @command="sendControllerCommand"
+        />
       </div>
     </div>
   </Teleport>

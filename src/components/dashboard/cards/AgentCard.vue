@@ -62,7 +62,12 @@ const roleBadge = computed(() => agentRoleBadge(props.agent))
 const syncedMcpText = computed(() => agentSyncedMcpText(props.agent))
 const { thinkingPreview, thinkingViewportRef, thinkingTextRef } = useAgentCardThinking(() => props.agent)
 
-const rcTarget = ref<{ deviceId: string; name: string; mode: 'android' | 'desktop' | 'browser' } | null>(null)
+const rcTarget = ref<{
+  deviceId: string
+  name: string
+  mode: 'android' | 'desktop' | 'browser'
+  capabilities?: string[]
+} | null>(null)
 const DOUBLE_TAP_DELAY = 320
 let lastTouchTapAt = 0
 
@@ -88,8 +93,13 @@ const onCardPointerUp = (event: PointerEvent) => {
   emit('chat', props.agent)
 }
 
-const openRemote = (mode: 'android' | 'desktop' | 'browser', deviceId?: string, name?: string) => {
-  rcTarget.value = { deviceId: deviceId || '', name: name || props.agent.name, mode }
+const openRemote = (
+  mode: 'android' | 'desktop' | 'browser',
+  deviceId?: string,
+  name?: string,
+  capabilities?: string[],
+) => {
+  rcTarget.value = { deviceId: deviceId || '', name: name || props.agent.name, mode, capabilities }
 }
 
 const openTaskDetail = () => {
@@ -224,13 +234,13 @@ const openTaskDetail = () => {
       <button class="text-xs text-zinc-500 hover:text-indigo-600 px-2 py-1 hover:bg-zinc-50 rounded transition-colors dark:text-zinc-400 dark:hover:text-indigo-300 dark:hover:bg-zinc-800" @click.stop="emit('show-tasks', agent)">
         任务列表
       </button>
-      <button v-if="agent.androidAgentConnected" class="text-xs text-teal-600 hover:text-teal-700 px-2 py-1 hover:bg-teal-50 rounded transition-colors dark:text-teal-300 dark:hover:text-teal-200 dark:hover:bg-teal-500/10" title="实时查看并控制该安卓设备" @click.stop="openRemote('android', agent.androidAgentId, agent.androidAgentName || agent.name)">
+      <button v-if="agent.androidAgentConnected" class="text-xs text-teal-600 hover:text-teal-700 px-2 py-1 hover:bg-teal-50 rounded transition-colors dark:text-teal-300 dark:hover:text-teal-200 dark:hover:bg-teal-500/10" title="实时查看并控制该安卓设备" @click.stop="openRemote('android', agent.androidAgentId, agent.androidAgentName || agent.name, agent.androidAgentCapabilities)">
         远程控制
       </button>
-      <button v-if="agent.desktopAgentConnected" class="text-xs text-sky-600 hover:text-sky-700 px-2 py-1 hover:bg-sky-50 rounded transition-colors dark:text-sky-300 dark:hover:text-sky-200 dark:hover:bg-sky-500/10" title="实时查看并控制该桌面设备" @click.stop="openRemote('desktop', agent.desktopAgentId, agent.desktopAgentName || agent.name)">
+      <button v-if="agent.desktopAgentConnected" class="text-xs text-sky-600 hover:text-sky-700 px-2 py-1 hover:bg-sky-50 rounded transition-colors dark:text-sky-300 dark:hover:text-sky-200 dark:hover:bg-sky-500/10" title="实时查看并控制该桌面设备" @click.stop="openRemote('desktop', agent.desktopAgentId, agent.desktopAgentName || agent.name, agent.desktopAgentCapabilities)">
         桌面控制
       </button>
-      <button v-if="agent.browserAgentConnected" class="text-xs text-violet-600 hover:text-violet-700 px-2 py-1 hover:bg-violet-50 rounded transition-colors dark:text-violet-300 dark:hover:text-violet-200 dark:hover:bg-violet-500/10" title="实时查看并控制该浏览器" @click.stop="openRemote('browser', agent.browserAgentId, agent.browserAgentName || agent.name)">
+      <button v-if="agent.browserAgentConnected" class="text-xs text-violet-600 hover:text-violet-700 px-2 py-1 hover:bg-violet-50 rounded transition-colors dark:text-violet-300 dark:hover:text-violet-200 dark:hover:bg-violet-500/10" title="实时查看并控制该浏览器" @click.stop="openRemote('browser', agent.browserAgentId, agent.browserAgentName || agent.name, agent.browserAgentCapabilities)">
         浏览器控制
       </button>
       <button class="text-xs text-red-400 hover:text-red-600 px-2 py-1 hover:bg-red-50 rounded transition-colors dark:text-red-300 dark:hover:text-red-200 dark:hover:bg-red-500/10" @click.stop="emit('chat', agent)">
@@ -243,6 +253,7 @@ const openTaskDetail = () => {
       :device-id="rcTarget.deviceId"
       :device-name="rcTarget.name"
       :mode="rcTarget.mode"
+      :capabilities="rcTarget.capabilities"
       @close="rcTarget = null"
     />
     </div>

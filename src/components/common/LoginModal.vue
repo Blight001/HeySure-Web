@@ -15,7 +15,7 @@ const zIndex = usePopupZIndex(() => props.show)
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'login-success', user: User, token: string): void
+  (e: 'login-success', user: User, token: string, agentSocketUrl?: string): void
 }>()
 
 const isLoginMode = ref(true)
@@ -104,7 +104,7 @@ const handleSubmit = async () => {
         error.value = '该账号没有管理员权限'
         return
       }
-      emit('login-success', data.user, data.access_token)
+      emit('login-success', data.user, data.access_token, data.agent_socket_url)
       emit('close')
     } else {
       await authApi.register({

@@ -1,16 +1,8 @@
-import { io, type Socket } from 'socket.io-client'
+import type { Socket } from 'socket.io-client'
 import { getAuthToken } from '@/api/http'
 import { fetchIceServers, DEFAULT_ICE_SERVERS, type IceServer } from '@/api/rtc'
 import type { RcBrowserState, RcQualityPreset, RcStatus } from './useRemoteControl'
-
-export const connectorSocketUrl = () => {
-  const url = new URL(window.location.href)
-  url.port = '3002'
-  url.pathname = ''
-  url.search = ''
-  url.hash = ''
-  return url.origin
-}
+import { createConnectorSocket } from './connectorSocket'
 
 export type RemoteControlCtx = {
   status: { value: RcStatus }
@@ -97,7 +89,7 @@ export async function handleRemoteIce(ctx: RemoteControlCtx, data: { candidate: 
 }
 
 export function attachSocketHandlers(ctx: RemoteControlCtx, deviceId: string) {
-  ctx.socket = io(connectorSocketUrl(), { transports: ['websocket', 'polling'] })
+  ctx.socket = createConnectorSocket()
   ctx.socket.on('connect', () => {
     ctx.socket?.emit('rc:start', {
       deviceId,

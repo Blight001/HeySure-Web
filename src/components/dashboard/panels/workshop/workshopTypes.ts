@@ -45,4 +45,5 @@ export type WorkshopRcTarget = {
   deviceId: string
   name: string
   mode: 'android' | 'desktop' | 'browser'
+  capabilities?: string[]
 }
