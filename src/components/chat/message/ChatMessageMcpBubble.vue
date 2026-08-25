@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed } from 'vue'
 import ChatCollapsible from '../ChatCollapsible.vue'
-import ChatMessageImagePreview from './ChatMessageImagePreview.vue'
 import ChatMessageMcpDetails from './ChatMessageMcpDetails.vue'
+import RemoteScreenBubble from './RemoteScreenBubble.vue'
 import { buildMcpToolSummary, mcpImageUrlFromText } from '@/utils/chatMessageView'
 import { useCopiedTarget } from '@/utils/chatMessageCopy'
 
@@ -17,33 +17,16 @@ const props = defineProps<{
 const summary = computed(() => buildMcpToolSummary(props.text))
 const mcpImageUrl = computed(() => mcpImageUrlFromText(props.text))
 const { copiedTarget, copyTarget } = useCopiedTarget()
-const imagePreviewOpen = ref(false)
-let imagePreviewTrigger: HTMLElement | null = null
-
-const openImagePreview = async (event: MouseEvent) => {
-  imagePreviewTrigger = event.currentTarget as HTMLElement | null
-  imagePreviewOpen.value = true
-}
-
-const closeImagePreview = async () => {
-  imagePreviewOpen.value = false
-  await nextTick()
-  imagePreviewTrigger?.focus()
-}
 </script>
 
 <template>
   <div class="text-[13px] leading-snug">
-    <button
+    <RemoteScreenBubble
       v-if="mcpImageUrl"
-      type="button"
-      class="mcp-screenshot-link"
-      title="点击放大图片"
-      aria-label="放大查看截图"
-      @click="openImagePreview"
-    >
-      <img :src="mcpImageUrl" alt="截图" class="mcp-screenshot" loading="lazy" />
-    </button>
+      :src="mcpImageUrl"
+      title="远程画面"
+      alt="设备远程画面"
+    />
     <ChatCollapsible
       details-class="mcp-details group/mcp"
       summary-class="flex w-full items-center gap-2 whitespace-nowrap cursor-pointer select-none leading-5 py-0.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
@@ -85,7 +68,6 @@ const closeImagePreview = async () => {
         @copy="copyTarget"
       />
     </ChatCollapsible>
-    <ChatMessageImagePreview :open="imagePreviewOpen" :src="mcpImageUrl" @close="closeImagePreview" />
   </div>
 </template>
 
@@ -125,29 +107,4 @@ const closeImagePreview = async () => {
   color: rgb(165 180 252);
 }
 
-.mcp-screenshot-link {
-  display: inline-block;
-  margin-bottom: 6px;
-  padding: 0;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid rgb(228 228 231);
-  background: rgb(244 244 245);
-  line-height: 0;
-  cursor: zoom-in;
-}
-
-.dark .mcp-screenshot-link {
-  border-color: rgb(63 63 70);
-  background: rgb(24 24 27);
-}
-
-.mcp-screenshot {
-  display: block;
-  max-width: min(420px, 100%);
-  max-height: 320px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-}
 </style>
