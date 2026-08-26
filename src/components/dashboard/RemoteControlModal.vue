@@ -6,7 +6,7 @@ import RemoteControlSurface from './RemoteControlSurface.vue'
 import RemoteControllerPanel from './RemoteControllerPanel.vue'
 import type { RwmSurfacePreference } from '@/types/rwm'
 import type { RwmTransport } from '@/composables/useRemoteWebMirror'
-import { normalizeRemoteCapabilities, remoteControlAvailability } from '@/utils/remoteControlCapabilities'
+import { normalizeRemoteCapabilities, remoteControlAvailability, type RemoteControlSurface as RemoteControlSurfaceKind } from '@/utils/remoteControlCapabilities'
 import {
   fitPanelToOrientation,
   isDesktopLikeMode,
@@ -34,8 +34,11 @@ const surfaceRef = ref<{ resetZoom: () => void } | null>(null)
 const panelConstraints = computed(() => panelConstraintsStyle(isDesktopLike.value))
 const availability = computed(() => remoteControlAvailability(props.mode, props.capabilities))
 const screenAvailable = computed(() => availability.value.screenAvailable)
+const controllerAvailable = computed(() => availability.value.controllerAvailable)
+const customControllerAvailable = computed(() => availability.value.customControllerAvailable)
+const sessionAvailable = computed(() => availability.value.sessionAvailable)
 const terminalAvailable = computed(() => availability.value.terminalAvailable)
-const activeSurface = ref<'screen' | 'terminal'>(availability.value.initialSurface)
+const activeSurface = ref<RemoteControlSurfaceKind>(availability.value.initialSurface)
 const normalizedCapabilities = computed(() => normalizeRemoteCapabilities(props.capabilities))
 const webMirrorAvailable = computed(() => screenAvailable.value && normalizedCapabilities.value.has('remote_web_mirror'))
 const savedSurface = window.localStorage.getItem('heysure.remoteControl.webSurface')
@@ -161,7 +164,7 @@ onMounted(() => {
   window.addEventListener('resize', onViewportResize)
   window.addEventListener('orientationchange', onViewportResize)
   window.visualViewport?.addEventListener('resize', onViewportResize)
-  if (props.deviceId && screenAvailable.value) start(props.deviceId, {
+  if (props.deviceId && sessionAvailable.value) start(props.deviceId, {
     qualityPreset: qualityPreset.value,
     requestWebMirror: webMirrorAvailable.value,
   })
@@ -220,6 +223,7 @@ onBeforeUnmount(() => {
           <template #navigation>
             <div class="flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-950/70 px-3 py-2">
               <button v-if="screenAvailable" type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'screen' ? 'bg-indigo-500/20 text-indigo-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'screen'">远控</button>
+              <button v-if="customControllerAvailable" type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'controller' ? 'bg-indigo-500/20 text-indigo-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'controller'">遥控器</button>
               <button v-if="terminalAvailable" type="button" class="rounded-md px-3 py-1 text-xs transition-colors" :class="activeSurface === 'terminal' ? 'bg-emerald-500/20 text-emerald-200' : 'text-zinc-400 hover:bg-zinc-800'" @click="activeSurface = 'terminal'">终端</button>
               <label v-if="activeSurface === 'screen' && webMirrorAvailable" class="ml-auto flex items-center gap-1.5 text-xs text-zinc-400">
                 显示
@@ -259,13 +263,22 @@ onBeforeUnmount(() => {
             :transport="rwmTransport"
             @fallback="webFallbackReason = $event"
           />
-          <RemoteTerminalPane v-else-if="terminalAvailable" :device-id="deviceId" />
+          <div v-else-if="customControllerAvailable && activeSurface === 'controller'" class="flex min-h-24 flex-1 items-center justify-center bg-zinc-950/50 px-6 py-8 text-center">
+            <div>
+              <div class="mb-2 text-sm font-medium" :class="controlReady ? 'text-emerald-300' : status === 'error' ? 'text-rose-300' : 'text-amber-300'">
+                {{ controlReady ? 'DataChannel 遥控已连接' : statusText }}
+              </div>
+              <p class="text-xs text-zinc-500">此设备使用纯数据通道，不需要屏幕视频轨。</p>
+            </div>
+          </div>
+          <RemoteTerminalPane v-else-if="terminalAvailable && activeSurface === 'terminal'" :device-id="deviceId" />
         </RemoteControlChrome>
         <RemoteControllerPanel
-          v-if="screenAvailable && activeSurface === 'screen' && !isMaximized"
+          v-if="controllerAvailable && ((screenAvailable && activeSurface === 'screen' && !isMaximized) || (customControllerAvailable && activeSurface === 'controller'))"
           :mode="mode"
           :capabilities="capabilities"
           :disabled="!controlReady"
+          :default-expanded="customControllerAvailable"
           :send-input="sendInput"
           :send-browser-command="sendBrowserCommand"
           :send-control-json="sendControlJson"

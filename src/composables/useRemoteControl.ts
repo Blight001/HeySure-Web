@@ -7,7 +7,7 @@ import {
 } from './useRemoteControlHelpers'
 
 export type RcStatus = 'idle' | 'connecting' | 'streaming' | 'error' | 'ended'
-export type RcMode = 'android' | 'desktop' | 'browser'
+export type RcMode = 'android' | 'desktop' | 'browser' | 'custom'
 export type RcMouseButton = 'left' | 'right' | 'middle'
 export type RcQualityPreset = 'smooth' | 'balanced' | 'clear'
 

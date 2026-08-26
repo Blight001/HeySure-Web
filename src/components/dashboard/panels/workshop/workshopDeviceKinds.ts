@@ -1,4 +1,5 @@
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
+import type { RcMode } from '@/composables/useRemoteControl'
 import { remoteControlAvailability } from '@/utils/remoteControlCapabilities'
 
 export const isToolboxDevice = (device: ConnectedDevice) =>
@@ -77,7 +78,8 @@ export function lifecycleClass(lifecycle?: string) {
   return 'bg-zinc-400'
 }
 
-export function remoteControlMode(device: ConnectedDevice): 'android' | 'desktop' | 'browser' {
+export function remoteControlMode(device: ConnectedDevice): RcMode {
+  if (isCustomDevice(device)) return 'custom'
   if (isAndroidDevice(device)) return 'android'
   if (isBrowserDevice(device)) return 'browser'
   return 'desktop'
@@ -85,7 +87,8 @@ export function remoteControlMode(device: ConnectedDevice): 'android' | 'desktop
 
 export function remoteControlLabel(device: ConnectedDevice) {
   const availability = remoteControlAvailability(remoteControlMode(device), device.capabilities)
-  if (!availability.screenAvailable && availability.terminalAvailable) return '远程终端'
+  if (!availability.sessionAvailable && availability.terminalAvailable) return '远程终端'
+  if (availability.customControllerAvailable) return '远程控制'
   if (isAndroidDevice(device)) return '远程控制'
   if (isBrowserDevice(device)) return '浏览器控制'
   return '桌面控制'

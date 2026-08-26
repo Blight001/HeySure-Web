@@ -40,10 +40,20 @@ describe('remote controller mutation DTOs', () => {
 
   it('lists from the canonical endpoint without cache-busting query fields', async () => {
     const fetch = vi.fn().mockResolvedValue(response({
-      schema: 'remote_controller_template.v1', items: BUILTIN_REMOTE_CONTROLLER_TEMPLATES, total: 4, defaultsRevision: 1,
+      schema: 'remote_controller_template.v1', items: BUILTIN_REMOTE_CONTROLLER_TEMPLATES, total: 5, defaultsRevision: 1,
     }))
     vi.stubGlobal('fetch', fetch)
-    expect(await listRemoteControllerTemplates()).toHaveLength(4)
+    expect(await listRemoteControllerTemplates()).toHaveLength(5)
     expect(fetch.mock.calls[0][0]).toBe('/api/remote-controller-templates')
+  })
+
+  it('queries custom templates with the canonical deviceType filter', async () => {
+    const arm = BUILTIN_REMOTE_CONTROLLER_TEMPLATES.find(item => item.id === 'jibotarm')!
+    const fetch = vi.fn().mockResolvedValue(response({
+      schema: 'remote_controller_template.v1', items: [arm], total: 1, defaultsRevision: 1,
+    }))
+    vi.stubGlobal('fetch', fetch)
+    expect(await listRemoteControllerTemplates('custom')).toEqual([arm])
+    expect(fetch.mock.calls[0][0]).toBe('/api/remote-controller-templates?deviceType=custom')
   })
 })

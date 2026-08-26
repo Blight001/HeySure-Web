@@ -24,7 +24,7 @@ export interface RemoteControllerTemplate {
   name: string
   revision: number
   builtin?: boolean
-  deviceTypes: Array<'android' | 'desktop' | 'browser'>
+  deviceTypes: Array<'android' | 'desktop' | 'browser' | 'custom'>
   requiredCapabilities: string[]
   layout: { columns: number; gap: 'xs' | 'sm' | 'md' | 'lg' }
   controls: RemoteControllerControl[]

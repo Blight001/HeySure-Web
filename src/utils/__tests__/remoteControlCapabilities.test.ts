@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ConnectedDevice } from '@/composables/dashboard/useDashboardData'
-import { canRemoteControl, remoteControlLabel } from '@/components/dashboard/panels/workshop/workshopDeviceKinds'
-import { remoteControlAvailability, shouldStartRemoteScreen } from '../remoteControlCapabilities'
+import { canRemoteControl, remoteControlLabel, remoteControlMode } from '@/components/dashboard/panels/workshop/workshopDeviceKinds'
+import { remoteControlAvailability, shouldStartRemoteScreen, shouldStartRemoteSession } from '../remoteControlCapabilities'
 
 const device = (overrides: Partial<ConnectedDevice>): ConnectedDevice => ({
   id: 'device', name: 'Device', capabilities: [], ...overrides,
@@ -14,10 +14,31 @@ describe('remote control capability entry', () => {
     expect(canRemoteControl(linux)).toBe(true)
     expect(canRemoteControl(custom)).toBe(true)
     expect(remoteControlLabel(linux)).toBe('远程终端')
-    expect(remoteControlAvailability('desktop', linux.capabilities)).toEqual({
-      screenAvailable: false, terminalAvailable: true, initialSurface: 'terminal', canOpen: true,
+    expect(remoteControlAvailability('desktop', linux.capabilities)).toMatchObject({
+      screenAvailable: false, sessionAvailable: false, terminalAvailable: true, initialSurface: 'terminal', canOpen: true,
     })
     expect(shouldStartRemoteScreen('desktop', custom.capabilities)).toBe(false)
+  })
+
+  it('opens a custom DataChannel controller without advertising a video surface', () => {
+    const arm = device({
+      deviceType: 'custom',
+      capabilities: ['remote_control', 'remote_controller_templates'],
+    })
+    expect(remoteControlMode(arm)).toBe('custom')
+    expect(canRemoteControl(arm)).toBe(true)
+    expect(remoteControlLabel(arm)).toBe('远程控制')
+    expect(remoteControlAvailability('custom', arm.capabilities)).toMatchObject({
+      screenAvailable: false,
+      controllerAvailable: true,
+      customControllerAvailable: true,
+      sessionAvailable: true,
+      terminalAvailable: false,
+      initialSurface: 'controller',
+      canOpen: true,
+    })
+    expect(shouldStartRemoteScreen('custom', arm.capabilities)).toBe(false)
+    expect(shouldStartRemoteSession('custom', arm.capabilities)).toBe(true)
   })
 
   it('starts screen P2P only for screen capabilities and preserves empty legacy capabilities', () => {

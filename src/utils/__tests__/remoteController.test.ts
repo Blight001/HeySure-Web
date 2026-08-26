@@ -232,6 +232,7 @@ describe('remote controller schema parity', () => {
       { id: 'media', name: '媒体遥控器', deviceTypes: ['desktop', 'android'], columns: 3, controls: [['previous', '上一首', 'default'], ['play-pause', '播放/暂停', 'default'], ['next', '下一首', 'default'], ['volume-down', '音量-', 'default'], ['mute', '静音', 'default'], ['volume-up', '音量+', 'default']] },
       { id: 'presentation', name: '演示遥控器', deviceTypes: ['desktop'], columns: 3, controls: [['previous', '上一页', 'default'], ['next', '下一页', 'default'], ['start', '开始', 'default'], ['exit', '退出', 'default']] },
       { id: 'browser', name: '浏览器遥控器', deviceTypes: ['browser'], columns: 3, controls: [['back', '后退', 'default'], ['reload', '刷新', 'primary'], ['forward', '前进', 'default']] },
+      { id: 'jibotarm', name: 'AI Mechanical Arm', deviceTypes: ['custom'], columns: 2, controls: [['joint1', '关节 1', 'default'], ['joint2', '关节 2', 'default'], ['joint3', '关节 3', 'default'], ['joint4', '关节 4', 'default'], ['joint5', '关节 5', 'default'], ['joint6', '关节 6', 'default']] },
     ])
     const loose = structuredClone(BUILTIN_REMOTE_CONTROLLER_TEMPLATES[0]) as any
     loose.deviceTypes.push('desktop')

@@ -44,6 +44,6 @@ export interface DeviceSettingsDraft {
 export type WorkshopRcTarget = {
   deviceId: string
   name: string
-  mode: 'android' | 'desktop' | 'browser'
+  mode: 'android' | 'desktop' | 'browser' | 'custom'
   capabilities?: string[]
 }

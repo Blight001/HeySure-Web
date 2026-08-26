@@ -11,6 +11,7 @@ const props = defineProps<{
   mode: RcMode
   capabilities?: string[]
   disabled?: boolean
+  defaultExpanded?: boolean
   sendInput: (input: RcInput) => void
   sendBrowserCommand: (command: RcBrowserCommand) => void
   sendControlJson: (payload: unknown, maxBufferedAmount?: number) => boolean
@@ -18,9 +19,9 @@ const props = defineProps<{
   controllerFastReady: boolean
 }>()
 const RemoteControllerManagerModal = defineAsyncComponent(() => import('./RemoteControllerManagerModal.vue'))
-const expanded = ref(false)
+const expanded = ref(props.defaultExpanded === true)
 const managerOpen = ref(false)
-const activeTemplateId = ref('direction')
+const activeTemplateId = ref(props.mode === 'custom' ? 'jibotarm' : 'direction')
 const serverTemplates = ref<RemoteControllerTemplate[]>([])
 const loadWarning = ref('')
 const transport = useRemoteControllerTransport(props.mode, props)
@@ -44,7 +45,7 @@ const toneClass = (control: RemoteControllerControl) => control.tone === 'primar
     : 'border-zinc-700 bg-zinc-800 text-zinc-200'
 const reloadTemplates = async () => {
   try {
-    serverTemplates.value = await listRemoteControllerTemplates()
+    serverTemplates.value = await listRemoteControllerTemplates(props.mode)
     loadWarning.value = ''
   } catch {
     loadWarning.value = '服务器模板暂不可用，正在使用内置离线模板'

@@ -1,9 +1,16 @@
 import { ref, shallowRef } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { createFastChannelJsonSender, sendDataChannelJson } from '../useRemoteControl'
-import { attachRemoteDataChannel, emptyRemoteControlState, teardownSession, type RemoteControlCtx } from '../useRemoteControlHelpers'
+import { applyRemoteReady, attachRemoteDataChannel, emptyRemoteControlState, teardownSession, type RemoteControlCtx } from '../useRemoteControlHelpers'
 
 describe('remote control data channel send', () => {
+  it('accepts a DataChannel-only rc:ready payload with zero dimensions', () => {
+    const ctx = { deviceWidth: ref(1920), deviceHeight: ref(1080) }
+    applyRemoteReady(ctx, { width: 0, height: 0, rotation: 0 })
+    expect(ctx.deviceWidth.value).toBe(0)
+    expect(ctx.deviceHeight.value).toBe(0)
+  })
+
   it('returns false when RTCDataChannel.send throws', () => {
     const channel = { readyState: 'open', bufferedAmount: 0, send: vi.fn(() => { throw new Error('closed') }) } as unknown as RTCDataChannel
     expect(sendDataChannelJson(channel, { kind: 'test' }, 1024)).toBe(false)

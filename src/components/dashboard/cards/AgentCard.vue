@@ -65,7 +65,7 @@ const { thinkingPreview, thinkingViewportRef, thinkingTextRef } = useAgentCardTh
 const rcTarget = ref<{
   deviceId: string
   name: string
-  mode: 'android' | 'desktop' | 'browser'
+  mode: 'android' | 'desktop' | 'browser' | 'custom'
   capabilities?: string[]
 } | null>(null)
 const DOUBLE_TAP_DELAY = 320
@@ -94,7 +94,7 @@ const onCardPointerUp = (event: PointerEvent) => {
 }
 
 const openRemote = (
-  mode: 'android' | 'desktop' | 'browser',
+  mode: 'android' | 'desktop' | 'browser' | 'custom',
   deviceId?: string,
   name?: string,
   capabilities?: string[],

@@ -16,7 +16,7 @@ const selectedId = ref('')
 const editing = ref<RemoteControllerTemplate | null>(null)
 const saving = ref(false)
 const message = ref('')
-const builtinIds = new Set(['direction', 'media', 'presentation', 'browser'])
+const builtinIds = new Set(['direction', 'media', 'presentation', 'browser', 'jibotarm'])
 const kinds: RemoteControllerKind[] = ['button', 'dpad', 'keypad', 'slider', 'joystick', 'textInput']
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 const selected = computed(() => props.templates.find(item => item.id === selectedId.value))
@@ -118,7 +118,7 @@ watch(selected, editSelected)
               <label class="text-xs">名称<input v-model.trim="editing.name" required maxlength="80" class="field" /></label>
               <label class="text-xs">列数<input v-model.number="editing.layout.columns" type="number" min="1" max="12" class="field" /></label>
               <label class="text-xs">间距<select v-model="editing.layout.gap" class="field"><option v-for="gap in ['xs','sm','md','lg']" :key="gap">{{ gap }}</option></select></label>
-              <fieldset class="sm:col-span-2"><legend class="text-xs">设备类型</legend><label v-for="device in ['desktop','android','browser']" :key="device" class="mr-4 text-sm"><input v-model="editing.deviceTypes" type="checkbox" :value="device" /> {{ device }}</label></fieldset>
+              <fieldset class="sm:col-span-2"><legend class="text-xs">设备类型</legend><label v-for="device in ['desktop','android','browser','custom']" :key="device" class="mr-4 text-sm"><input v-model="editing.deviceTypes" type="checkbox" :value="device" /> {{ device }}</label></fieldset>
             </div>
             <div class="my-4 flex items-center justify-between"><h4 class="text-sm font-medium">控件</h4><button type="button" class="small-button" @click="editing.controls.push(newControl(editing.controls.length))">添加控件</button></div>
             <section v-for="(control, index) in editing.controls" :key="index" class="mb-3 rounded-lg border border-zinc-700 p-3">

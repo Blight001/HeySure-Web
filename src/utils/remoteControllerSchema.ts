@@ -1,7 +1,7 @@
 import type { RemoteControllerAction, RemoteControllerControl, RemoteControllerTemplate } from '@/types/remoteController'
 
 const KINDS = new Set(['button', 'dpad', 'keypad', 'slider', 'joystick', 'textInput'])
-const DEVICE_TYPES = new Set(['android', 'desktop', 'browser'])
+const DEVICE_TYPES = new Set(['android', 'desktop', 'browser', 'custom'])
 export const REMOTE_CONTROLLER_KEYS = [
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Escape', 'Home', 'End', 'PageUp', 'PageDown',
   'Tab', 'Space', 'Backspace', 'Delete', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
@@ -107,7 +107,7 @@ const templateCollections = (value: Record<string, unknown>) => {
   if (!Array.isArray(value.controls) || value.controls.length < 1 || value.controls.length > 64) throw new Error('模板控件数量无效')
   return { deviceTypes: devices, capabilities, controls: value.controls.map(parseControl) }
 }
-const validUniqueList = (items: string[], allowed: Set<string>) => items.length >= 1 && items.length <= 3
+const validUniqueList = (items: string[], allowed: Set<string>) => items.length >= 1 && items.length <= 4
   && new Set(items).size === items.length && items.every(item => allowed.has(item))
 
 const templateLayout = (value: unknown): RemoteControllerTemplate['layout'] => {

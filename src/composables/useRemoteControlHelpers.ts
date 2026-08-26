@@ -147,6 +147,18 @@ export async function handleRemoteIce(ctx: RemoteControlCtx, data: { candidate: 
   ctx.pendingIce.push(data.candidate)
 }
 
+export function applyRemoteReady(
+  ctx: Pick<RemoteControlCtx, 'deviceWidth' | 'deviceHeight'>,
+  data: { width?: unknown; height?: unknown; rotation?: unknown } | null | undefined,
+) {
+  const dimension = (value: unknown) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+  }
+  ctx.deviceWidth.value = dimension(data?.width)
+  ctx.deviceHeight.value = dimension(data?.height)
+}
+
 export function attachSocketHandlers(ctx: RemoteControlCtx, deviceId: string) {
   ctx.socket = createConnectorSocket()
   ctx.socket.on('connect', () => {
@@ -160,9 +172,8 @@ export function attachSocketHandlers(ctx: RemoteControlCtx, deviceId: string) {
   ctx.socket.on('connect_error', () => failSession(ctx, '信令通道连接失败'))
   ctx.socket.on('rc:started', (data: { sessionId: string }) => { ctx.sessionId = data.sessionId })
   ctx.socket.on('rc:error', (data: { message?: string }) => failSession(ctx, data?.message || '远程控制启动失败'))
-  ctx.socket.on('rc:ready', (data: { width: number; height: number }) => {
-    ctx.deviceWidth.value = Number(data?.width) || 0
-    ctx.deviceHeight.value = Number(data?.height) || 0
+  ctx.socket.on('rc:ready', (data: { width?: unknown; height?: unknown; rotation?: unknown }) => {
+    applyRemoteReady(ctx, data)
   })
   ctx.socket.on('rc:offer', (data: { sessionId: string; sdp: string }) => { void handleRemoteOffer(ctx, data) })
   ctx.socket.on('rc:ice', (data: { candidate: RTCIceCandidateInit }) => { void handleRemoteIce(ctx, data) })

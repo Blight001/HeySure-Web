@@ -15,7 +15,7 @@ defineProps<{
   addressInput: string
   typing: string
   mode: string
-  activeSurface: 'screen' | 'terminal'
+  activeSurface: 'screen' | 'controller' | 'terminal'
 }>()
 
 const emit = defineEmits<{
@@ -42,7 +42,7 @@ const emit = defineEmits<{
   <div v-if="!isMaximized" class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
     <div class="min-w-0">
       <div class="text-sm font-semibold text-zinc-100 truncate">远程控制{{ modeLabel }} · {{ deviceName || deviceId }}</div>
-      <div v-if="activeSurface === 'screen'" class="text-xs mt-0.5 flex items-center gap-1.5" :class="status === 'streaming' ? 'text-emerald-400' : status === 'error' ? 'text-rose-400' : 'text-amber-400'">
+      <div v-if="activeSurface !== 'terminal'" class="text-xs mt-0.5 flex items-center gap-1.5" :class="status === 'streaming' ? 'text-emerald-400' : status === 'error' ? 'text-rose-400' : 'text-amber-400'">
         <span class="inline-block w-1.5 h-1.5 rounded-full" :class="status === 'streaming' ? 'bg-emerald-400 animate-pulse' : status === 'error' ? 'bg-rose-400' : 'bg-amber-400 animate-pulse'"></span>
         {{ statusText }}
       </div>
@@ -56,7 +56,7 @@ const emit = defineEmits<{
           <option value="clear">清晰优先</option>
         </select>
       </label>
-      <button class="grid h-8 w-8 place-items-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors" :title="isMaximized ? '退出全屏' : '全屏控制'" @click="emit('toggle-maximize')">
+      <button v-if="activeSurface === 'screen'" class="grid h-8 w-8 place-items-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors" :title="isMaximized ? '退出全屏' : '全屏控制'" @click="emit('toggle-maximize')">
         <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M8 3H5a2 2 0 0 0-2 2v3" />
           <path d="M16 3h3a2 2 0 0 1 2 2v3" />
