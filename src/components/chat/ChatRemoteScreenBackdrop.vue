@@ -81,7 +81,11 @@ const movePointer = (event: PointerEvent) => {
     const dx = event.clientX - bubblePointer.point.x
     const dy = event.clientY - bubblePointer.point.y
     if (Math.abs(dx) + Math.abs(dy) > 4) bubbleMoved = true
-    bubblePosition.value = { left: Math.max(8, bubblePointer.left + dx), top: Math.max(8, bubblePointer.top + dy) }
+    const view = viewport()
+    bubblePosition.value = {
+      left: Math.min(Math.max(8, bubblePointer.left + dx), Math.max(8, view.width - 52)),
+      top: Math.min(Math.max(8, bubblePointer.top + dy), Math.max(8, view.height - 52)),
+    }
     event.preventDefault(); return
   }
   if (!pointers.has(event.pointerId)) return
@@ -154,7 +158,7 @@ onBeforeUnmount(() => {
           <span class="chat-remote-screen-device-status" aria-hidden="true"></span><span class="chat-remote-screen-device-name">{{ device.name || device.id }}</span><span v-if="device.id === selectedId" aria-hidden="true">✓</span>
         </button>
       </div>
-      <button type="button" class="chat-remote-screen-bubble" :class="{ 'is-offline': !selectedDevice || status === 'error' }" :style="bubbleStyle" :aria-label="selectedDevice ? `打开 ${selectedDevice.name || selectedDevice.id} 远程画面` : '选择远程设备'" title="远程设备" @pointerdown="beginBubblePointer" @click="onBubbleClick">
+      <button type="button" class="chat-remote-screen-bubble" :class="{ 'is-offline': !selectedDevice || status === 'error', 'is-positioned': bubblePosition }" :style="bubbleStyle" :aria-label="selectedDevice ? `打开 ${selectedDevice.name || selectedDevice.id} 远程画面` : '选择远程设备'" title="远程设备" @pointerdown="beginBubblePointer" @click="onBubbleClick">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M7 8h10v6H7z"/></svg>
       </button>
       <section v-if="open" class="chat-remote-screen-window" :style="windowStyle" role="dialog" aria-label="远程画面">
@@ -175,6 +179,7 @@ onBeforeUnmount(() => {
 .chat-remote-screen-layer { position: fixed; inset: 0; z-index: 130; pointer-events: none; }
 .chat-remote-screen-bubble { position: fixed; left: max(1rem, env(safe-area-inset-left)); bottom: max(5.5rem, calc(env(safe-area-inset-bottom) + 5rem)); z-index: 2; display: grid; place-items: center; width: 2.75rem; height: 2.75rem; padding: .55rem; border: 1px solid rgb(99 102 241 / .6); border-radius: 999px; color: #e0e7ff; background: rgb(30 27 75 / .96); box-shadow: 0 8px 24px rgb(15 23 42 / .3); touch-action: none; pointer-events: auto; cursor: grab; }
 .chat-remote-screen-bubble:active { cursor: grabbing; }
+.chat-remote-screen-bubble.is-positioned { bottom: auto; }
 .chat-remote-screen-bubble svg { width: 1.35rem; height: 1.35rem; }
 .chat-remote-screen-bubble:hover { background: rgb(49 46 129 / .98); }
 .chat-remote-screen-bubble.is-offline { opacity: .65; }
