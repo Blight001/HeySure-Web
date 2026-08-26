@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
-import { getAuthToken } from '@/api/http'
-import { listSkillMentions, type SkillMentionItem } from '@/api/librarian'
+import { defineAsyncComponent, nextTick, ref } from 'vue'
 import { useMessage } from '@/composables/useMessage'
 import { useChatWorkspace } from '@/composables/chat/useChatWorkspace'
 import type { ChatInterfaceProps } from '@/types/chat'
@@ -17,17 +15,6 @@ import FrontPromptPreview from './FrontPromptPreview.vue'
 const ChatRemoteScreenBackdrop = defineAsyncComponent(() => import('./ChatRemoteScreenBackdrop.vue'))
 
 const props = defineProps<ChatInterfaceProps>()
-const skillMentions = ref<SkillMentionItem[]>([])
-const loadSkillMentions = async () => {
-  if (!getAuthToken()) return
-  try {
-    skillMentions.value = (await listSkillMentions('', 100)).items || []
-  } catch {
-    skillMentions.value = []
-  }
-}
-onMounted(loadSkillMentions)
-watch(() => props.aiConfigId, loadSkillMentions)
 const { alert, confirm } = useMessage(() => props.embeddedDialogs ? (props.dialogHost || 'chat') : 'global')
 const emit = defineEmits<{
   (e: 'update:selectedFiles', value: string[]): void
@@ -385,7 +372,6 @@ const editQueuedItem = async (itemId: string) => {
         :currentPath="currentPath"
         :selectable-file-root="selectableFileRoot"
         :toolGroups="attachableToolGroups"
-        :skills="skillMentions"
         :selectedToolGroups="selectedToolGroupKeys"
         :selectedToolNames="selectedMcpToolNames"
         :mentions="chatMentions"
