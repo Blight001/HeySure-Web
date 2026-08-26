@@ -67,6 +67,7 @@ const emit = defineEmits<{
   (e: 'removeUpload', clientId: string): void
   (e: 'selectModel', modelId: string): void
   (e: 'addMention', mention: ChatMention): void
+  (e: 'refreshMentions'): void
 }>()
 
 const inputValue = computed({
@@ -90,6 +91,7 @@ const activeMentionIndex = ref(0)
 const mentionDismissed = ref(false)
 const mentionQuery = ref('')
 const mentionDomRange = ref<Range | null>(null)
+let lastMentionRefreshAt = 0
 const TEXTAREA_MIN_HEIGHT = 36
 const TEXTAREA_MAX_HEIGHT = 256
 const { mentionTooltip, showMentionTooltip, hideMentionTooltip, keepMentionTooltip } = useChatMentionTooltip()
@@ -109,6 +111,10 @@ const updateMentionState = () => {
   const resolved = mentionRangeFromSelection(editorRef.value)
   mentionQuery.value = resolved?.query || ''
   mentionDomRange.value = resolved?.range || null
+  if (resolved && Date.now() - lastMentionRefreshAt > 1000) {
+    lastMentionRefreshAt = Date.now()
+    emit('refreshMentions')
+  }
 }
 
 const selectMention = async (candidate = mentionCandidates.value[activeMentionIndex.value]) => {

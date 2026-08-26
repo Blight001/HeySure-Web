@@ -410,6 +410,7 @@ const editQueuedItem = async (itemId: string) => {
         @removeUpload="removeUploadedAttachment"
         @selectModel="switchConversationModel"
         @addMention="addChatMention"
+        @refreshMentions="loadSkillMentions"
       />
     </div>
   </div>
