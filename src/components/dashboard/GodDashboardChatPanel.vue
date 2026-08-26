@@ -4,7 +4,7 @@ import ChatTokenUsageBar from '@/components/chat/ChatTokenUsageBar.vue'
 import { useDismissibleLayer } from '@/composables/useDismissibleLayer'
 import { BACKGROUND_POPUP_Z_INDEX, PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
 import type { Agent } from '@/types'
-import type { ChatDeviceHint } from './godDashboardAgents'
+import { devicesBoundToAiConfig, type ChatDeviceHint } from './godDashboardAgents'
 import type { ChatResizeEdge } from './godDashboardChatGeometry'
 import { CHAT_FLOAT_CONSTRAINTS } from './godDashboardChatGeometry'
 
@@ -53,6 +53,7 @@ const chatMemberSwitcherRef = ref<HTMLElement | null>(null)
 const chatMemberMenuRef = ref<HTMLElement | null>(null)
 const chatMemberMenuOpen = ref(false)
 const chatMemberMenuStyle = ref<Record<string, string | number>>({})
+const boundChatDevices = computed(() => devicesBoundToAiConfig(props.connectedDevices, props.chatTarget.aiConfigId))
 
 const closeChatMemberMenu = () => {
   chatMemberMenuOpen.value = false
@@ -259,7 +260,7 @@ const resizeClass: Record<ChatResizeEdge, string> = {
           :selectedFiles="selectedFiles"
           :allFiles="allFiles"
           :selectable-file-root="selectableFileRoot"
-          :remote-screen-devices="connectedDevices"
+          :remote-screen-devices="boundChatDevices"
           @update:selectedFiles="emit('update:selectedFiles', $event)"
           @update:currentSessionId="emit('update:currentSessionId', $event)"
           @taskPlanRefresh="emit('taskPlanRefresh', $event)"

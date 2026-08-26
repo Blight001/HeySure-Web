@@ -136,7 +136,9 @@ watch([availableDevices, () => props.preferredDeviceId], ([devices, preferred]) 
   if (!selectedId.value) { open.value = false; stop() }
 }, { immediate: true })
 watch(selectedId, deviceId => { if (mounted.value) void startView(deviceId) })
-watch(remoteStream, () => { void attachStream() })
+// The video is conditionally mounted by the stream ref; wait for that DOM commit
+// before assigning srcObject, otherwise the first stream can render as a black box.
+watch(remoteStream, () => { void nextTick().then(attachStream) })
 onMounted(() => {
   mounted.value = true
   if (selectedId.value) void startView(selectedId.value)
