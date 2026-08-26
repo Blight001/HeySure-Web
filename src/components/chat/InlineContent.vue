@@ -12,7 +12,7 @@ const props = withDefaults(defineProps<{
   enableMcpTextBubble?: boolean;
   plainTextMode?: boolean;
   mcpIcon?: string;
-  mentionTokens?: Array<{ token: string; type: 'mcp' | 'file'; detail?: string }>;
+  mentionTokens?: Array<{ token: string; type: 'mcp' | 'file' | 'skill'; detail?: string }>;
 }>(), {
   enableMcpTextBubble: true,
   plainTextMode: false,

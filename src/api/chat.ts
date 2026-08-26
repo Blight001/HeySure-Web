@@ -147,6 +147,7 @@ export const startRun = (payload: {
   model_content: string
   visible_tags?: string
   selected_mcp_tools?: string[]
+  skill_refs?: string[]
   session_id: string
   session_name: string
   ai_config_id?: number

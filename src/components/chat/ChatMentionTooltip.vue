@@ -26,8 +26,8 @@ defineEmits<{
             class="rounded-md px-1.5 py-0.5 text-[9px] font-bold tracking-wide"
             :class="state.type === 'mcp'
               ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300'
-              : 'bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300'"
-          >{{ state.type === 'mcp' ? 'MCP' : '文件' }}</span>
+              : state.type === 'skill' ? 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300' : 'bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300'"
+          >{{ state.type === 'mcp' ? 'MCP' : state.type === 'skill' ? 'Skill' : '文件' }}</span>
           <strong class="min-w-0 flex-1 truncate font-mono text-[11px] text-zinc-700 dark:text-zinc-200">{{ state.label }}</strong>
         </div>
         <div class="mention-tooltip-body min-h-0 flex-auto overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 text-[10px] leading-4 text-zinc-500 dark:text-zinc-400">{{ state.detail }}</div>

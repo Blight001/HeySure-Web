@@ -25,6 +25,12 @@ const EMPTY_TOOLTIP: ChatMentionTooltipState = {
   maxHeight: 320,
 }
 
+const mentionTypeFromDataset = (value: string | undefined): ChatMentionType => {
+  if (value === 'file') return 'file'
+  if (value === 'skill') return 'skill'
+  return 'mcp'
+}
+
 const fitTooltipHeightToWholeLines = (availableHeight: number, hasScrollHint: boolean) => {
   const cappedHeight = availableHeight
   // Header, body padding, border and optional 24px hint; body text uses a fixed 16px line-height.
@@ -64,7 +70,7 @@ export const useChatMentionTooltip = () => {
       open: true,
       label: String(target.dataset.mentionLabel || target.textContent || '').trim(),
       detail,
-      type: target.dataset.mentionType === 'file' ? 'file' : 'mcp',
+      type: mentionTypeFromDataset(target.dataset.mentionType),
       x: Math.max(12 + tooltipHalfWidth, Math.min(viewportWidth - 12 - tooltipHalfWidth, rect.left + rect.width / 2)),
       y: placement === 'above' ? rect.top - 8 : rect.bottom + 8,
       placement,

@@ -13,11 +13,32 @@ export interface UploadAttachmentItem {
 
 export interface MentionCandidate {
   key: string
-  type: 'tool' | 'file'
+  type: 'tool' | 'file' | 'skill'
   label: string
   detail: string
   groupKey?: string
 }
+
+export interface SkillMentionCandidate {
+  slug: string
+  name: string
+  summary: string
+  triggers?: string[]
+  risk?: string
+}
+
+const collectSkillMentionCandidates = (
+  skills: SkillMentionCandidate[] | undefined,
+  query: string,
+) => (skills || [])
+  .map<MentionCandidate>(skill => ({
+    key: `skill:${skill.slug}`,
+    type: 'skill',
+    label: skill.name || skill.slug,
+    detail: [skill.summary, skill.risk && `风险：${skill.risk}`].filter(Boolean).join('；'),
+    groupKey: 'skills',
+  }))
+  .filter(item => !query || `${item.label} ${item.detail} ${item.key}`.toLowerCase().includes(query))
 
 const toToolMentionCandidate = (
   group: McpCatalogToolGroup,
@@ -83,9 +104,11 @@ export const buildMentionCandidates = (
   allFiles: string[],
   selectableFileRoot: string | undefined,
   query: string,
+  skills?: SkillMentionCandidate[],
 ) => {
   if (!open) return []
   return [
+    ...collectSkillMentionCandidates(skills, query),
     ...collectToolMentionCandidates(toolGroups, query),
     ...collectFileMentionCandidates(allFiles, selectableFileRoot, query),
   ].slice(0, 10)

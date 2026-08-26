@@ -264,6 +264,7 @@ const buildSendPayload = (deps: ChatSendDeps, prepared: PreparedSend) => {
       model_content: [visibleUserContent, mentionContext, attachedPathStr].filter(Boolean).join('\n\n'),
       visible_tags: encodeUserContextTags(selectedAiPaths, activeMentions, deps.files.toAiWorkspacePath),
       selected_mcp_tools: prepared.selectedMcpToolNames,
+      skill_refs: activeMentions.filter(mention => mention.type === 'skill').map(mention => mention.reference),
       session_id: deps.state.currentSessionId.value,
       session_name: isPlaceholderSessionName(currentSessionName)
         ? buildAutoSessionTitle(visibleUserContent)
