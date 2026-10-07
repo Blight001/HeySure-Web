@@ -11,6 +11,7 @@ import ChatConversationView from './ChatConversationView.vue'
 import ChatInput from './ChatInput.vue'
 import ChatQueuePanel from './ChatQueuePanel.vue'
 import FrontPromptPreview from './FrontPromptPreview.vue'
+import CodexEventTimeline from './CodexEventTimeline.vue'
 import { resolveRemoteScreenDevice } from '@/utils/chatRemoteScreen'
 
 const ChatRemoteScreenBackdrop = defineAsyncComponent(() => import('./ChatRemoteScreenBackdrop.vue'))
@@ -101,6 +102,7 @@ const {
   modelOptions,
   selectedModelId,
   modelSwitching,
+  codexEvents,
   toggleToolGroup,
   toggleMcpTool,
   handleChatSend,
@@ -362,6 +364,8 @@ const editQueuedItem = async (itemId: string) => {
         @move-up="movePendingQueueItemUp"
         @delete="removePendingQueueItem"
       />
+
+      <CodexEventTimeline :events="codexEvents" />
 
       <ChatInput
         ref="chatInputRef"

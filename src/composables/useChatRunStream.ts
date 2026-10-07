@@ -74,6 +74,18 @@ export interface ChatHistoryChangedPayload {
   source?: string
 }
 
+export interface CodexEventPayload {
+  sessionId?: string
+  sequence?: number
+  type?: string
+  payload?: unknown
+}
+
+export interface CodexModelsPayload {
+  deviceId?: string
+  models?: unknown[]
+}
+
 export interface ChatRunStreamHandlers {
   onLive?: (payload: RunLivePayload) => void
   onDone?: (payload: RunDonePayload) => void
@@ -81,49 +93,39 @@ export interface ChatRunStreamHandlers {
   onDeviceResult?: (payload: DeviceTaskEventPayload) => void
   onDeviceError?: (payload: DeviceTaskEventPayload) => void
   onHistoryChanged?: (payload: ChatHistoryChangedPayload) => void
+  onCodexEvent?: (payload: CodexEventPayload) => void
+  onCodexModels?: (payload: CodexModelsPayload) => void
 }
+
+const forward = <T>(handler?: (payload: T) => void) => (payload: T) => handler?.(payload)
+
+const streamHandlers = (handlers: ChatRunStreamHandlers) => ({
+  live: forward(handlers.onLive), done: forward(handlers.onDone),
+  deviceProgress: forward(handlers.onDeviceProgress), deviceResult: forward(handlers.onDeviceResult),
+  deviceError: forward(handlers.onDeviceError), history: forward(handlers.onHistoryChanged),
+  codexEvent: forward(handlers.onCodexEvent), codexModels: forward(handlers.onCodexModels),
+})
+
+const streamEventNames = (h: ReturnType<typeof streamHandlers>) => [
+  ['chat:run_live', h.live], ['chat:run_done', h.done],
+  ['device:task_progress', h.deviceProgress], ['device:task_result', h.deviceResult],
+  ['device:task_error', h.deviceError], ['chat:history_changed', h.history],
+  ['codex:event', h.codexEvent], ['codex:models', h.codexModels],
+] as const
 
 export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
   const connected = ref(false)
   let socket: Socket | null = null
   let joinedUserId = 0
-
-  const handleLive = (payload: RunLivePayload) => {
-    if (!payload || typeof payload !== 'object') return
-    handlers.onLive?.(payload)
-  }
-  const handleDone = (payload: RunDonePayload) => {
-    if (!payload || typeof payload !== 'object') return
-    handlers.onDone?.(payload)
-  }
-  const handleDeviceProgress = (payload: DeviceTaskEventPayload) => {
-    if (!payload || typeof payload !== 'object') return
-    handlers.onDeviceProgress?.(payload)
-  }
-  const handleDeviceResult = (payload: DeviceTaskEventPayload) => {
-    if (!payload || typeof payload !== 'object') return
-    handlers.onDeviceResult?.(payload)
-  }
-  const handleDeviceError = (payload: DeviceTaskEventPayload) => {
-    if (!payload || typeof payload !== 'object') return
-    handlers.onDeviceError?.(payload)
-  }
-  const handleHistoryChanged = (payload: ChatHistoryChangedPayload) => {
-    if (!payload || typeof payload !== 'object') return
-    handlers.onHistoryChanged?.(payload)
-  }
+  const bound = streamHandlers(handlers)
+  const events = streamEventNames(bound)
 
   const disconnect = () => {
     if (!socket) return
     socket.off('connect')
     socket.off('disconnect')
     socket.off('connect_error')
-    socket.off('chat:run_live', handleLive)
-    socket.off('chat:run_done', handleDone)
-    socket.off('device:task_progress', handleDeviceProgress)
-    socket.off('device:task_result', handleDeviceResult)
-    socket.off('device:task_error', handleDeviceError)
-    socket.off('chat:history_changed', handleHistoryChanged)
+    events.forEach(([name, handler]) => socket?.off(name, handler))
     socket.disconnect()
     socket = null
     joinedUserId = 0
@@ -152,12 +154,7 @@ export function useChatRunStream(handlers: ChatRunStreamHandlers = {}) {
     socket.on('connect_error', () => {
       connected.value = false
     })
-    socket.on('chat:run_live', handleLive)
-    socket.on('chat:run_done', handleDone)
-    socket.on('device:task_progress', handleDeviceProgress)
-    socket.on('device:task_result', handleDeviceResult)
-    socket.on('device:task_error', handleDeviceError)
-    socket.on('chat:history_changed', handleHistoryChanged)
+    events.forEach(([name, handler]) => socket?.on(name, handler))
   }
 
   onUnmounted(disconnect)

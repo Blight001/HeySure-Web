@@ -253,6 +253,8 @@ const buildSendPayload = (deps: ChatSendDeps, prepared: PreparedSend) => {
   const activeMentions = activeChatMentions(prepared.content, prepared.mentions)
   const mentionContext = buildMentionContextSection(activeMentions)
   const currentSessionName = deps.state.sessionList.value.find(s => s.id === deps.state.currentSessionId.value)?.name || BLANK_SESSION_NAME
+  const selectedModel = deps.state.modelOptions.value.find(item => item.id === deps.state.selectedModelId.value)
+  const isCodex = selectedModel?.source === 'codex'
   const visibleUserContent = prepared.content || `已上传 ${prepared.readyUploads.length} 个附件`
   return {
     selectedReadableFiles,
@@ -271,6 +273,11 @@ const buildSendPayload = (deps: ChatSendDeps, prepared: PreparedSend) => {
       ai_config_id: deps.props.aiConfigId,
       ai_kind: deps.state.aiKindValue.value,
       attachments: prepared.readyUploads.map(item => ({ file_ref: item.file_ref })),
+      ...(isCodex ? {
+        execution_provider: 'codex_local',
+        codex_device_id: selectedModel?.deviceId,
+        codex_model: selectedModel?.model,
+      } : {}),
     },
   }
 }

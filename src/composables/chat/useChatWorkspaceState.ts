@@ -7,6 +7,7 @@ import type {
   ChatRunPhase,
   ChatRunStatus,
   SessionItem,
+  CodexEventRecord,
 } from '@/types/chat'
 import type { ChatMention } from '@/utils/chatMentions'
 import type { McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
@@ -35,6 +36,7 @@ const createRunRefs = () => ({
   currentMcpDeviceId: ref(''),
   currentDeviceTaskId: ref(''),
   currentDeviceProgress: ref(''),
+  codexEvents: ref<CodexEventRecord[]>([]),
   taskPlanRefreshSignal: ref(0),
 })
 

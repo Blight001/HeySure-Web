@@ -9,6 +9,7 @@ import type { ChatSendApi } from './useChatSend'
 import type { ChatSessionsApi } from './useChatSessions'
 import type { ChatUploadsApi } from './useChatUploads'
 import type { ChatWorkspaceState } from './useChatWorkspaceState'
+import { loadCodexEvents } from './codexEventState'
 
 export interface WorkspaceLifecycleCtx {
   props: ChatInterfaceProps
@@ -62,7 +63,9 @@ const applySessionDraft = (ctx: WorkspaceLifecycleCtx, sid: string, oldSid: stri
 
 const onSessionChange = async (ctx: WorkspaceLifecycleCtx, sid: string, oldSid: string) => {
   ctx.run.bumpExternalDiscovery()
+  ctx.state.codexEvents.value = []
   ctx.emit('update:currentSessionId', sid || '')
+  if (sid) void loadCodexEvents(ctx.state, sid)
   if (sid === oldSid) return
   applySessionDraft(ctx, sid, oldSid)
   ctx.prompt.loadEffectiveSystemPromptPreview()

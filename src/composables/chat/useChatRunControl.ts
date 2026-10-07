@@ -1,5 +1,4 @@
-import { onBeforeUnmount, watch } from 'vue'
-import * as chatApi from '@/api/chat'
+import { onBeforeUnmount, watch } from 'vue'; import * as chatApi from '@/api/chat'
 import { getAuthToken } from '@/api/http'
 import {
   useChatRunStream,
@@ -8,6 +7,7 @@ import {
   type RunDonePayload,
   type RunLivePayload,
 } from '@/composables/useChatRunStream'
+import { appendCodexEvent, refreshCodexModels } from './codexEventState'
 import type { ChatDialogFns, ChatInterfaceEmitFn, ChatInterfaceProps, ChatRunPhase } from '@/types/chat'
 import { waitMs } from '@/utils/chatAsync'
 import {
@@ -62,8 +62,7 @@ interface RunCtl {
 }
 
 const liveSessionOf = (state: ChatWorkspaceState) => ({
-  sessionId: state.currentSessionId.value,
-  aiKind: state.aiKindValue.value,
+  sessionId: state.currentSessionId.value, aiKind: state.aiKindValue.value,
   configId: Number(state.chatCtx.value.aiConfigId || 0),
 })
 
@@ -488,6 +487,8 @@ export const useChatRunControl = (deps: ChatRunControlDeps) => {
     onDeviceResult: payload => handleDeviceTerminal(ctl, payload),
     onDeviceError: payload => handleDeviceTerminal(ctl, payload),
     onHistoryChanged: payload => handleHistoryChanged(ctl, payload),
+    onCodexEvent: payload => appendCodexEvent(ctl.deps.state, payload),
+    onCodexModels: payload => { void refreshCodexModels(ctl.deps.state, payload) },
   })
   wireRunWatchers(ctl, stream)
   onBeforeUnmount(() => {

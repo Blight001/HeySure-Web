@@ -14,7 +14,7 @@ interface Props {
   /** 已勾选的工具组 groupKey 列表 */
   selectedToolGroups?: string[]
   selectedToolNames?: string[]
-  modelOptions?: Array<{ id: string; name: string; model: string }>
+  modelOptions?: Array<{ id: string; name: string; model: string; source?: string; deviceName?: string; devicePlatform?: string; online?: boolean }>
   selectedModelId?: string
   modelSwitching?: boolean
 }
@@ -208,7 +208,7 @@ const handleModelChange = (event: Event) => {
           @change="handleModelChange"
         >
           <option v-for="option in modelOptions" :key="option.id" :value="option.id">
-            {{ option.name || option.model }}
+            {{ option.name || option.model }}{{ option.source === 'codex' ? ` · ${option.deviceName || '本地设备'}${option.online === false ? '（离线）' : ''}` : '' }}
           </option>
         </select>
         <span v-if="modelSwitching" class="shrink-0 text-[10px] text-indigo-500">切换中…</span>

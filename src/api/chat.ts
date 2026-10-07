@@ -151,6 +151,9 @@ export const startRun = (payload: {
   session_name: string
   ai_config_id?: number
   ai_kind: AiKind
+  execution_provider?: 'codex_local' | string
+  codex_device_id?: string
+  codex_model?: string
   attachments?: Array<{ file_ref: string }>
 }) => post<{ run_id: string }>('/api/chat/run/start', payload, { fallbackError: 'run start failed' })
 

@@ -62,6 +62,20 @@ export interface ChatModelOption {
   id: string
   name: string
   model: string
+  source?: 'preset' | 'codex'
+  provider?: string
+  deviceId?: string
+  deviceName?: string
+  devicePlatform?: string
+  online?: boolean
+}
+
+export interface CodexEventRecord {
+  sessionId: string
+  sequence?: number
+  type: string
+  payload?: unknown
+  receivedAt: number
 }
 
 export interface ChatRemoteScreenDevice {
