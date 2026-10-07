@@ -127,6 +127,14 @@ const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
 ))
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 
+// Codex is a device-backed execution provider, so it is useful even when the
+// current conversation is not using the server's ``core`` AI kind.  Keep the
+// normal preset list scoped to core chats, but expose any discovered local
+// Codex models in assistant chats as well.
+const visibleModelOptions = computed(() => aiKindValue.value === 'core'
+  ? modelOptions.value
+  : modelOptions.value.filter(option => option.source === 'codex'))
+
 const editQueuedItem = async (itemId: string) => {
   if (!editPendingQueueItem(itemId)) return
   await nextTick()
@@ -386,7 +394,7 @@ const editQueuedItem = async (itemId: string) => {
         :mentions="chatMentions"
         :uploadedAttachments="uploadedAttachments"
         :uploadingCount="uploadingCount"
-        :modelOptions="aiKindValue === 'core' ? modelOptions : []"
+        :modelOptions="visibleModelOptions"
         :selectedModelId="selectedModelId"
         :modelSwitching="modelSwitching"
         @toggleToolGroup="toggleToolGroup"
