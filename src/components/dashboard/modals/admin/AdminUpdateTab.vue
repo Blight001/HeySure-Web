@@ -409,6 +409,20 @@ onUnmounted(() => {
             <span>{{ line.text }}</span>
           </div>
         </div>
+
+        <div
+          v-if="repoStatus.state.release_manifest"
+          class="rounded-lg border border-indigo-200/70 bg-indigo-50/50 px-3 py-2 text-[11px] text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/20 dark:text-indigo-300"
+        >
+          <div class="font-semibold">CI 镜像发布</div>
+          <div class="mt-1 break-all">
+            release {{ repoStatus.state.release_manifest.release_id?.slice(0, 12) || '未知' }}
+            · root {{ repoStatus.state.release_manifest.root_commit?.slice(0, 12) || '未知' }}
+          </div>
+          <div class="mt-1 break-all text-[10px] opacity-80">
+            Web {{ repoStatus.state.release_manifest.images?.web?.digest || '未返回 digest' }}
+          </div>
+        </div>
       </section>
     </template>
 

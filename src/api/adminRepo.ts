@@ -57,6 +57,12 @@ export interface RepoUpdateState {
   last_error: string
   logs: string[]
   updated_at: number
+  release_manifest?: {
+    release_id?: string
+    generated_at?: string
+    root_commit?: string
+    images?: Record<string, { reference?: string; digest?: string }>
+  } | null
 }
 
 export interface RepoVersionInfo {
