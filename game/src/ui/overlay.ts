@@ -3,6 +3,8 @@
  * P0 只读；P1 的设置抽屉 / 操作菜单也挂在这一层（Vue 化）。
  */
 
+import { ScaleSettingsPanel } from './scaleSettings'
+
 const esc = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
@@ -29,6 +31,7 @@ export class Overlay {
   private bgmMuted = false
   private sfxMuted = false
   private soundOnChange: ((state: { bgmMuted: boolean; sfxMuted: boolean }) => void) | null = null
+  private scaleSettings: ScaleSettingsPanel | null = null
 
   constructor(parent: HTMLElement) {
     const style = document.createElement('style')
@@ -223,6 +226,12 @@ export class Overlay {
     this.bgmBtn.textContent = this.bgmMuted ? '🔇 背景声关' : '🎵 背景声开'
     this.sfxBtn.textContent = this.sfxMuted ? '🔕 音效关' : '🔔 音效开'
     this.soundOnChange({ bgmMuted: this.bgmMuted, sfxMuted: this.sfxMuted })
+  }
+
+  /** 世界素材比例调试入口；参数只保存在浏览器，复制后再写回源码。 */
+  initScaleSettings(parent: HTMLElement, onPreview: () => void) {
+    this.scaleSettings?.destroy()
+    this.scaleSettings = new ScaleSettingsPanel({ parent, onPreview })
   }
 
 }

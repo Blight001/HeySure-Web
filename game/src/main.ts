@@ -47,6 +47,9 @@ const boot = async () => {
     scene: [],
   })
   game.scene.add('world', WorldScene, true, { store, overlay })
+  overlay.initScaleSettings(document.body, () => {
+    game.scene.getScene('world').scene.restart({ store, overlay })
+  })
   // 调试/测试句柄：冒烟脚本断言相机状态
   ;(window as unknown as Record<string, unknown>).__worldGame = game
 

@@ -1,5 +1,6 @@
 import { WORLD_H, WORLD_W } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import { updateAtmosphere } from './worldSceneAtmosphere'
 import { anchorFor } from './worldSceneMembers'
 import type { WorldButterfly, WorldSceneHost } from './worldSceneTypes'
@@ -59,8 +60,8 @@ const updateWorkshopTaskGlows = (scene: WorldSceneHost, time: number) => {
     view.taskGlow.setAlpha(buildingLight + taskLight)
     const taskScale = view.taskActive ? pulse : 0
     view.taskGlow.setScale(
-      VISUAL_SCALE.effect.workshopTaskGlow.baseX + taskScale * VISUAL_SCALE.effect.workshopTaskGlow.pulseX,
-      VISUAL_SCALE.effect.workshopTaskGlow.baseY + taskScale * VISUAL_SCALE.effect.workshopTaskGlow.pulseY,
+      scaleBy('effect', VISUAL_SCALE.effect.workshopTaskGlow.baseX + taskScale * VISUAL_SCALE.effect.workshopTaskGlow.pulseX),
+      scaleBy('effect', VISUAL_SCALE.effect.workshopTaskGlow.baseY + taskScale * VISUAL_SCALE.effect.workshopTaskGlow.pulseY),
     )
   }
 }
@@ -70,8 +71,8 @@ const updateWorkshopPads = (scene: WorldSceneHost, time: number) => {
     const pulse = 0.5 + 0.5 * Math.sin(time * Math.PI / p.halfPeriod + p.phase)
     p.img.setAlpha(0.12 + pulse * 0.10)
     p.img.setScale(
-      VISUAL_SCALE.effect.workshopPad.x + pulse * VISUAL_SCALE.effect.workshopPad.pulseX,
-      VISUAL_SCALE.effect.workshopPad.y,
+      scaleBy('effect', VISUAL_SCALE.effect.workshopPad.x + pulse * VISUAL_SCALE.effect.workshopPad.pulseX),
+      scaleBy('effect', VISUAL_SCALE.effect.workshopPad.y),
     )
   }
 }

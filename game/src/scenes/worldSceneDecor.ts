@@ -29,6 +29,7 @@ import {
   type ButterflyHome,
 } from '../world/map'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import type { DecoFn, NightGlowSpec, WorldSceneHost } from './worldSceneTypes'
 
 const makeDeco = (scene: WorldSceneHost): DecoFn => {
@@ -36,7 +37,7 @@ const makeDeco = (scene: WorldSceneHost): DecoFn => {
     const img = scene.add.image(x, y, key, frame)
     img.setOrigin(0.5, 0.9)
     // 环境图集使用 2x 运行时帧，默认缩回逻辑像素尺寸。
-    img.setScale(VISUAL_SCALE.prop.default)
+    img.setScale(scaleBy('prop', VISUAL_SCALE.prop.default))
     img.setDepth(y)
     return img
   }
@@ -62,7 +63,7 @@ const createFireflies = (scene: WorldSceneHost) => {
     const img = scene.add.image(150 + frnd() * (WORLD_W - 300), 150 + frnd() * (WORLD_H - 300), 'glow.png', 0)
     img.setBlendMode(Phaser.BlendModes.ADD)
     img.setTint(tints[i % 3])
-    img.setScale(VISUAL_SCALE.prop.firefly)
+    img.setScale(scaleBy('prop', VISUAL_SCALE.prop.firefly))
     img.setDepth(160000)
     img.setAlpha(0)
     scene.fireflies.push({ img, vx: (frnd() - 0.5) * 18, vy: (frnd() - 0.5) * 14, phase: frnd() * Math.PI * 2 })
@@ -83,7 +84,7 @@ const addButterfly = (
   )
   sprite.play('butterfly.png:loop')
   sprite.setTint(tint)
-  sprite.setScale(scale)
+  sprite.setScale(scaleBy('prop', scale))
   sprite.setDepth(95000)
   scene.butterflies.push({
     sprite,
@@ -102,7 +103,7 @@ const createButterflies = (scene: WorldSceneHost) => {
       rnd,
       home,
       BUTTERFLY_TINTS[i % BUTTERFLY_TINTS.length],
-      VISUAL_SCALE.prop.butterfly.homeMin + rnd() * VISUAL_SCALE.prop.butterfly.homeRange,
+      scaleBy('prop', VISUAL_SCALE.prop.butterfly.homeMin + rnd() * VISUAL_SCALE.prop.butterfly.homeRange),
     )
     if (i % 2 === 0) {
       addButterfly(
@@ -110,7 +111,7 @@ const createButterflies = (scene: WorldSceneHost) => {
         rnd,
         home,
         BUTTERFLY_TINTS[(i + 2) % BUTTERFLY_TINTS.length],
-        VISUAL_SCALE.prop.butterfly.evenMin + rnd() * VISUAL_SCALE.prop.butterfly.evenRange,
+        scaleBy('prop', VISUAL_SCALE.prop.butterfly.evenMin + rnd() * VISUAL_SCALE.prop.butterfly.evenRange),
       )
     }
   })
@@ -120,7 +121,7 @@ const createButterflies = (scene: WorldSceneHost) => {
       rnd,
       { ...pos, r: 46 },
       BUTTERFLY_TINTS[(i + 1) % BUTTERFLY_TINTS.length],
-      VISUAL_SCALE.prop.butterfly.spawn,
+      scaleBy('prop', VISUAL_SCALE.prop.butterfly.spawn),
     )
   })
 }
@@ -172,20 +173,26 @@ export const createLibraryCoreDecor = (scene: WorldSceneHost, deco: DecoFn) => {
   const aura = scene.add.image(center.x, center.y + 64, 'glow.png', 0)
   aura.setBlendMode(Phaser.BlendModes.ADD)
   aura.setTint(0xffcc66)
-  aura.setScale(VISUAL_SCALE.effect.libraryAura.x, VISUAL_SCALE.effect.libraryAura.y)
+  aura.setScale(
+    scaleBy('effect', VISUAL_SCALE.effect.libraryAura.x),
+    scaleBy('effect', VISUAL_SCALE.effect.libraryAura.y),
+  )
   aura.setDepth(center.y - 4)
   aura.setAlpha(0.2)
   scene.tweens.add({
     targets: aura,
     alpha: 0.34,
-    scaleX: VISUAL_SCALE.effect.libraryAura.pulseX,
-    scaleY: VISUAL_SCALE.effect.libraryAura.pulseY,
+    scaleX: scaleBy('effect', VISUAL_SCALE.effect.libraryAura.pulseX),
+    scaleY: scaleBy('effect', VISUAL_SCALE.effect.libraryAura.pulseY),
     duration: 2300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
   })
   const crown = scene.add.image(center.x, center.y - 72, 'glow.png', 0)
   crown.setBlendMode(Phaser.BlendModes.ADD)
   crown.setTint(0xfffbe0)
-  crown.setScale(VISUAL_SCALE.effect.libraryCrown.x, VISUAL_SCALE.effect.libraryCrown.y)
+  crown.setScale(
+    scaleBy('effect', VISUAL_SCALE.effect.libraryCrown.x),
+    scaleBy('effect', VISUAL_SCALE.effect.libraryCrown.y),
+  )
   crown.setDepth(center.y + 20)
   crown.setAlpha(0.18)
   scene.tweens.add({
@@ -236,9 +243,9 @@ const placeLibraryProps = (scene: WorldSceneHost, deco: DecoFn) => {
     const sparkle = scene.add.sprite(pos.x, pos.y, 'effect_sparkle.png', 0)
     sparkle.setTint([0xfff09e, 0xffffff, 0xc99cff, 0x9ed2ff][i % 4])
     sparkle.setScale(
-      i === LIBRARY_SPARKLE_POINTS.length - 1
+      scaleBy('prop', i === LIBRARY_SPARKLE_POINTS.length - 1
         ? VISUAL_SCALE.prop.sparkle.libraryCrown
-        : VISUAL_SCALE.prop.sparkle.library,
+        : VISUAL_SCALE.prop.sparkle.library),
     )
     sparkle.setDepth(94000)
     sparkle.setAlpha(0.76)
@@ -252,20 +259,26 @@ export const createSpawnDecor = (scene: WorldSceneHost, deco: DecoFn) => {
   const aura = scene.add.image(spawn.x, spawn.y + 32, 'glow.png', 0)
   aura.setBlendMode(Phaser.BlendModes.ADD)
   aura.setTint(0x60d8ff)
-  aura.setScale(VISUAL_SCALE.effect.spawnAura.x, VISUAL_SCALE.effect.spawnAura.y)
+  aura.setScale(
+    scaleBy('effect', VISUAL_SCALE.effect.spawnAura.x),
+    scaleBy('effect', VISUAL_SCALE.effect.spawnAura.y),
+  )
   aura.setDepth(spawn.y - 18)
   aura.setAlpha(0.16)
   scene.tweens.add({
     targets: aura,
     alpha: 0.26,
-    scaleX: VISUAL_SCALE.effect.spawnAura.pulseX,
-    scaleY: VISUAL_SCALE.effect.spawnAura.pulseY,
+    scaleX: scaleBy('effect', VISUAL_SCALE.effect.spawnAura.pulseX),
+    scaleY: scaleBy('effect', VISUAL_SCALE.effect.spawnAura.pulseY),
     duration: 1900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
   })
   const inner = scene.add.image(spawn.x, spawn.y - 8, 'glow.png', 0)
   inner.setBlendMode(Phaser.BlendModes.ADD)
   inner.setTint(0xffffff)
-  inner.setScale(VISUAL_SCALE.effect.spawnInner.x, VISUAL_SCALE.effect.spawnInner.y)
+  inner.setScale(
+    scaleBy('effect', VISUAL_SCALE.effect.spawnInner.x),
+    scaleBy('effect', VISUAL_SCALE.effect.spawnInner.y),
+  )
   inner.setDepth(spawn.y - 16)
   inner.setAlpha(0.12)
   scene.tweens.add({ targets: inner, angle: 360, duration: 12000, repeat: -1, ease: 'Linear' })
@@ -287,7 +300,7 @@ const addSpawnSparkles = (scene: WorldSceneHost, spawn: { x: number; y: number }
   for (const p of points) {
     const sparkle = scene.add.sprite(p.x, p.y, 'effect_sparkle.png', 0)
     sparkle.setTint(p.tint)
-    sparkle.setScale(VISUAL_SCALE.prop.sparkle.spawn)
+    sparkle.setScale(scaleBy('prop', VISUAL_SCALE.prop.sparkle.spawn))
     sparkle.setDepth(94000)
     sparkle.setAlpha(0.72)
     sparkle.play('effect_sparkle.png:loop')
@@ -303,13 +316,16 @@ export const createWorkshopBayDecor = (scene: WorldSceneHost) => {
     const pad = scene.add.image(pos.x, pos.y + 38, 'glow.png', 0)
     pad.setBlendMode(Phaser.BlendModes.ADD)
     pad.setTint(tint)
-    pad.setScale(VISUAL_SCALE.effect.workshopPad.x, VISUAL_SCALE.effect.workshopPad.y)
+    pad.setScale(
+      scaleBy('effect', VISUAL_SCALE.effect.workshopPad.x),
+      scaleBy('effect', VISUAL_SCALE.effect.workshopPad.y),
+    )
     pad.setDepth(pos.y - 8)
     pad.setAlpha(0.12)
     scene.workshopPads.push({ img: pad, phase: rnd() * Math.PI * 2, halfPeriod: 1800 + (i % 3) * 240 })
     const beacon = scene.add.sprite(pos.x + 34, pos.y - 42, 'effect_sparkle.png', 0)
     beacon.setTint(tint)
-    beacon.setScale(row === 0 ? VISUAL_SCALE.effect.beacon.upper : VISUAL_SCALE.effect.beacon.lower)
+    beacon.setScale(scaleBy('effect', row === 0 ? VISUAL_SCALE.effect.beacon.upper : VISUAL_SCALE.effect.beacon.lower))
     beacon.setDepth(94000)
     beacon.setAlpha(0.58)
     beacon.play('effect_sparkle.png:loop')
@@ -322,7 +338,7 @@ export const addStreetLampGlow = (scene: WorldSceneHost, lamp: Phaser.GameObject
     x: lamp.x,
     y: lamp.y - 44,
     color: 0xffe2a3,
-    scaleX: VISUAL_SCALE.effect.lampGlow.core,
+    scaleX: scaleBy('effect', VISUAL_SCALE.effect.lampGlow.core),
     base: 0.38,
     pulse: 0.05,
   })
@@ -330,9 +346,9 @@ export const addStreetLampGlow = (scene: WorldSceneHost, lamp: Phaser.GameObject
     x: lamp.x,
     y: lamp.y - 2,
     color: 0xffd18a,
-    scaleX: VISUAL_SCALE.effect.lampGlow.groundX,
+    scaleX: scaleBy('effect', VISUAL_SCALE.effect.lampGlow.groundX),
     base: 0.13,
-    scaleY: VISUAL_SCALE.effect.lampGlow.groundY,
+    scaleY: scaleBy('effect', VISUAL_SCALE.effect.lampGlow.groundY),
     pulse: 0.015,
   })
 }
@@ -341,7 +357,7 @@ export const addNightGlow = (scene: WorldSceneHost, spec: NightGlowSpec) => {
   const img = scene.add.image(spec.x, spec.y, 'glow.png', 0)
   img.setBlendMode(Phaser.BlendModes.ADD)
   img.setTint(spec.color)
-  img.setScale(spec.scaleX, spec.scaleY ?? spec.scaleX)
+  img.setScale(scaleBy('effect', spec.scaleX), scaleBy('effect', spec.scaleY ?? spec.scaleX))
   img.setDepth(155000)
   img.setAlpha(0)
   scene.nightGlows.push({ img, base: spec.base, pulse: spec.pulse ?? 0.12, phase: Math.random() * Math.PI * 2 })
@@ -351,7 +367,7 @@ export const spawnSmoke = (scene: WorldSceneHost, x: number, y: number) => {
   if (!scene.introDone) return
   const s = scene.smokePool.pop() ?? scene.add.sprite(0, 0, 'effect_smoke.png', 0)
   s.setPosition(x, y)
-    .setScale(VISUAL_SCALE.effect.smoke)
+    .setScale(scaleBy('effect', VISUAL_SCALE.effect.smoke))
     .setAlpha(1).setActive(true).setVisible(true).setDepth(98000)
   s.play('effect_smoke.png:loop')
   scene.tweens.add({
@@ -372,7 +388,7 @@ export const spawnPetal = (scene: WorldSceneHost, spot: { x: number; y: number; 
   const startY = spot.y - (34 + Math.random() * 18) * spot.scale
   const p = scene.petalPool.pop() ?? scene.add.sprite(0, 0, 'effect_petal.png', 0)
   p.setPosition(startX, startY)
-    .setScale(VISUAL_SCALE.effect.petal)
+    .setScale(scaleBy('effect', VISUAL_SCALE.effect.petal))
     .setAlpha(0.95).setActive(true).setVisible(true).setDepth(spot.y + 1)
   p.play('effect_petal.png:loop')
   const drift = (Math.random() - 0.5) * 30
@@ -394,7 +410,7 @@ export const createBuildings = (scene: WorldSceneHost) => {
   for (const def of FIXED_BUILDINGS) {
     const sprite = scene.add.sprite(def.pos.x, def.pos.y, def.sheet, 0)
     sprite.setOrigin(0.5, 0.55)
-    sprite.setScale(def.scale)
+    sprite.setScale(scaleBy('building', def.scale))
     sprite.setDepth(def.pos.y + sprite.displayHeight * 0.4)
     sprite.setInteractive({ pixelPerfect: true })
     sprite.setData('tooltip', () => buildingTooltipData(def.key, def.label, scene.snap))

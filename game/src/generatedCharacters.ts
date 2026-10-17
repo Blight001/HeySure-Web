@@ -180,28 +180,40 @@ const scanLastPoseBounds = (
   for (let y = 0; y < height - top; y++) for (let x = 0; x < width; x++) {
     const start = y * width + x
     if (visited[start] || pixels[start * 4 + 3] <= 20) continue
-    const stack = [start]; visited[start] = 1
-    let minX = x; let minY = y; let maxX = x; let maxY = y; let size = 0
-    while (stack.length) {
-      const index = stack.pop()!; const px = index % width; const py = Math.floor(index / width)
-      size++; minX = Math.min(minX, px); minY = Math.min(minY, py)
-      maxX = Math.max(maxX, px); maxY = Math.max(maxY, py)
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-        const nx = px + dx; const ny = py + dy
-        if (nx < 0 || ny < 0 || nx >= width || ny >= height - top) continue
-        const next = ny * width + nx
-        if (!visited[next] && pixels[next * 4 + 3] > 20) { visited[next] = 1; stack.push(next) }
-      }
-    }
-    if (size < 100) continue
-    const distance = Math.abs((minX + maxX) / 2 - cellWidth * 3.5)
+    const component = readAlphaComponent(pixels, width, height - top, start, visited)
+    if (component.size < 100) continue
+    const distance = Math.abs((component.bounds.x + component.bounds.w / 2) - cellWidth * 3.5)
     if (!best || distance < best.distance) best = {
       distance,
-      bounds: { x: minX, y: top + minY, w: maxX - minX + 1, h: maxY - minY + 1 },
+      bounds: { ...component.bounds, y: top + component.bounds.y },
     }
   }
   return best?.bounds ?? scanAlphaBounds(image, cellWidth * 3, top, cellWidth, height - top)
 }
+
+const readAlphaComponent = (
+  pixels: Uint8ClampedArray, width: number, height: number, start: number, visited: Uint8Array,
+): { size: number; bounds: Bounds } => {
+  const stack = [start]; visited[start] = 1
+  let minX = start % width; let minY = Math.floor(start / width)
+  let maxX = minX; let maxY = minY; let size = 0
+  while (stack.length) {
+    const index = stack.pop()!; const px = index % width; const py = Math.floor(index / width)
+    size++; minX = Math.min(minX, px); minY = Math.min(minY, py)
+    maxX = Math.max(maxX, px); maxY = Math.max(maxY, py)
+    for (const [dx, dy] of ALPHA_NEIGHBORS) {
+      const nx = px + dx; const ny = py + dy
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+      const next = ny * width + nx
+      if (!visited[next] && pixels[next * 4 + 3] > 20) { visited[next] = 1; stack.push(next) }
+    }
+  }
+  return { size, bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } }
+}
+
+const ALPHA_NEIGHBORS = [
+  [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1],
+] as const
 
 const layoutDirections = (file: CharacterFile, image: ImageSource): DirectionFrame[] => {
   const bounds = directionBounds(file, image)

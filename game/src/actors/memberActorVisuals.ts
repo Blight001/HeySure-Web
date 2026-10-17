@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { EMOTES } from '../assetManifest'
 import { speechPreview } from '../world/format'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import type { WorldMember } from '../world/store'
 import {
   BAG_DROP_Y,
@@ -30,14 +31,15 @@ export const applyAppearance = (actor: MemberActorHost, a: ActorAppearance) => {
     VISUAL_SCALE.character.logicalMax,
   )
   actor.logicalScale = scale
-  actor.sprite.setScale(scale * VISUAL_SCALE.character.display)
+  actor.sprite.setScale(scaleBy('character', scale * VISUAL_SCALE.character.display))
   actor.sprite.y = -(actor.sprite.displayHeight * 0.5) - 1
   positionNameTag(actor)
-  actor.bag.setScale(scale * VISUAL_SCALE.character.bag)
+  actor.bag.setScale(scaleBy('character', scale * VISUAL_SCALE.character.bag))
   applyBagSide(actor)
   actor.shadow.clear()
   actor.shadow.fillStyle(0x000000, 0.2)
-  actor.shadow.fillEllipse(0, 0, SHADOW_RX * 2 * scale, SHADOW_RY * 2 * scale)
+  const shadowScale = scaleBy('character', scale)
+  actor.shadow.fillEllipse(0, 0, SHADOW_RX * 2 * shadowScale, SHADOW_RY * 2 * shadowScale)
   applyAura(actor, a, scale)
 }
 
@@ -56,7 +58,10 @@ const applyAura = (actor: MemberActorHost, a: ActorAppearance, scale: number) =>
   actor.auraOn = auraColor !== null
   if (auraColor !== null) {
     actor.aura.setTint(auraColor)
-    actor.aura.setScale(VISUAL_SCALE.character.auraX * scale, VISUAL_SCALE.character.auraY * scale)
+    actor.aura.setScale(
+      scaleBy('character', VISUAL_SCALE.character.auraX * scale),
+      scaleBy('character', VISUAL_SCALE.character.auraY * scale),
+    )
     actor.aura.setVisible(true)
     return
   }

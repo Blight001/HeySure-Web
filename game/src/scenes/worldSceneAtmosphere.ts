@@ -5,6 +5,7 @@
 import Phaser from 'phaser'
 import { WORLD_W } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import type { WorldSceneHost } from './worldSceneTypes'
 
 interface CloudShadow {
@@ -78,7 +79,14 @@ const createCloudShadows = (scene: WorldSceneHost, reducedMotion: boolean): Clou
     { x: 1070, y: 710, ...VISUAL_SCALE.atmosphere.cloudShadows[2], speed: 0.00006, phase: 4.4 },
   ]
   return definitions.map(def => {
-    const img = scene.add.ellipse(def.x, def.y, def.width, def.height, 0x426579, 1)
+    const img = scene.add.ellipse(
+      def.x,
+      def.y,
+      scaleBy('atmosphere', def.width),
+      scaleBy('atmosphere', def.height),
+      0x426579,
+      1,
+    )
     img.setDepth(2).setBlendMode(Phaser.BlendModes.MULTIPLY).setAlpha(0)
     return { img, startX: def.x, startY: def.y, speed: reducedMotion ? 0 : def.speed, phase: def.phase }
   })
@@ -94,8 +102,8 @@ const createPondRipples = (scene: WorldSceneHost): PondRipple[] => {
     const ring = scene.add.ellipse(
       point.x,
       point.y,
-      VISUAL_SCALE.atmosphere.rippleSize.width,
-      VISUAL_SCALE.atmosphere.rippleSize.height,
+      scaleBy('atmosphere', VISUAL_SCALE.atmosphere.rippleSize.width),
+      scaleBy('atmosphere', VISUAL_SCALE.atmosphere.rippleSize.height),
     )
     ring.setStrokeStyle(1.2, 0xe8fbff, 1).setFillStyle(0xffffff, 0).setDepth(4).setAlpha(0)
     return { ring, phase: point.phase }
@@ -109,7 +117,7 @@ const createLightPools = (scene: WorldSceneHost): Phaser.GameObjects.Image[] => 
   ]
   return pools.map(pool => scene.add.image(pool.x, pool.y, 'glow.png', 0)
     .setTint(pool.tint)
-    .setScale(pool.scaleX, pool.scaleY)
+    .setScale(scaleBy('atmosphere', pool.scaleX), scaleBy('atmosphere', pool.scaleY))
     .setBlendMode(Phaser.BlendModes.ADD)
     .setDepth(3)
     .setAlpha(0))
@@ -141,7 +149,7 @@ const updateLightPools = (state: AtmosphereState, time: number, daylight: number
 const updateRipples = (state: AtmosphereState, time: number, daylight: number) => {
   for (const ripple of state.pondRipples) {
     const wave = (Math.sin(time / 740 + ripple.phase) + 1) * 0.5
-    const scale = VISUAL_SCALE.atmosphere.ripple.min + wave * VISUAL_SCALE.atmosphere.ripple.range
+    const scale = scaleBy('atmosphere', VISUAL_SCALE.atmosphere.ripple.min + wave * VISUAL_SCALE.atmosphere.ripple.range)
     ripple.ring.setScale(scale, scale)
     ripple.ring.setAlpha(daylight * (0.06 + wave * 0.16))
   }

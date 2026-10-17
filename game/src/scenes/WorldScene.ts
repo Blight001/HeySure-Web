@@ -86,6 +86,8 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
   dragHoveredDeviceId: string | null = null
   dragHoveredSpawn = false
   chatMemberId: number | null = null
+  private unsubscribeStore: (() => void) | null = null
+  private unsubscribeWorldEvents: (() => void) | null = null
 
   private readonly onParentMessage = (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return
@@ -122,11 +124,15 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
     attachClickAndDrag(this)
     createAmbientLife(this)
     window.addEventListener('message', this.onParentMessage)
-    this.store.subscribe(snap => applySnapshot(this, snap))
-    this.store.onEvent(ev => handleWorldEvent(this, ev))
+    this.unsubscribeStore = this.store.subscribe(snap => applySnapshot(this, snap))
+    this.unsubscribeWorldEvents = this.store.onEvent(ev => handleWorldEvent(this, ev))
     this.store.start()
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener('message', this.onParentMessage)
+      this.unsubscribeStore?.()
+      this.unsubscribeStore = null
+      this.unsubscribeWorldEvents?.()
+      this.unsubscribeWorldEvents = null
       this.store.stop()
     })
   }

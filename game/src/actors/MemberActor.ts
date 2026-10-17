@@ -9,6 +9,7 @@ import Phaser from 'phaser'
 import { EMOTES } from '../assetManifest'
 import { clampToWorld, type Point, type Rect } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import type { WorldMember } from '../world/store'
 import { tickMember } from './memberActorTick'
 import {
@@ -116,7 +117,10 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
     this.bagGlow = scene.add.image(start.x, start.y, 'glow.png', 0)
     this.bagGlow.setBlendMode(Phaser.BlendModes.ADD)
     this.bagGlow.setTint(0xffcf8a)
-    this.bagGlow.setScale(VISUAL_SCALE.character.bagGlowX, VISUAL_SCALE.character.bagGlowY)
+    this.bagGlow.setScale(
+      scaleBy('character', VISUAL_SCALE.character.bagGlowX),
+      scaleBy('character', VISUAL_SCALE.character.bagGlowY),
+    )
     this.bagGlow.setDepth(155050)
     this.bagGlow.setAlpha(0)
     this.bagGlow.setVisible(false)
@@ -143,7 +147,7 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
     this.nameTag.setY(spriteTop - this.nameTag.height - 5)
     this.add(this.nameTag)
     this.emote = scene.add.image(0, -84, 'emotes.png', 0)
-    this.emote.setScale(VISUAL_SCALE.effect.emote)
+    this.emote.setScale(scaleBy('effect', VISUAL_SCALE.effect.emote))
     this.emote.setVisible(false)
     this.emote.setY(this.nameTag.y - this.emote.displayHeight / 2 - 4)
     this.add(this.emote)

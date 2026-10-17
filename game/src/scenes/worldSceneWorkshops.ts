@@ -5,6 +5,7 @@ import {
   workshopSlotPos,
 } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import type { WorldMember, WorldSnapshot, WorldWorkshop } from '../world/store'
 import {
   OFFLINE_KEEP_MS,
@@ -148,12 +149,16 @@ export const applyWorkshopTexture = (scene: WorldSceneHost, view: WorkshopView) 
   if (view.textureKey !== key) bindWorkshopSprite(scene, view, key, customIconLoaded)
   view.sprite.setOrigin(0.5, WORKSHOP_BASE_ORIGIN_Y)
   if (customIconLoaded) {
-    const size = view.data.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
+    const size = scaleBy(
+      'building',
+      view.data.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE,
+    )
     setSpriteMaxDisplaySize(view.sprite, size)
   } else {
-    view.sprite.setScale(
+    view.sprite.setScale(scaleBy(
+      'building',
       view.data.type === 'workshop' ? VISUAL_SCALE.building.library : VISUAL_SCALE.building.workshop,
-    )
+    ))
   }
   view.sprite.setAlpha(view.offlineSince !== null || !view.data.online ? 0.62 : 1)
   syncWorkshopLabel(view)
@@ -248,7 +253,10 @@ const createWorkshopGlow = (
   const taskGlow = scene.add.image(pos.x, pos.y - 24, 'glow.png', 0)
   taskGlow.setBlendMode(Phaser.BlendModes.ADD)
   taskGlow.setTint(workshopGlowTintForType(w.type))
-  taskGlow.setScale(VISUAL_SCALE.effect.workshopTaskGlow.x, VISUAL_SCALE.effect.workshopTaskGlow.y)
+  taskGlow.setScale(
+    scaleBy('effect', VISUAL_SCALE.effect.workshopTaskGlow.x),
+    scaleBy('effect', VISUAL_SCALE.effect.workshopTaskGlow.y),
+  )
   taskGlow.setDepth(155100)
   taskGlow.setAlpha(0)
   return taskGlow
@@ -264,12 +272,13 @@ const createWorkshopSprite = (
   const sprite = scene.add.sprite(pos.x, pos.y, textureKey, 0)
   sprite.setOrigin(0.5, WORKSHOP_BASE_ORIGIN_Y)
   if (customIconLoaded) {
-    const size = w.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
+    const size = scaleBy('building', w.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE)
     setSpriteMaxDisplaySize(sprite, size)
   } else {
-    sprite.setScale(
+    sprite.setScale(scaleBy(
+      'building',
       w.type === 'workshop' ? VISUAL_SCALE.building.library : VISUAL_SCALE.building.workshop,
-    )
+    ))
   }
   sprite.setDepth(pos.y)
   sprite.setInteractive({ pixelPerfect: !customIconLoaded })

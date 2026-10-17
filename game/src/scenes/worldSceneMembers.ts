@@ -10,6 +10,7 @@ import {
   type Rect,
 } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import type { WorldEvent, WorldMember, WorldSnapshot } from '../world/store'
 import { burstSparkle, playSfx, revealWorld } from './worldSceneAmbient'
 import { postToDashboard, updateHud } from './worldSceneShared'
@@ -73,7 +74,7 @@ export const playMessenger = (
   if (!from || !to || from === to) return
   from.flashEmote('scroll', 1500)
   const envelope = scene.add.image(from.x, from.y - 36, 'envelope.png', 0)
-  envelope.setScale(VISUAL_SCALE.effect.envelope)
+  envelope.setScale(scaleBy('effect', VISUAL_SCALE.effect.envelope))
   envelope.setDepth(99500)
   playSfx(scene, 'ui_click', 0.3)
   const sx = from.x

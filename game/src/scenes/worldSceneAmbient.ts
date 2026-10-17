@@ -5,6 +5,7 @@ import { TILE, WORLD_H, WORLD_W, mulberry32 } from '../world/layout'
 import { generateGroundMap } from '../world/map'
 import { nightnessForHour, resolveWorldHour } from '../world/time'
 import { VISUAL_SCALE } from '../world/visualScale'
+import { scaleBy } from '../world/visualScaleRuntime'
 import { updateHud, worldFitZoom } from './worldSceneShared'
 import type { WorldSceneHost } from './worldSceneTypes'
 
@@ -41,11 +42,11 @@ const placeTrees = (
     const tree = scene.add.image(t.x, t.y, 'tree.png', t.variant)
     // Keep natural variation, but prevent landmark trees from overwhelming
     // characters and buildings when a high-resolution frame is used.
-    const displayScale = Phaser.Math.Clamp(
+    const displayScale = scaleBy('tree', Phaser.Math.Clamp(
       t.scale * VISUAL_SCALE.tree.display * VISUAL_SCALE.tree.rasterFactor,
       VISUAL_SCALE.tree.min,
       VISUAL_SCALE.tree.max,
-    )
+    ))
     tree.setOrigin(0.5, 0.94)
     tree.setScale(displayScale)
     tree.setFlipX(t.flip)
@@ -67,7 +68,7 @@ const placeBushes = (
     const bush = scene.add.image(b.x, b.y, 'bush.png', b.variant)
     bush.setOrigin(0.5, 0.9)
     // 灌木运行时帧提升为 2x，按逻辑尺寸缩回；树木单独放大以改善可读性。
-    bush.setScale(b.scale * VISUAL_SCALE.bush.rasterFactor * VISUAL_SCALE.bush.display)
+    bush.setScale(scaleBy('bush', b.scale * VISUAL_SCALE.bush.rasterFactor * VISUAL_SCALE.bush.display))
     bush.setFlipX(b.flip)
     bush.setDepth(b.y)
   }
@@ -137,7 +138,7 @@ export const burstSparkle = (scene: WorldSceneHost, x: number, y: number) => {
   for (let i = 0; i < 5; i++) {
     const s = scene.sparklePool.pop() ?? scene.add.sprite(0, 0, 'effect_sparkle.png', 0)
     s.setPosition(x + (Math.random() - 0.5) * 40, y + (Math.random() - 0.5) * 30)
-      .setScale(VISUAL_SCALE.effect.sparkle)
+      .setScale(scaleBy('effect', VISUAL_SCALE.effect.sparkle))
       .setActive(true).setVisible(true).setDepth(99000)
     s.play('effect_sparkle.png:loop')
     scene.time.delayedCall(600 + i * 150, () => {
@@ -304,7 +305,7 @@ const scatterClouds = (scene: WorldSceneHost, w: number, h: number) => {
       )
       cloud.setScrollFactor(0)
       cloud.setDepth(400000 + i)
-      cloud.setScale(VISUAL_SCALE.effect.cloud.min + rnd() * VISUAL_SCALE.effect.cloud.range)
+      cloud.setScale(scaleBy('effect', VISUAL_SCALE.effect.cloud.min + rnd() * VISUAL_SCALE.effect.cloud.range))
       cloud.setAlpha(0.94 + rnd() * 0.06)
       if (rnd() > 0.5) cloud.setFlipX(true)
       if (rnd() < 0.5) driftCloud(scene, cloud, rnd)
