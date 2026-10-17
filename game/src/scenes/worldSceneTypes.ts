@@ -71,7 +71,13 @@ export interface NightGlowSpec {
   pulse?: number
 }
 
-export type DecoFn = (key: string, x: number, y: number, frame?: number) => Phaser.GameObjects.Image
+export type DecoFn = (
+  key: string,
+  x: number,
+  y: number,
+  frame?: number,
+  layoutKey?: string,
+) => Phaser.GameObjects.Image
 
 /** Mutable WorldScene surface used by extracted scene modules. */
 export interface WorldSceneFields {
@@ -124,6 +130,8 @@ export interface WorldSceneFields {
   pinchStartDist: number
   pinchStartZoom: number
   pressedObj: Phaser.GameObjects.GameObject | null
+  /** 当前坐标编辑模式中正在拖动的素材；非空时相机不得跟随平移。 */
+  visualPositionDragObject: Phaser.GameObjects.GameObject | null
   dragHoveredDeviceId: string | null
   dragHoveredSpawn: boolean
   chatMemberId: number | null

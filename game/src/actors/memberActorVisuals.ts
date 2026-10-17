@@ -34,6 +34,7 @@ export const applyAppearance = (actor: MemberActorHost, a: ActorAppearance) => {
   actor.sprite.setScale(scaleBy('character', scale * VISUAL_SCALE.character.display))
   actor.sprite.y = -(actor.sprite.displayHeight * 0.5) - 1
   positionNameTag(actor)
+  actor.tokenBar?.setScale(scale)
   actor.bag.setScale(scaleBy('character', scale * VISUAL_SCALE.character.bag))
   applyBagSide(actor)
   actor.shadow.clear()
@@ -47,10 +48,24 @@ const positionNameTag = (actor: MemberActorHost) => {
   if (!actor.nameTag) return
   // 用实际渲染尺寸定位，避免切换高分辨率帧后名称与角色重叠。
   const spriteTop = actor.sprite.y - actor.sprite.displayHeight * actor.sprite.originY
-  actor.nameTag.setY(spriteTop - actor.nameTag.height - 5)
+  actor.nameTag.setY(spriteTop - actor.nameTag.displayHeight - 5)
   if (actor.emote) {
     actor.emote.setY(actor.nameTag.y - actor.emote.displayHeight / 2 - 4)
   }
+}
+
+/**
+ * World objects follow camera zoom, but the name should remain readable at a
+ * stable screen size. Keep the token bar as a normal world child so it scales
+ * together with the character instead of applying this inverse scale to it.
+ */
+export const syncNameTagScale = (actor: MemberActorHost) => {
+  const zoom = Math.max(actor.scene.cameras.main.zoom, 0.01)
+  const screenScale = 1 / zoom
+  if (Math.abs(actor.nameTag.scaleX - screenScale) < 0.001) return
+  actor.nameTag.setScale(screenScale)
+  positionNameTag(actor)
+  refreshTokenBar(actor)
 }
 
 const applyAura = (actor: MemberActorHost, a: ActorAppearance, scale: number) => {
@@ -141,6 +156,12 @@ export const refreshTokenBar = (actor: MemberActorHost) => {
   g.fillRect(x, y, TOKEN_BAR_W, TOKEN_BAR_H)
   g.fillStyle(color, 0.98)
   g.fillRect(x, y, Math.max(1, TOKEN_BAR_W * remainingRatio), TOKEN_BAR_H)
+}
+
+export const setTokenBarVisible = (actor: MemberActorHost, visible: boolean) => {
+  const shouldShow = visible && !actor.controlled && !actor.dying && actor.member.tokenLimit > 0
+  actor.tokenBar.setVisible(shouldShow)
+  if (shouldShow) refreshTokenBar(actor)
 }
 
 export const refreshSpeechBubble = (actor: MemberActorHost) => {

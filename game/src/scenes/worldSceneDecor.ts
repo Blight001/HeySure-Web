@@ -30,15 +30,28 @@ import {
 } from '../world/map'
 import { VISUAL_SCALE } from '../world/visualScale'
 import { scaleBy } from '../world/visualScaleRuntime'
+import { markVisualPositionObject } from '../world/visualPositionRuntime'
 import type { DecoFn, NightGlowSpec, WorldSceneHost } from './worldSceneTypes'
 
 const makeDeco = (scene: WorldSceneHost): DecoFn => {
+  const counts = new Map<string, number>()
   return (key, x, y, frame = 0) => {
     const img = scene.add.image(x, y, key, frame)
     img.setOrigin(0.5, 0.9)
     // 环境图集使用 2x 运行时帧，默认缩回逻辑像素尺寸。
     img.setScale(scaleBy('prop', VISUAL_SCALE.prop.default))
     img.setDepth(y)
+    const stem = key.replace(/\.png$/, '')
+    const index = counts.get(stem) ?? 0
+    counts.set(stem, index + 1)
+    markVisualPositionObject(img, {
+      key: `prop:${stem}:${index}`,
+      label: `${stem} ${index + 1}`,
+      source: 'prop',
+    })
+    img.setDepth(img.y)
+    img.setInteractive({ pixelPerfect: true })
+    scene.input.setDraggable(img)
     return img
   }
 }
@@ -415,6 +428,13 @@ export const createBuildings = (scene: WorldSceneHost) => {
     sprite.setInteractive({ pixelPerfect: true })
     sprite.setData('tooltip', () => buildingTooltipData(def.key, def.label, scene.snap))
     sprite.setData('buildingKey', def.key)
+    markVisualPositionObject(sprite, {
+      key: `building:${def.key}`,
+      label: def.label,
+      source: 'building',
+    })
+    sprite.setDepth(sprite.y + sprite.displayHeight * 0.4)
+    scene.input.setDraggable(sprite)
     scene.buildings.set(def.key, sprite)
   }
   scene.buildings.get('spawn')?.play('building_spawn.png:loop')

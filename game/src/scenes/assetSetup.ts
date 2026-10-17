@@ -19,8 +19,10 @@ export const createWorldAnims = (scene: Phaser.Scene) => {
   for (const sheet of SHEETS) {
     for (const [name, anim] of Object.entries(sheet.anims)) {
       if (anim.frames.length < 2) continue
+      const key = `${sheet.file}:${name}`
+      if (scene.anims.exists(key)) continue
       scene.anims.create({
-        key: `${sheet.file}:${name}`,
+        key,
         frames: scene.anims.generateFrameNumbers(sheet.file, { frames: anim.frames }),
         frameRate: anim.fps,
         repeat: anim.repeat ? -1 : 0,

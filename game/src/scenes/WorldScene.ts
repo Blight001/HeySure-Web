@@ -6,6 +6,12 @@ import Phaser from 'phaser'
 import type { MemberActor } from '../actors/MemberActor'
 import type { Overlay, TooltipData } from '../ui/overlay'
 import { WorldStore, type WorldSnapshot } from '../world/store'
+import {
+  applyVisualPositionEditMode,
+  clearVisualPositionRegistry,
+  isVisualPositionEditMode,
+  onVisualPositionEditModeChange,
+} from '../world/visualPositionRuntime'
 import { createWorldAnims, preloadWorldAssets } from './assetSetup'
 import { createAtmosphere } from './worldSceneAtmosphere'
 import {
@@ -83,11 +89,13 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
   pinchStartDist = 0
   pinchStartZoom = 1
   pressedObj: Phaser.GameObjects.GameObject | null = null
+  visualPositionDragObject: Phaser.GameObjects.GameObject | null = null
   dragHoveredDeviceId: string | null = null
   dragHoveredSpawn = false
   chatMemberId: number | null = null
   private unsubscribeStore: (() => void) | null = null
   private unsubscribeWorldEvents: (() => void) | null = null
+  private unsubscribeVisualPositionMode: (() => boolean) | null = null
 
   private readonly onParentMessage = (event: MessageEvent) => {
     if (event.origin !== window.location.origin) return
@@ -106,11 +114,66 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
     this.overlay = data.overlay
   }
 
+  /** Phaser restart 复用同一个 Scene 实例，必须清掉上一次运行的可变状态。 */
+  private resetForRestart() {
+    clearVisualPositionRegistry()
+    this.actors.clear()
+    this.workshops.clear()
+    this.deviceIconLoads.clear()
+    this.deviceIconFailures.clear()
+    this.buildings.clear()
+    this.memberPatrol.clear()
+    this.prevGeneration.clear()
+    this.clouds = []
+    this.waterTiles = []
+    this.waterFlip = false
+    this.lamps = []
+    this.butterflies = []
+    this.nightGlows = []
+    this.fireflies = []
+    this.nightGlowsVisible = false
+    this.butterfliesVisible = true
+    this.firefliesVisible = false
+    this.workshopPads = []
+    this.smokePool = []
+    this.sparklePool = []
+    this.petalPool = []
+    this.swayTrees = []
+    this.sakuraSpots = []
+    this.snap = null
+    this.groundLayer = null
+    this.nightOverlay = null
+    this.currentBgm = null
+    this.currentBgmIndex = -1
+    this.bgmAutoplayArmed = false
+    this.introDone = false
+    this.sceneReadyAt = 0
+    this.nightness = 0
+    this.worldHour = 12
+    this.nextPatrolUpdate = 0
+    this.lastTooltipTarget = null
+    this.lastTooltipData = null
+    this.camVx = 0
+    this.camVy = 0
+    this.camDragging = false
+    this.pinching = false
+    this.pinchStartDist = 0
+    this.pinchStartZoom = 1
+    this.pressedObj = null
+    this.visualPositionDragObject = null
+    this.dragHoveredDeviceId = null
+    this.dragHoveredSpawn = false
+  }
+
   preload() {
     preloadWorldAssets(this)
   }
 
   create() {
+    // Phaser reuses the Scene instance on `scene.restart()`. Reset the
+    // one-shot intro guard so a preview reload can hide its loading curtain
+    // again instead of leaving the stale "正在连接世界..." hint visible.
+    this.resetForRestart()
     createWorldAnims(this)
     createGround(this)
     createDecor(this)
@@ -122,6 +185,10 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
     createCloudCurtain(this)
     attachHover(this)
     attachClickAndDrag(this)
+    applyVisualPositionEditMode(this, isVisualPositionEditMode())
+    this.unsubscribeVisualPositionMode = onVisualPositionEditModeChange(enabled => {
+      applyVisualPositionEditMode(this, enabled)
+    })
     createAmbientLife(this)
     window.addEventListener('message', this.onParentMessage)
     this.unsubscribeStore = this.store.subscribe(snap => applySnapshot(this, snap))
@@ -133,6 +200,8 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
       this.unsubscribeStore = null
       this.unsubscribeWorldEvents?.()
       this.unsubscribeWorldEvents = null
+      this.unsubscribeVisualPositionMode?.()
+      this.unsubscribeVisualPositionMode = null
       this.store.stop()
     })
   }

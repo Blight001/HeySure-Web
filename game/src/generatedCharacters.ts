@@ -2,7 +2,7 @@ import { VISUAL_SCALE } from './world/visualScale'
 
 /**
  * ImageGen 人物 atlas 到 64 x 96、4 x 5 spritesheet 契约的适配层。
- * actions-v3 atlas 已包含真实步态与动作；v2 四方向图仍作为资源失败时的回退。
+ * actions-v3/v4 atlas 已包含真实步态与动作；v2 四方向图仍作为资源失败时的回退。
  */
 export const CHARACTER_FILES = {
   'char_member_blue.png': 'town-character-blue-v2.png',
@@ -17,11 +17,11 @@ type CharacterFile = keyof typeof CHARACTER_FILES
 type ImageSource = HTMLImageElement | HTMLCanvasElement
 
 const ACTION_FILES: Record<CharacterFile, string> = {
-  'char_member_blue.png': 'town-character-blue-actions-v3.png',
+  'char_member_blue.png': 'town-character-blue-actions-v4.png',
   'char_member_red.png': 'town-character-red-actions-v3.png',
   'char_member_amber.png': 'town-character-amber-actions-v3.png',
   'char_member_slate.png': 'town-character-slate-actions-v3.png',
-  'char_admin.png': 'town-character-admin-actions-v3.png',
+  'char_admin.png': 'town-character-admin-actions-v5.png',
   'char_librarian.png': 'town-character-librarian-actions-v3.png',
 }
 
@@ -47,7 +47,7 @@ const atlasUrls = import.meta.glob('../assets/town-character-*-v2.png', {
   query: '?url',
   import: 'default',
 }) as Record<string, string>
-const actionAtlasUrls = import.meta.glob('../assets/town-character-*-actions-v3.png', {
+const actionAtlasUrls = import.meta.glob('../assets/town-character-*-actions-v*.png', {
   eager: true,
   query: '?url',
   import: 'default',
@@ -57,6 +57,30 @@ const actionAtlasCache = new Map<string, Promise<HTMLImageElement>>()
 const sheetCache = new Map<string, Promise<HTMLCanvasElement>>()
 const boundsCache = new Map<string, Bounds[]>()
 const actionBoundsCache = new Map<string, Bounds[]>()
+
+/**
+ * ImageGen 的动作图集不是严格的等高网格：部分角色的脚/头发会跨过
+ * nominal height / 5 边界。固定用 height / 5 会把上一行的脚切到下一
+ * 行顶部（或反过来），所以为当前六套已生成素材记录实际行缝。值以
+ * 原始图高度为基准，运行时按实际加载高度同比例缩放；管理员 v5 使用独立
+ * 行缝，未知素材仍回退
+ * 到等高切分。
+ */
+const ACTION_ROW_CUTS: Partial<Record<CharacterFile, readonly number[]>> = {
+  'char_member_blue.png': [0, 305, 584, 870, 1142, 1402],
+  'char_member_red.png': [0, 284, 538, 803, 1081, 1402],
+  'char_member_amber.png': [0, 281, 544, 809, 1090, 1402],
+  'char_member_slate.png': [0, 261, 501, 747, 988, 1230],
+  'char_admin.png': [0, 285, 550, 820, 1098, 1402],
+  'char_librarian.png': [0, 286, 559, 840, 1117, 1402],
+}
+
+// The regenerated admin atlas has a deliberately narrow robe, but its wide
+// silhouette still needs a small vertical compensation to match the other
+// town characters without clipping the crown or cape.
+const ACTION_VERTICAL_STRETCH: Partial<Record<CharacterFile, number>> = {
+  'char_admin.png': 1.2,
+}
 
 const imageSize = (image: ImageSource) => ({
   width: image instanceof HTMLImageElement ? image.naturalWidth : image.width,
@@ -133,13 +157,32 @@ const renderActionSheet = (file: CharacterFile, image: ImageSource): HTMLCanvasE
   const maxWidth = Math.max(...walkBounds.map(item => item.w))
   const maxHeight = Math.max(...walkBounds.map(item => item.h))
   const scale = Math.min((FRAME_WIDTH - 4) / maxWidth, (FRAME_HEIGHT - 3) / maxHeight)
+  const frameCanvas = document.createElement('canvas')
+  frameCanvas.width = FRAME_WIDTH
+  frameCanvas.height = FRAME_HEIGHT
+  const frameCtx = frameCanvas.getContext('2d', { willReadFrequently: true })
+  if (!frameCtx) return canvas
+  frameCtx.imageSmoothingEnabled = false
   bounds.forEach((bound, frame) => {
     const frameScale = Math.min(scale, (FRAME_WIDTH - 4) / bound.w, (FRAME_HEIGHT - 4) / bound.h)
     const width = Math.max(1, Math.round(bound.w * frameScale))
-    const height = Math.max(1, Math.round(bound.h * frameScale))
+    const verticalStretch = frame < DIRECTIONS * 5 - 1 ? ACTION_VERTICAL_STRETCH[file] ?? 1 : 1
+    const height = Math.max(1, Math.round(bound.h * frameScale * verticalStretch))
     const x = (frame % DIRECTIONS) * FRAME_WIDTH + Math.round((FRAME_WIDTH - width) / 2)
-    const y = Math.floor(frame / DIRECTIONS) * FRAME_HEIGHT + FRAME_HEIGHT - 2 - height
-    ctx.drawImage(image, bound.x, bound.y, bound.w, bound.h, x, y, width, height)
+    const localX = Math.round((FRAME_WIDTH - width) / 2)
+    const localY = FRAME_HEIGHT - 2 - height
+    frameCtx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT)
+    frameCtx.drawImage(image, bound.x, bound.y, bound.w, bound.h, localX, localY, width, height)
+    const pixels = frameCtx.getImageData(0, 0, FRAME_WIDTH, FRAME_HEIGHT).data
+    let bottom = -1
+    for (let y = FRAME_HEIGHT - 1; y >= 0 && bottom < 0; y--) {
+      for (let px = 0; px < FRAME_WIDTH; px++) {
+        if (pixels[(y * FRAME_WIDTH + px) * 4 + 3] > 20) { bottom = y; break }
+      }
+    }
+    const row = Math.floor(frame / DIRECTIONS)
+    const baselineShift = frame < DIRECTIONS * 4 && bottom >= 0 ? FRAME_HEIGHT - 3 - bottom : 0
+    ctx.drawImage(frameCanvas, x - localX, row * FRAME_HEIGHT + baselineShift)
   })
   return canvas
 }
@@ -148,72 +191,81 @@ const actionBounds = (file: CharacterFile, image: ImageSource): Bounds[] => {
   const cached = actionBoundsCache.get(file)
   if (cached) return cached
   const { width, height } = imageSize(image)
-  const cellWidth = Math.floor(width / DIRECTIONS)
-  const cellHeight = Math.floor(height / 5)
-  if (!cellWidth || !cellHeight) throw new Error(`无效人物动作 atlas: ${file}`)
-  const bounds = Array.from({ length: DIRECTIONS * 5 }, (_, frame) => scanAlphaBounds(
-    image,
-    (frame % DIRECTIONS) * cellWidth,
-    Math.floor(frame / DIRECTIONS) * cellHeight,
-    cellWidth,
-    cellHeight,
-  ))
-  // Wide lying poses may reach left of the last cell; select that row component
-  // instead of clipping the head at the cell boundary.
-  bounds[bounds.length - 1] = scanLastPoseBounds(image, width, height, cellHeight, cellWidth)
+  const bounds = scanActionRows(file, image, width, height)
   actionBoundsCache.set(file, bounds)
   return bounds
 }
 
-const scanLastPoseBounds = (
-  image: ImageSource, width: number, height: number, cellHeight: number, cellWidth: number,
-): Bounds => {
-  const top = cellHeight * 4
+/**
+ * ImageGen occasionally adds transparent margins around individual cells, so
+ * width/4 slicing can split a character across two frames (blue v3 is one
+ * example). Group each row's occupied alpha columns instead of trusting the
+ * nominal grid boundaries, then restore row-major frame order. The union bbox
+ * keeps disconnected hair, hands, or props that belong to the same pose.
+ */
+const scanActionRows = (file: CharacterFile, image: ImageSource, width: number, height: number): Bounds[] => {
+  const fallbackWidth = Math.floor(width / DIRECTIONS)
+  const fallbackHeight = Math.floor(height / 5)
+  if (!fallbackWidth || !fallbackHeight) throw new Error('无效人物动作 atlas')
+  // Both v3 and v4 atlases can have feet/capes crossing nominal row seams;
+  // use the measured cuts for every known action atlas instead of splitting
+  // those pixels into the next frame.
+  const referenceCuts = ACTION_ROW_CUTS[file]
+  const cuts = referenceCuts?.map(cut => Math.round(cut * height / referenceCuts[referenceCuts.length - 1]))
+    ?? Array.from({ length: 6 }, (_, row) => Math.floor(row * height / 5))
+  return Array.from({ length: 5 }, (_, row) => {
+    const top = cuts[row]
+    const rowHeight = cuts[row + 1] - top
+    const candidates = scanAlphaProjection(image, 0, top, width, rowHeight)
+    if (candidates.length === DIRECTIONS) return candidates
+    return Array.from({ length: DIRECTIONS }, (_, column) => scanAlphaBounds(
+      image, column * fallbackWidth, top, fallbackWidth, rowHeight,
+    ))
+  }).flat()
+}
+
+const scanAlphaProjection = (
+  image: ImageSource, left: number, top: number, width: number, height: number,
+): Bounds[] => {
   const canvas = document.createElement('canvas')
-  canvas.width = width; canvas.height = height - top
+  canvas.width = width; canvas.height = height
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  if (!ctx) return scanAlphaBounds(image, cellWidth * 3, top, cellWidth, height - top)
-  ctx.drawImage(image, 0, top, width, height - top, 0, 0, width, height - top)
-  const pixels = ctx.getImageData(0, 0, width, height - top).data
-  const visited = new Uint8Array(width * (height - top))
-  let best: { distance: number; bounds: Bounds } | null = null
-  for (let y = 0; y < height - top; y++) for (let x = 0; x < width; x++) {
-    const start = y * width + x
-    if (visited[start] || pixels[start * 4 + 3] <= 20) continue
-    const component = readAlphaComponent(pixels, width, height - top, start, visited)
-    if (component.size < 100) continue
-    const distance = Math.abs((component.bounds.x + component.bounds.w / 2) - cellWidth * 3.5)
-    if (!best || distance < best.distance) best = {
-      distance,
-      bounds: { ...component.bounds, y: top + component.bounds.y },
-    }
+  if (!ctx) return []
+  ctx.drawImage(image, left, top, width, height, 0, 0, width, height)
+  const pixels = ctx.getImageData(0, 0, width, height).data
+  const runs: Array<[number, number]> = []
+  let start = -1
+  for (let x = 0; x <= width; x++) {
+    const occupied = x < width && columnHasAlpha(pixels, width, height, x)
+    if (occupied && start < 0) start = x
+    if (occupied || start < 0) continue
+    if (runs.length && start - runs[runs.length - 1][1] - 1 <= 24) runs[runs.length - 1][1] = x - 1
+    else runs.push([start, x - 1])
+    start = -1
   }
-  return best?.bounds ?? scanAlphaBounds(image, cellWidth * 3, top, cellWidth, height - top)
+  if (runs.length !== DIRECTIONS) return []
+  return runs.map(([runLeft, runRight]) => alphaBoundsInRange(
+    pixels, width, height, runLeft, runRight, left, top,
+  ))
 }
 
-const readAlphaComponent = (
-  pixels: Uint8ClampedArray, width: number, height: number, start: number, visited: Uint8Array,
-): { size: number; bounds: Bounds } => {
-  const stack = [start]; visited[start] = 1
-  let minX = start % width; let minY = Math.floor(start / width)
-  let maxX = minX; let maxY = minY; let size = 0
-  while (stack.length) {
-    const index = stack.pop()!; const px = index % width; const py = Math.floor(index / width)
-    size++; minX = Math.min(minX, px); minY = Math.min(minY, py)
-    maxX = Math.max(maxX, px); maxY = Math.max(maxY, py)
-    for (const [dx, dy] of ALPHA_NEIGHBORS) {
-      const nx = px + dx; const ny = py + dy
-      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
-      const next = ny * width + nx
-      if (!visited[next] && pixels[next * 4 + 3] > 20) { visited[next] = 1; stack.push(next) }
-    }
-  }
-  return { size, bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } }
+const columnHasAlpha = (pixels: Uint8ClampedArray, width: number, height: number, x: number): boolean => {
+  for (let y = 0; y < height; y++) if (pixels[(y * width + x) * 4 + 3] > 20) return true
+  return false
 }
 
-const ALPHA_NEIGHBORS = [
-  [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1],
-] as const
+const alphaBoundsInRange = (
+  pixels: Uint8ClampedArray, width: number, height: number,
+  left: number, right: number, offsetX: number, offsetY: number,
+): Bounds => {
+  let minX = right; let minY = height; let maxX = left; let maxY = -1
+  for (let y = 0; y < height; y++) for (let x = left; x <= right; x++) {
+    if (pixels[(y * width + x) * 4 + 3] <= 20) continue
+    minX = Math.min(minX, x); minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y)
+  }
+  return { x: offsetX + minX, y: offsetY + minY, w: maxX - minX + 1, h: maxY - minY + 1 }
+}
 
 const layoutDirections = (file: CharacterFile, image: ImageSource): DirectionFrame[] => {
   const bounds = directionBounds(file, image)

@@ -1,14 +1,16 @@
 import { WORLD_H, WORLD_W } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
 import { scaleBy } from '../world/visualScaleRuntime'
+import { isVisualPositionEditMode } from '../world/visualPositionRuntime'
 import { updateAtmosphere } from './worldSceneAtmosphere'
 import { anchorFor } from './worldSceneMembers'
 import type { WorldButterfly, WorldSceneHost } from './worldSceneTypes'
 
 export const updateWorldScene = (scene: WorldSceneHost, time: number, delta: number) => {
-  updatePatrolAnchors(scene, time)
+  const editingPositions = isVisualPositionEditMode()
+  if (!editingPositions) updatePatrolAnchors(scene, time)
   updateCameraInertia(scene)
-  updateActors(scene, time, delta)
+  if (!editingPositions) updateActors(scene, time, delta)
   updateWorkshopTaskGlows(scene, time)
   updateWorkshopPads(scene, time)
   updateSwayTrees(scene, time)
@@ -77,9 +79,14 @@ const updateWorkshopPads = (scene: WorldSceneHost, time: number) => {
   }
 }
 
+const TREE_SWAY_PERIOD_MS = 2200
+
 const updateSwayTrees = (scene: WorldSceneHost, time: number) => {
   for (const t of scene.swayTrees) {
-    t.img.setAngle(Math.sin(time / 1400 + t.phase) * t.amp)
+    // The sprite origin is planted at the roots; keep the sway slow and subtle
+    // so the small amount of movement at the root edge is not visually obvious.
+    const sway = Math.sin(time / TREE_SWAY_PERIOD_MS + t.phase) * t.amp * 0.55
+    t.img.setAngle(sway)
   }
 }
 

@@ -16,22 +16,31 @@ export const VISUAL_SCALE_GROUPS = [
   'atmosphere',
 ] as const
 
+/**
+ * 写入源码的默认素材比例覆盖值。
+ *
+ * 网页端调试面板会将当前值导出为同名代码块；提交后由运行时作为
+ * 没有浏览器临时覆盖值时的初始比例使用。
+ */
+export const VISUAL_SCALE_OVERRIDES = {
+  tree: 1.30,
+  bush: 1.20,
+  character: 0.75,
+  building: 0.75,
+  prop: 0.90,
+  effect: 1.80,
+  atmosphere: 0.90,
+} as const
+
 export type VisualScaleGroup = (typeof VISUAL_SCALE_GROUPS)[number]
 export type VisualScaleOverrides = Record<VisualScaleGroup, number>
 
-const STORAGE_KEY = 'heysure.world.visual-scale-overrides.v1'
+// v2 以本次写入的源码覆盖值为新基线，避免旧浏览器临时值覆盖已确认参数。
+const STORAGE_KEY = 'heysure.world.visual-scale-overrides.v2'
 const MIN_MULTIPLIER = 0.25
 const MAX_MULTIPLIER = 3
 
-const defaults = (): VisualScaleOverrides => ({
-  tree: 1,
-  bush: 1,
-  character: 1,
-  building: 1,
-  prop: 1,
-  effect: 1,
-  atmosphere: 1,
-})
+const defaults = (): VisualScaleOverrides => ({ ...VISUAL_SCALE_OVERRIDES })
 
 const clampMultiplier = (value: number): number => {
   if (!Number.isFinite(value)) return 1

@@ -16,9 +16,11 @@ Create a gorgeous cozy pixel-art game asset atlas. Genuine transparent backgroun
 
 ## 环境
 
-文件：`town-trees-v2.png`；1254 × 1254，2 列 × 2 行。
+文件：`town-trees.png`；1254 × 1254，2 列 × 2 行。
 
 橡树、云杉、白桦、樱花。树根锚点与原版一致。
+
+当前版本保留四种树的原构图并扩大透明安全边距。运行时由 `generatedAssets.ts` 按完整轮廓归一为 4 帧 192 × 288，避免图集象限接缝的溢出像素被误裁。
 
 最终提示词：
 
@@ -40,7 +42,7 @@ A single charming full-body pixel-art village gardener, chestnut hair, green ove
 
 ## 人物、地面与街道装饰同步（第二轮）
 
-六类 AI 人物全部使用 `town-character-{blue,red,amber,slate,admin,librarian}-v2.png` 的四方向原图；角色身份、皮肤 ID、32 × 48 帧尺寸保持原约定。`generatedCharacters.ts` 将上下左右各方向的身体与腿部分层，生成行走、眨眼、坐、跪、躺的 20 帧；外观设置预览也使用同一适配结果。人物提示词详见 [CHARACTER-PROMPTS.md](CHARACTER-PROMPTS.md)。
+六类 AI 人物全部使用 `town-character-{blue,red,amber,slate,admin,librarian}-v2.png` 的四方向原图；角色身份、皮肤 ID、32 × 48 帧尺寸保持原约定。动作 atlas 使用 `actions-v3/v4/v5` 的真实 4 × 5 帧，`generatedCharacters.ts` 逐帧扫描透明轮廓并归一到 64 × 96；管理员使用窄袍 v5 素材与轻微纵向补偿，避免宽袍等比缩放后显得偏矮。外观设置预览也使用同一适配结果。人物提示词详见 [CHARACTER-PROMPTS.md](CHARACTER-PROMPTS.md)。
 
 `town-ground-v2.png`：1254 × 1254、2 × 2，不透明草地 / 砂土 / 石板 / 水面纹理。`generatedTerrain.ts` 按既有 24 个瓦片索引适配为 256 × 96，保留道路、水面及场景碰撞语义；地表边缘作对齐，水面两帧加入细微涟漪。
 
@@ -50,7 +52,9 @@ A single charming full-body pixel-art village gardener, chestnut hair, green ove
 A seamless ground texture atlas for a cozy storybook 32-bit pixel RPG town, square image, exactly 2 by 2 equal square cells, no margins or grid borders. Top left: naturally mottled meadow grass, muted sage and moss green, very fine subtle blades, NO flowers. Top right: warm sandy earth footpath with tiny tan pebbles, softly textured. Bottom left: elegant pale limestone cobblestone paving, irregular rounded rectangular stones, narrow soft taupe joints, no rigid tile perimeter. Bottom right: clear softly rippling teal pond water, pale mint highlights, no shore. Perfect overhead orthographic material textures, evenly lit, fine readable pixel clusters, refined natural material detail, restrained contrast. All four squares individually seamless at their edges, entire canvas fully opaque edge to edge. No objects, characters, shadows, text, labels, frames, dividers or checkerboard.
 ```
 
-`town-props-v2.png`：1448 × 1086、4 × 3 透明图集。顺序为：板凳、熄灯路灯、亮灯路灯、路牌；绿灌木、浆果灌木、花灌木、方尖碑；学院旗帜、书台、工具挎包、薰衣草陶盆。`generatedProps.ts` 对应原素材键，路灯保留昼夜 0 / 1 帧，座椅保留原交互坐标。
+`town-decor.png`：2560 × 1024、5 × 2 透明图集。由 ImageGen 道具素材重新整理为板凳、熄灯路灯、亮灯路灯、路牌、方尖碑、学院旗帜、书台、工具挎包、薰衣草陶盆；`generatedProps.ts` 对应原素材键，路灯保留昼夜 0 / 1 帧，座椅保留原交互坐标。
+
+`town-bushes.png`：2172 × 724、3 × 1 透明图集。顺序为圆灌木、浆果灌木、花灌木；三帧使用完整轮廓归一为 128 × 96，独立于旧道具图集，避免跨格溢出造成裁剪。
 
 装饰最终提示词：
 

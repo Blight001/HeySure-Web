@@ -8,6 +8,15 @@ import {
   visualScaleRange,
   VISUAL_SCALE_GROUPS,
 } from '../world/visualScaleRuntime'
+import {
+  exportVisualPositionOverrides,
+  getVisualPositionOverrides,
+  isVisualPositionEditMode,
+  onVisualPositionChange,
+  onVisualPositionEditModeChange,
+  resetVisualPositionOverrides,
+  setVisualPositionEditMode,
+} from '../world/visualPositionRuntime'
 
 const GROUP_LABELS: Record<VisualScaleGroup, string> = {
   tree: '树木',
@@ -51,6 +60,10 @@ export class ScaleSettingsPanel {
   private readonly values = new Map<VisualScaleGroup, HTMLSpanElement>()
   private readonly inputs = new Map<VisualScaleGroup, HTMLInputElement>()
   private readonly unsubscribe: () => boolean
+  private readonly unsubscribePosition: () => boolean
+  private readonly unsubscribePositionMode: () => boolean
+  private positionModeButton: HTMLButtonElement | null = null
+  private previewTimer: number | null = null
   private open = false
 
   constructor(options: ScaleSettingsOptions) {
@@ -74,11 +87,15 @@ export class ScaleSettingsPanel {
     this.createRows()
     this.status = document.createElement('div')
     this.status.className = 'gw-scale-status'
-    this.status.textContent = '调整后点击“应用预览”，再复制参数给开发者。'
+    this.status.textContent = '拖动后会自动刷新预览；也可以点击“应用预览”立即刷新。'
     this.root.appendChild(this.status)
     options.parent.appendChild(this.root)
     this.unsubscribe = onVisualScaleChange(value => this.renderValues(value))
+    this.unsubscribePosition = onVisualPositionChange(value => this.renderPositionSummary(value))
+    this.unsubscribePositionMode = onVisualPositionEditModeChange(enabled => this.renderPositionMode(enabled))
     this.renderValues(getVisualScaleOverrides())
+    this.renderPositionSummary(getVisualPositionOverrides())
+    this.renderPositionMode(isVisualPositionEditMode())
     this.preview = options.onPreview
   }
 
@@ -116,6 +133,10 @@ export class ScaleSettingsPanel {
       .gw-scale-range { width:100%; accent-color:#8fb8ff; cursor:ew-resize; }
       .gw-scale-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
       .gw-scale-actions .primary { border-color:#648dd4; color:#dce8ff; }
+      .gw-scale-position { border-top:1px solid #414858; margin-top:12px; padding-top:10px; }
+      .gw-scale-position-title { color:#f0c060; font-weight:bold; margin-bottom:4px; }
+      .gw-scale-position-help { color:#8a90a0; margin-bottom:7px; }
+      .gw-scale-actions .active { border-color:#76cf9d; color:#b8f2cd; background:#203d32; }
       .gw-scale-status { color:#8a90a0; margin-top:9px; min-height:2.8em; }
     `
     document.head.appendChild(style)
@@ -136,7 +157,7 @@ export class ScaleSettingsPanel {
     header.append(title, close)
     const subtitle = document.createElement('div')
     subtitle.className = 'gw-scale-subtitle'
-    subtitle.textContent = '拖动倍率后应用预览；1.00 = 当前源码比例。只保存在本浏览器。'
+    subtitle.textContent = '拖动倍率会自动应用预览；1.00 = 当前源码比例。只保存在本浏览器。'
     const wrap = document.createElement('div')
     wrap.append(header, subtitle)
     return wrap
@@ -163,7 +184,8 @@ export class ScaleSettingsPanel {
       input.value = String(current[group])
       input.oninput = () => {
         setVisualScaleOverride(group, Number(input.value))
-        this.status.textContent = '参数已暂存；点击“应用预览”查看画面，或直接复制参数。'
+        this.status.textContent = '正在自动应用预览…'
+        this.schedulePreview()
       }
       row.append(label, input)
       this.body.appendChild(row)
@@ -174,13 +196,43 @@ export class ScaleSettingsPanel {
     actions.className = 'gw-scale-actions'
     actions.append(
       this.actionButton('应用预览', 'primary', () => {
-        this.status.textContent = '正在重新加载世界场景…'
-        this.preview()
+        this.previewNow()
       }),
       this.actionButton('复制参数', '', () => void this.copy()),
-      this.actionButton('恢复默认', '', () => resetVisualScaleOverrides()),
+      this.actionButton('恢复默认', '', () => {
+        resetVisualScaleOverrides()
+        this.previewNow()
+      }),
     )
     this.body.appendChild(actions)
+    this.createPositionControls()
+  }
+
+  private createPositionControls() {
+    const section = document.createElement('div')
+    section.className = 'gw-scale-position'
+    const title = document.createElement('div')
+    title.className = 'gw-scale-position-title'
+    title.textContent = '素材坐标编辑'
+    const help = document.createElement('div')
+    help.className = 'gw-scale-position-help'
+    help.textContent = '开启后可直接拖动画面素材；坐标按世界像素记录。'
+    const actions = document.createElement('div')
+    actions.className = 'gw-scale-actions'
+    const modeButton = this.actionButton('坐标编辑：关', '', () => {
+      setVisualPositionEditMode(!isVisualPositionEditMode())
+    })
+    this.positionModeButton = modeButton
+    actions.append(
+      modeButton,
+      this.actionButton('复制坐标', '', () => void this.copyPositions()),
+      this.actionButton('恢复坐标', '', () => {
+        resetVisualPositionOverrides()
+        this.previewNow()
+      }),
+    )
+    section.append(title, help, actions)
+    this.body.appendChild(section)
   }
 
   private actionButton(text: string, className: string, onClick: () => void) {
@@ -209,13 +261,56 @@ export class ScaleSettingsPanel {
       : '复制失败，请手动选择浏览器剪贴板权限后重试。'
   }
 
+  private async copyPositions() {
+    const copied = await copyText(exportVisualPositionOverrides())
+    this.status.textContent = copied
+      ? '坐标已复制。把 VISUAL_POSITION_OVERRIDES 内容发给开发者即可写回地图配置。'
+      : '坐标复制失败，请手动选择浏览器剪贴板权限后重试。'
+  }
+
+  private renderPositionSummary(value: Record<string, { x: number; y: number }>) {
+    const count = Object.keys(value).length
+    if (isVisualPositionEditMode()) return
+    this.status.textContent = count > 0
+      ? `已记录 ${count} 个素材坐标；开启“坐标编辑”可继续拖动。`
+      : '尚未记录素材坐标；开启“坐标编辑”后拖动素材。'
+  }
+
+  private renderPositionMode(enabled: boolean) {
+    const button = this.positionModeButton
+    if (!button) return
+    button.textContent = enabled ? '坐标编辑：开' : '坐标编辑：关'
+    button.classList.toggle('active', enabled)
+    this.status.textContent = enabled
+      ? '坐标编辑已开启：拖动素材后点击“复制坐标”。'
+      : '坐标编辑已关闭。'
+  }
+
+  private schedulePreview() {
+    if (this.previewTimer !== null) window.clearTimeout(this.previewTimer)
+    this.previewTimer = window.setTimeout(() => {
+      this.previewTimer = null
+      this.previewNow()
+    }, 260)
+  }
+
+  private previewNow() {
+    if (this.previewTimer !== null) window.clearTimeout(this.previewTimer)
+    this.previewTimer = null
+    this.preview()
+    this.status.textContent = '预览已触发；场景连接完成后画面会更新。'
+  }
+
   private toggle(force?: boolean) {
     this.open = force ?? !this.open
     this.root.hidden = !this.open
   }
 
   destroy() {
+    if (this.previewTimer !== null) window.clearTimeout(this.previewTimer)
     this.unsubscribe()
+    this.unsubscribePosition()
+    this.unsubscribePositionMode()
     this.root.remove()
   }
 }

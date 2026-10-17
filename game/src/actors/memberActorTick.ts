@@ -16,6 +16,7 @@ import {
   stopBob,
   syncBag,
   syncDepth,
+  syncNameTagScale,
 } from './memberActorVisuals'
 
 export const isOnScreen = (actor: MemberActorHost): boolean => {
@@ -27,6 +28,7 @@ export const isOnScreen = (actor: MemberActorHost): boolean => {
 }
 
 export const tickMember = (actor: MemberActorHost, time: number, deltaMs: number): boolean => {
+  syncNameTagScale(actor)
   syncBag(actor)
   refreshBagGlow(actor, time)
   if (actor.auraOn) actor.aura.setAlpha(0.42 + 0.16 * Math.sin(time / 420 + actor.auraPhase))

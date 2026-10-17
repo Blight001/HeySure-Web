@@ -11,6 +11,7 @@ import {
 } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
 import { scaleBy } from '../world/visualScaleRuntime'
+import { isVisualPositionEditMode, markVisualPositionObject } from '../world/visualPositionRuntime'
 import type { WorldEvent, WorldMember, WorldSnapshot } from '../world/store'
 import { burstSparkle, playSfx, revealWorld } from './worldSceneAmbient'
 import { postToDashboard, updateHud } from './worldSceneShared'
@@ -160,6 +161,12 @@ const spawnMember = (scene: WorldSceneHost, m: WorldMember): MemberActor => {
     ? { x: lockedSeat.x - 2, y: lockedSeat.y - 2, w: 4, h: 4 }
     : zone
   const actor = new MemberActor(scene, m, skin, initZone)
+  markVisualPositionObject(actor, {
+    key: `character:${m.id}`,
+    label: m.name || `角色 ${m.id}`,
+    source: 'character',
+    preserveDraggable: true,
+  })
   scene.input.setDraggable(actor)
   scene.actors.set(m.id, actor)
   return actor
@@ -170,6 +177,7 @@ const applyMemberAnchor = (scene: WorldSceneHost, actor: MemberActor, m: WorldMe
   const lockedSeat = getLockedBenchSeat(scene, m)
   const zone = anchorFor(scene, m, scene.time.now)
   actor.setMember(m, skin)
+  if (isVisualPositionEditMode()) return
   if (lockedSeat) {
     actor.lockSitOnBench(lockedSeat)
     return

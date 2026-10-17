@@ -18,6 +18,7 @@ const initialUiPreferences = getInitialUiPreferences()
 const isDarkStartup = initialUiPreferences.themeMode === 'dark'
 
 const showLogin = ref(false)
+const loginInitialMode = ref<'login' | 'register'>('login')
 const showHostRescue = ref(false)
 const adminLoginRequested = ref(false)
 const openAdminOnDashboard = ref(false)
@@ -106,13 +107,15 @@ const onLoginSuccess = (userData: User, token: string, agentSocketUrl?: string) 
   showLogin.value = false
 }
 
-const openLogin = (adminOnly = false) => {
+const openLogin = (adminOnly = false, initialMode: 'login' | 'register' = 'login') => {
   adminLoginRequested.value = adminOnly
+  loginInitialMode.value = initialMode
   showLogin.value = true
 }
 
 const closeLogin = () => {
   adminLoginRequested.value = false
+  loginInitialMode.value = 'login'
   showLogin.value = false
 }
 
@@ -264,7 +267,7 @@ onBeforeUnmount(() => {
         <HomePage
           v-if="!user"
           @login="openLogin()"
-          @register="openLogin()"
+          @register="openLogin(false, 'register')"
           @admin="showHostRescue = true"
         />
         <GodDashboard
@@ -284,6 +287,7 @@ onBeforeUnmount(() => {
     <LoginModal
       :show="showLogin"
       :admin-only="adminLoginRequested"
+      :initial-mode="loginInitialMode"
       @close="closeLogin"
       @login-success="onLoginSuccess"
     />

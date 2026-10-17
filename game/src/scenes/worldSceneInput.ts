@@ -1,7 +1,15 @@
 import Phaser from 'phaser'
 import { MemberActor } from '../actors/MemberActor'
+import { setTokenBarVisible } from '../actors/memberActorVisuals'
 import { applyMemberDropBinding } from '../world/bindings'
 import { VISUAL_SCALE } from '../world/visualScale'
+import {
+  isVisualPositionEditMode,
+  onVisualPositionEditModeChange,
+  onVisualPositionChange,
+  recordVisualPosition,
+  visualPositionTargetFor,
+} from '../world/visualPositionRuntime'
 import { memberTooltipData } from '../ui/worldText'
 import type { TooltipData } from '../ui/overlay'
 import { playSfx } from './worldSceneAmbient'
@@ -20,6 +28,7 @@ export const attachHover = (scene: WorldSceneHost) => {
   scene.input.on(
     'gameobjectover',
     (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
+      if (obj instanceof MemberActor) setTokenBarVisible(obj, true)
       scene.lastTooltipTarget = obj
       scene.lastTooltipData = tooltipFor(obj)
       showTooltipAt(scene, pointer)
@@ -36,6 +45,9 @@ export const attachHover = (scene: WorldSceneHost) => {
     },
   )
   scene.input.on('gameobjectout', () => {
+    if (scene.lastTooltipTarget instanceof MemberActor) {
+      setTokenBarVisible(scene.lastTooltipTarget, false)
+    }
     scene.lastTooltipTarget = null
     scene.lastTooltipData = null
     scene.overlay.hideTooltip()
@@ -56,30 +68,54 @@ const tooltipFor = (obj: Phaser.GameObjects.GameObject): TooltipData | null => {
 
 export const attachClickAndDrag = (scene: WorldSceneHost) => {
   scene.input.dragDistanceThreshold = 8
+  const unsubscribePositionMode = onVisualPositionEditModeChange(enabled => {
+    if (!enabled && scene.visualPositionDragObject) {
+      onVisualPositionDragEnd(scene, scene.visualPositionDragObject)
+    }
+  })
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribePositionMode)
+  const unsubscribePosition = onVisualPositionChange(() => {
+    for (const view of scene.workshops.values()) {
+      view.taskGlow.setPosition(view.sprite.x, view.sprite.y - 24)
+      positionWorkshopLabel(view)
+      view.sprite.setDepth(view.sprite.y)
+    }
+  })
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribePosition)
   scene.input.on(
     'gameobjectdown',
     (_ptr: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
       scene.pressedObj = obj
-      if (obj instanceof MemberActor && !obj.isDying) obj.flashClick()
+      if (!isVisualPositionEditMode() && obj instanceof MemberActor && !obj.isDying) obj.flashClick()
     },
   )
   scene.input.on(
     'gameobjectup',
     (pointer: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
+      if (isVisualPositionEditMode()) {
+        scene.pressedObj = null
+        return
+      }
       onWorldObjectUp(scene, pointer, obj)
     },
   )
   scene.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-    onWorldDragStart(scene, obj)
+    if (isVisualPositionEditMode()) onVisualPositionDragStart(scene, obj)
+    else onWorldDragStart(scene, obj)
   })
   scene.input.on(
     'drag',
     (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject, dragX: number, dragY: number) => {
-      onWorldDrag(scene, obj, dragX, dragY)
+      if (isVisualPositionEditMode()) onVisualPositionDrag(scene, obj, dragX, dragY)
+      else onWorldDrag(scene, obj, dragX, dragY)
     },
   )
   scene.input.on('dragend', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
-    onWorldDragEnd(scene, obj)
+    if (isVisualPositionEditMode()) onVisualPositionDragEnd(scene, obj)
+    else onWorldDragEnd(scene, obj)
+  })
+  scene.input.on(Phaser.Input.Events.GAME_OUT, () => {
+    if (scene.visualPositionDragObject) onVisualPositionDragEnd(scene, scene.visualPositionDragObject)
   })
 }
 
@@ -165,6 +201,75 @@ const onWorldDrag = (
     workshop.taskGlow.setPosition(dragX, dragY - 24)
     positionWorkshopLabel(workshop)
   }
+}
+
+/** 坐标编辑优先于成员绑定/作坊排序拖拽；dragX/dragY 已是世界坐标。 */
+const onVisualPositionDragStart = (scene: WorldSceneHost, obj: Phaser.GameObjects.GameObject) => {
+  const target = visualPositionTargetFor(obj)
+  if (!target) return
+  if (obj instanceof MemberActor && obj.isDying) return
+  scene.visualPositionDragObject = obj
+  scene.pressedObj = null
+  scene.overlay.hideTooltip()
+  if (obj instanceof MemberActor) obj.beginDrag()
+  const workshop = workshopForObject(scene, obj)
+  if (workshop) {
+    workshop.sprite.setDepth(160000)
+    workshop.label.setDepth(160012)
+  } else {
+    const positioned = obj as Phaser.GameObjects.GameObject & {
+      setDepth?: (value: number) => unknown
+    }
+    positioned.setDepth?.(160000)
+  }
+}
+
+const onVisualPositionDrag = (
+  scene: WorldSceneHost,
+  obj: Phaser.GameObjects.GameObject,
+  dragX: number,
+  dragY: number,
+) => {
+  if (scene.visualPositionDragObject !== obj) return
+  const positioned = obj as Phaser.GameObjects.GameObject & {
+    x: number
+    y: number
+    setPosition?: (x: number, y: number) => unknown
+    setDepth?: (value: number) => unknown
+  }
+  positioned.setPosition?.(dragX, dragY)
+  positioned.x = dragX
+  positioned.y = dragY
+  const workshop = workshopForObject(scene, obj)
+  if (workshop) {
+    workshop.taskGlow.setPosition(dragX, dragY - 24)
+    positionWorkshopLabel(workshop)
+    return
+  }
+  positioned.setDepth?.(dragY)
+}
+
+const onVisualPositionDragEnd = (scene: WorldSceneHost, obj: Phaser.GameObjects.GameObject) => {
+  if (scene.visualPositionDragObject !== obj) return
+  const positioned = obj as Phaser.GameObjects.GameObject & {
+    x: number
+    y: number
+    setDepth?: (value: number) => unknown
+  }
+  const x = positioned.x
+  const y = positioned.y
+  if (obj instanceof MemberActor && obj.isDragging) {
+    obj.endDrag()
+    obj.setPosition(x, y)
+  }
+  recordVisualPosition(positioned)
+  const workshop = workshopForObject(scene, obj)
+  if (workshop) {
+    workshop.sprite.setDepth(y)
+    workshop.taskGlow.setPosition(x, y - 24)
+    positionWorkshopLabel(workshop)
+  } else positioned.setDepth?.(obj instanceof MemberActor ? obj.y + 1 : y)
+  scene.visualPositionDragObject = null
 }
 
 const onWorldDragEnd = (scene: WorldSceneHost, obj: Phaser.GameObjects.GameObject) => {

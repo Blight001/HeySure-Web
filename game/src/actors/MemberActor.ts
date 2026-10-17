@@ -33,6 +33,7 @@ import {
   refreshBag,
   refreshEmote,
   refreshTokenBar,
+  setTokenBarVisible,
   showReceivedMessage,
   stopBob,
   syncMemberFromSnapshot,
@@ -131,6 +132,8 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
 
   private attachHud(scene: Phaser.Scene, member: WorldMember) {
     this.tokenBar = scene.add.graphics()
+    this.tokenBar.setScale(this.logicalScale)
+    setTokenBarVisible(this, false)
     this.add(this.tokenBar)
     this.nameTag = scene.add.text(0, -56, member.name || `#${member.id}`, {
       fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
@@ -185,6 +188,7 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
     stopBob(this)
     this.sprite.stop()
     this.sprite.setFrame(0)
+    setTokenBarVisible(this, false)
     this.setAlpha(0.85)
   }
 
@@ -330,6 +334,7 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
     if (this.dying) return
     this.dying = true
     stopBob(this)
+    setTokenBarVisible(this, false)
     this.target = null
     this.emote.setFrame(EMOTES.skull)
     this.emote.setVisible(true)

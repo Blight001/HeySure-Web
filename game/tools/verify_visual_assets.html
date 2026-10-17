@@ -81,6 +81,14 @@
           check(directions.size === 4, `${file} 四方向不同`, `${directions.size}/4`)
           const motion = [0, 1, 2, 3].every(row => new Set(frames.slice(row * 4, row * 4 + 4).map(hash)).size >= 3)
           check(motion, `${file} 每行走路至少 3 种帧`)
+          const walkBoxes = frames.slice(0, 16).map(frame => bbox(frame, 64, 96))
+          const baselines = walkBoxes.filter(Boolean).map(box => box.bottom)
+          const baselineStable = baselines.length === 16 && Math.max(...baselines) - Math.min(...baselines) <= 2
+          check(baselineStable, `${file} 行走脚底基线稳定`, baselines.length ? `${Math.min(...baselines)}-${Math.max(...baselines)}` : 'empty')
+          if (file === 'char_admin.png') {
+            const minHeight = Math.min(...walkBoxes.filter(Boolean).map(box => box.height))
+            check(minHeight >= 80, `${file} 行走视觉身高`, `${minHeight}px min`)
+          }
           const lying = bbox(frames[19], 64, 96)
           const safe = lying && lying.width > lying.height && lying.left > 0 && lying.top > 0 && lying.right < 63 && lying.bottom < 95
           check(Boolean(safe), `${file} 躺姿横向且留边`, lying ? `${lying.width}×${lying.height}` : 'empty')
@@ -88,7 +96,7 @@
       }
 
       const verifyProps = async () => {
-        const entries = Object.entries(GENERATED_ASSETS).filter(([, def]) => def.file === 'town-props-v2.png')
+        const entries = Object.entries(GENERATED_ASSETS).filter(([, def]) => def.file === 'town-decor.png')
         for (const [file, def] of entries) try {
           const canvas = await loadGeneratedAssetImage(file)
           preview(document.querySelector('#props'), file, canvas)
@@ -96,9 +104,41 @@
           const sizeOk = expected && canvas.width === expected.frameWidth * expected.columns && canvas.height === expected.frameHeight * expected.rows
           check(Boolean(sizeOk), `${file} manifest 尺寸`, `${canvas.width}×${canvas.height}`)
           check(nonEmpty(frameData(canvas, 0, 0, canvas.width, canvas.height)), `${file} 非空`)
+          const frameBoxes = Array.from({ length: def.frameColumns * def.frameRows }, (_, index) => bbox(
+            frameData(canvas, (index % def.frameColumns) * def.frameWidth, Math.floor(index / def.frameColumns) * def.frameHeight, def.frameWidth, def.frameHeight),
+            def.frameWidth, def.frameHeight,
+          ))
+          const framesSafe = frameBoxes.every(box => box && box.left > 0 && box.top > 0 && box.right < def.frameWidth - 1 && box.bottom < def.frameHeight - 1)
+          check(Boolean(framesSafe), `${file} 帧完整留边`, frameBoxes.map(box => box ? `${box.width}×${box.height}` : 'empty').join(' / '))
           if (file === 'lamp.png') check(hash(frameData(canvas, 0, 0, 48, 112)) !== hash(frameData(canvas, 48, 0, 48, 112)), 'lamp 两帧不同')
           if (file === 'bench.png') check(nonEmpty(frameData(canvas, 0, 0, 80, 48)), 'newbench 非空')
         } catch (error) { check(false, `${file} missing`, error.message) }
+      }
+
+      const verifyTrees = async () => {
+        try {
+          const canvas = await loadGeneratedAssetImage('tree.png')
+          preview(document.querySelector('#props'), 'tree.png', canvas)
+          check(canvas.width === 768 && canvas.height === 288, 'tree.png 运行时尺寸', `${canvas.width}×${canvas.height}`)
+          const frames = Array.from({ length: 4 }, (_, index) => bbox(
+            frameData(canvas, index * 192, 0, 192, 288), 192, 288,
+          ))
+          const safe = frames.every(box => box && box.left > 0 && box.top > 0 && box.right < 191 && box.bottom < 287)
+          check(Boolean(safe), 'tree.png 四帧完整留边', frames.map(box => box ? `${box.width}×${box.height}` : 'empty').join(' / '))
+        } catch (error) { check(false, 'tree.png missing', error.message) }
+      }
+
+      const verifyBushes = async () => {
+        try {
+          const canvas = await loadGeneratedAssetImage('bush.png')
+          preview(document.querySelector('#props'), 'bush.png', canvas)
+          check(canvas.width === 384 && canvas.height === 96, 'bush.png 运行时尺寸', `${canvas.width}×${canvas.height}`)
+          const frames = Array.from({ length: 3 }, (_, index) => bbox(
+            frameData(canvas, index * 128, 0, 128, 96), 128, 96,
+          ))
+          const safe = frames.every(box => box && box.left > 0 && box.top > 0 && box.right < 127 && box.bottom < 95 && box.width >= 96)
+          check(Boolean(safe), 'bush.png 三帧完整留边', frames.map(box => box ? `${box.width}×${box.height}` : 'empty').join(' / '))
+        } catch (error) { check(false, 'bush.png missing', error.message) }
       }
 
       const edgeMatch = (data, index) => {
@@ -121,7 +161,7 @@
         } catch (error) { check(false, 'terrain missing', error.message) }
       }
 
-      await Promise.all([Promise.all(Object.keys(CHARACTER_FILES).map(verifyCharacter)), verifyProps(), verifyTerrain()])
+      await Promise.all([Promise.all(Object.keys(CHARACTER_FILES).map(verifyCharacter)), verifyProps(), verifyTrees(), verifyBushes(), verifyTerrain()])
       summary.textContent = failed ? `验收完成：${failed} 项失败` : '验收完成：全部通过'
       summary.className = failed ? 'fail' : 'pass'
     </script>

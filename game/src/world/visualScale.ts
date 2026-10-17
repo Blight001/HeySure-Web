@@ -64,7 +64,7 @@ export const VISUAL_SCALE = {
     },
   },
   prop: {
-    /** town-props-v2.png 的装饰帧是 2x，默认缩回逻辑像素。 */
+    /** town-decor.png 的装饰帧是 2x，默认缩回逻辑像素。 */
     default: 0.5,
     firefly: 0.45,
     butterfly: {

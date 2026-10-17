@@ -1,8 +1,8 @@
-import { GENERATED_PROPS } from './generatedProps'
+import { BUSH_CELLS, GENERATED_PROPS } from './generatedProps'
 
 /**
- * 将 ImageGen atlas 规范化为现有 Phaser spritesheet 的运行时适配层。
- * 原 PNG 保持不动；调用方加载失败时可直接回退到旧素材。
+ * 将当前 ImageGen atlas 规范化为现有 Phaser spritesheet 的运行时适配层。
+ * 树木、灌木与装饰已使用整理后的独立命名图集。
  */
 export interface GeneratedAssetDef {
   /** ImageGen atlas 文件名。 */
@@ -44,7 +44,7 @@ export const GENERATED_ASSETS: Readonly<Record<string, GeneratedAssetDef>> = {
   'building_workshop_android.png': building('android', 128, 160, 4, 'green'),
   'building_spawn.png': building('spawn', 128, 128, 4, 'water'),
   'tree.png': {
-    file: 'town-trees-v2.png', columns: 2, rows: 2, cells: TREE_CELLS, cell: 'oak',
+    file: 'town-trees.png', columns: 2, rows: 2, cells: TREE_CELLS, cell: 'oak',
     // Keep a 2x logical raster so the 32px world can downscale with nearest
     // sampling without first throwing away the atlas detail.
     frameCells: ['oak', 'pine', 'birch', 'sakura'], frameWidth: 192, frameHeight: 288,
@@ -146,6 +146,8 @@ export const renderGeneratedSheet = (file: string, image: RenderableImage): HTML
 interface Bounds { x: number; y: number; w: number; h: number }
 
 const boundsCache = new Map<string, Bounds>()
+const atlasBoundsCache = new Map<string, Readonly<Record<string, Bounds>>>()
+const bushBoundsCache = new Map<string, Readonly<Record<string, Bounds>>>()
 
 const sourceCellForFrame = (def: GeneratedAssetDef, frame: number): string =>
   def.frameCells?.[frame] ?? def.cell
@@ -154,6 +156,8 @@ const alphaBounds = (image: RenderableImage, def: GeneratedAssetDef, cell: strin
   const cacheKey = `${def.file}:${cell}`
   const cached = boundsCache.get(cacheKey)
   if (cached) return cached
+  if (def.file === 'town-trees.png') return cacheAtlasBounds(def.file, cell, treeAlphaBounds(image))
+  if (def.file === 'town-bushes.png') return cacheAtlasBounds(def.file, cell, bushAlphaBounds(image))
   const { width, height } = sourceSize(image)
   const cellWidth = Math.floor(width / def.columns)
   const cellHeight = Math.floor(height / def.rows)
@@ -175,6 +179,124 @@ const alphaBounds = (image: RenderableImage, def: GeneratedAssetDef, cell: strin
   }
   if (maxX < 0) return cacheBounds(cacheKey, { x: left, y: top, w: cellWidth, h: cellHeight })
   return cacheBounds(cacheKey, { x: left + minX, y: top + minY, w: maxX - minX + 1, h: maxY - minY + 1 })
+}
+
+const cacheAtlasBounds = (file: string, cell: string, all: Readonly<Record<string, Bounds>>): Bounds => {
+  const bounds = all[cell]
+  if (!bounds) throw new Error(`无效生成 atlas 帧: ${cell}`)
+  return cacheBounds(`${file}:${cell}`, bounds)
+}
+
+const ATLAS_NEIGHBORS = [
+  [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1],
+] as const
+
+type AtlasComponent = { area: number; bounds: Bounds }
+
+const atlasAlphaPixels = (image: RenderableImage, width: number, height: number): Uint8ClampedArray => {
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('无法读取生成素材 alpha')
+  ctx.drawImage(image, 0, 0, width, height)
+  return ctx.getImageData(0, 0, width, height).data
+}
+
+const atlasComponentAt = (
+  start: number,
+  width: number,
+  height: number,
+  pixels: Uint8ClampedArray,
+  visited: Uint8Array,
+): AtlasComponent => {
+  const stack = [start]; visited[start] = 1
+  const startX = start % width; const startY = Math.floor(start / width)
+  let area = 0; let minX = startX; let minY = startY; let maxX = startX; let maxY = startY
+  while (stack.length) {
+    const index = stack.pop()!; const px = index % width; const py = Math.floor(index / width)
+    area++; minX = Math.min(minX, px); minY = Math.min(minY, py); maxX = Math.max(maxX, px); maxY = Math.max(maxY, py)
+    for (const [dx, dy] of ATLAS_NEIGHBORS) {
+      const nx = px + dx; const ny = py + dy
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+      const next = ny * width + nx
+      if (!visited[next] && pixels[next * 4 + 3] > 20) { visited[next] = 1; stack.push(next) }
+    }
+  }
+  return { area, bounds: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } }
+}
+
+const atlasComponents = (image: RenderableImage, width: number, height: number): AtlasComponent[] => {
+  const pixels = atlasAlphaPixels(image, width, height); const visited = new Uint8Array(width * height)
+  const components: AtlasComponent[] = []
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const start = y * width + x
+    if (visited[start] || pixels[start * 4 + 3] <= 20) continue
+    const component = atlasComponentAt(start, width, height, pixels, visited)
+    if (component.area > 1000) components.push(component)
+  }
+  return components
+}
+
+const nearestAtlasComponent = (
+  candidates: readonly AtlasComponent[],
+  used: ReadonlySet<number>,
+  targetX: number,
+  targetY: number,
+): number => {
+  let best = -1; let bestDistance = Number.POSITIVE_INFINITY
+  candidates.forEach((candidate, candidateIndex) => {
+    if (used.has(candidateIndex)) return
+    const centerX = candidate.bounds.x + candidate.bounds.w / 2
+    const centerY = candidate.bounds.y + candidate.bounds.h / 2
+    const distance = Math.hypot(centerX - targetX, centerY - targetY)
+    if (distance < bestDistance) { best = candidateIndex; bestDistance = distance }
+  })
+  return best
+}
+
+const assignAtlasComponents = (
+  candidates: readonly AtlasComponent[],
+  width: number,
+  height: number,
+  cells: Readonly<Record<string, number>>,
+  columns: number,
+  rows: number,
+): Readonly<Record<string, Bounds>> => {
+  const result: Record<string, Bounds> = {}; const used = new Set<number>()
+  for (const [cell, index] of Object.entries(cells)) {
+    const targetX = (index % columns + 0.5) * width / columns
+    const targetY = (Math.floor(index / columns) + 0.5) * height / rows
+    const best = nearestAtlasComponent(candidates, used, targetX, targetY)
+    if (best < 0) throw new Error(`无法定位生成 atlas 帧: ${cell}`)
+    used.add(best); result[cell] = candidates[best].bounds
+  }
+  return result
+}
+
+/**
+ * Tree atlas cells slightly overlap at the old quadrant seams. Detect the four
+ * complete silhouettes globally, then assign each to the nearest intended cell
+ * center; this prevents seam pixels from becoming clipped edges or stray roots.
+ */
+const treeAlphaBounds = (image: RenderableImage): Readonly<Record<string, Bounds>> => {
+  const { width, height } = sourceSize(image); const cacheKey = `${width}x${height}`
+  const cached = atlasBoundsCache.get(`tree:${cacheKey}`)
+  if (cached) return cached
+  const candidates = atlasComponents(image, width, height).sort((a, b) => b.area - a.area).slice(0, 4)
+  if (candidates.length !== 4) throw new Error('树木 atlas 未检测到四个完整轮廓')
+  const frozen = Object.freeze(assignAtlasComponents(candidates, width, height, TREE_CELLS, 2, 2))
+  atlasBoundsCache.set(`tree:${cacheKey}`, frozen)
+  return frozen
+}
+
+const bushAlphaBounds = (image: RenderableImage): Readonly<Record<string, Bounds>> => {
+  const { width, height } = sourceSize(image); const cacheKey = `${width}x${height}`
+  const cached = bushBoundsCache.get(cacheKey)
+  if (cached) return cached
+  const candidates = atlasComponents(image, width, height).sort((a, b) => b.area - a.area).slice(0, 3)
+  if (candidates.length !== 3) throw new Error('灌木 atlas 未检测到三个完整轮廓')
+  const frozen = Object.freeze(assignAtlasComponents(candidates, width, height, BUSH_CELLS, 3, 1))
+  bushBoundsCache.set(cacheKey, frozen)
+  return frozen
 }
 
 const cacheBounds = (key: string, bounds: Bounds): Bounds => (boundsCache.set(key, bounds), bounds)

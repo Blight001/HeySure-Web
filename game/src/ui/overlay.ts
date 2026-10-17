@@ -28,6 +28,7 @@ export class Overlay {
   private loadingHintEl: HTMLDivElement | null = null
   private bgmBtn: HTMLButtonElement | null = null
   private sfxBtn: HTMLButtonElement | null = null
+  private soundControls: HTMLDivElement | null = null
   private bgmMuted = false
   private sfxMuted = false
   private soundOnChange: ((state: { bgmMuted: boolean; sfxMuted: boolean }) => void) | null = null
@@ -179,11 +180,13 @@ export class Overlay {
     initial: { bgmMuted: boolean; sfxMuted: boolean },
     onChange: (state: { bgmMuted: boolean; sfxMuted: boolean }) => void,
   ) {
+    this.soundControls?.remove()
     const wrap = document.createElement('div')
     wrap.className = 'gw-sound-controls'
     this.bgmMuted = initial.bgmMuted
     this.sfxMuted = initial.sfxMuted
     this.soundOnChange = onChange
+    this.soundControls = wrap
 
     const bgmBtn = document.createElement('button')
     bgmBtn.type = 'button'

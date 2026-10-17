@@ -6,6 +6,11 @@ import {
 } from '../world/layout'
 import { VISUAL_SCALE } from '../world/visualScale'
 import { scaleBy } from '../world/visualScaleRuntime'
+import {
+  isVisualPositionEditMode,
+  markVisualPositionObject,
+  positionBy,
+} from '../world/visualPositionRuntime'
 import type { WorldMember, WorldSnapshot, WorldWorkshop } from '../world/store'
 import {
   OFFLINE_KEEP_MS,
@@ -240,7 +245,16 @@ const createWorkshopView = (scene: WorldSceneHost, w: WorldWorkshop): WorkshopVi
   }
   sprite.setData('tooltip', () => workshopTooltip(scene, view))
   sprite.setData('deviceId', w.deviceId)
-  if (w.type !== 'workshop') scene.input.setDraggable(sprite)
+  markVisualPositionObject(sprite, {
+    key: w.type === 'workshop' ? 'building:library' : `workshop:${w.deviceId}`,
+    group: 'building',
+    label: w.type === 'workshop' ? '图书馆' : workshopDisplayName(w),
+    source: w.type === 'workshop' ? 'building' : 'workshop',
+    preserveDraggable: w.type !== 'workshop',
+  })
+  if (w.type !== 'workshop' || isVisualPositionEditMode()) scene.input.setDraggable(sprite)
+  view.taskGlow.setPosition(sprite.x, sprite.y - 24)
+  positionWorkshopLabel(view)
   if (!w.online) sprite.setTint(w.lifecycle === 'waiting' ? 0xb9c4d8 : 0x8a8a8a)
   return view
 }
@@ -393,9 +407,12 @@ export const relayoutWorkshopSlots = (scene: WorldSceneHost) => {
   views.forEach((view, slot) => {
     view.slot = slot
     const pos = workshopSlotPos(slot)
-    view.sprite.setPosition(pos.x, pos.y)
-    view.sprite.setDepth(pos.y)
-    view.taskGlow.setPosition(pos.x, pos.y - 24)
+    const key = view.data.type === 'workshop' ? 'building:library' : `workshop:${view.data.deviceId}`
+    const next = positionBy(key, view.data.type === 'workshop' ? LIBRARY_DEVICE_POS : pos)
+    view.sprite.setPosition(next.x, next.y)
+    view.sprite.setDepth(next.y)
+    view.taskGlow.setPosition(next.x, next.y - 24)
+    positionWorkshopLabel(view)
     applyWorkshopTexture(scene, view)
   })
 }

@@ -6,6 +6,7 @@ import { generateGroundMap } from '../world/map'
 import { nightnessForHour, resolveWorldHour } from '../world/time'
 import { VISUAL_SCALE } from '../world/visualScale'
 import { scaleBy } from '../world/visualScaleRuntime'
+import { markVisualPositionObject } from '../world/visualPositionRuntime'
 import { updateHud, worldFitZoom } from './worldSceneShared'
 import type { WorldSceneHost } from './worldSceneTypes'
 
@@ -38,7 +39,7 @@ const placeTrees = (
   scene: WorldSceneHost,
   trees: { x: number; y: number; variant: number; scale: number; flip: boolean }[],
 ) => {
-  for (const t of trees) {
+  for (const [index, t] of trees.entries()) {
     const tree = scene.add.image(t.x, t.y, 'tree.png', t.variant)
     // Keep natural variation, but prevent landmark trees from overwhelming
     // characters and buildings when a high-resolution frame is used.
@@ -51,12 +52,20 @@ const placeTrees = (
     tree.setScale(displayScale)
     tree.setFlipX(t.flip)
     tree.setDepth(t.y)
+    markVisualPositionObject(tree, {
+      key: `tree:${index}`,
+      label: `树木 ${index + 1}`,
+      source: 'tree',
+    })
+    tree.setDepth(tree.y)
+    tree.setInteractive({ pixelPerfect: true })
+    scene.input.setDraggable(tree)
     scene.swayTrees.push({
       img: tree,
       phase: (t.x * 0.037 + t.y * 0.021) % (Math.PI * 2),
       amp: t.variant === TREE_VARIANTS.pine ? 0.55 : 1.1,
     })
-    if (t.variant === TREE_VARIANTS.sakura) scene.sakuraSpots.push({ x: t.x, y: t.y, scale: displayScale })
+    if (t.variant === TREE_VARIANTS.sakura) scene.sakuraSpots.push({ x: tree.x, y: tree.y, scale: displayScale })
   }
 }
 
@@ -64,13 +73,21 @@ const placeBushes = (
   scene: WorldSceneHost,
   bushes: { x: number; y: number; variant: number; scale: number; flip: boolean }[],
 ) => {
-  for (const b of bushes) {
+  for (const [index, b] of bushes.entries()) {
     const bush = scene.add.image(b.x, b.y, 'bush.png', b.variant)
     bush.setOrigin(0.5, 0.9)
     // 灌木运行时帧提升为 2x，按逻辑尺寸缩回；树木单独放大以改善可读性。
     bush.setScale(scaleBy('bush', b.scale * VISUAL_SCALE.bush.rasterFactor * VISUAL_SCALE.bush.display))
     bush.setFlipX(b.flip)
     bush.setDepth(b.y)
+    markVisualPositionObject(bush, {
+      key: `bush:${index}`,
+      label: `灌木 ${index + 1}`,
+      source: 'bush',
+    })
+    bush.setDepth(bush.y)
+    bush.setInteractive({ pixelPerfect: true })
+    scene.input.setDraggable(bush)
   }
 }
 

@@ -9,6 +9,7 @@ import { usePopupZIndex } from '@/composables/usePopupZIndex'
 const props = defineProps<{
   show: boolean
   adminOnly?: boolean
+  initialMode?: 'login' | 'register'
 }>()
 
 const zIndex = usePopupZIndex(() => props.show)
@@ -60,7 +61,8 @@ watch(
   () => props.show,
   async (visible) => {
     if (!visible) return
-    if (props.adminOnly) isLoginMode.value = true
+    // 每次打开都从调用方指定的入口开始；否则首页“注册”会沿用默认登录态。
+    isLoginMode.value = props.adminOnly || props.initialMode !== 'register'
     error.value = ''
     try {
       authConfig.value = await authApi.getAuthConfig()

@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { WORLD_H, WORLD_W } from '../world/layout'
+import { isVisualPositionEditMode } from '../world/visualPositionRuntime'
 import { worldFitZoom, worldMinZoom, WORLD_MAX_ZOOM } from './worldSceneShared'
 import type { WorldSceneHost } from './worldSceneTypes'
 
@@ -40,6 +41,12 @@ const onCamPointerDown = (
   drag: CamDragState,
   p: Phaser.Input.Pointer,
 ) => {
+  if (isVisualPositionEditMode()) {
+    scene.camDragging = false
+    scene.camVx = 0
+    scene.camVy = 0
+    return
+  }
   if (twoPointersDown(scene)) {
     beginPinch(scene, cam)
     return
@@ -64,7 +71,14 @@ const dragCamera = (
   drag: CamDragState,
   p: Phaser.Input.Pointer,
 ) => {
-  if (!scene.camDragging || !p.isDown || scene.draggingActor || scene.draggingWorkshop) {
+  if (
+    isVisualPositionEditMode()
+    || scene.visualPositionDragObject
+    || !scene.camDragging
+    || !p.isDown
+    || scene.draggingActor
+    || scene.draggingWorkshop
+  ) {
     return
   }
   const dx = (p.x - drag.lastX) / cam.zoom

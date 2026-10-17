@@ -106,11 +106,13 @@ game/
     world/bindings.ts ← 拖拽绑定/解绑动作：作坊、端侧 agent 的写接口适配
     world/layout.ts ← 地图尺寸 / 建筑坐标 / 锚区矩形 / 作坊插槽
     world/visualScale.ts ← 世界素材统一显示比例（树木 / 灌木 / 角色 / 建筑 / 装饰 / 特效）
+    world/visualPositionRuntime.ts ← 网页端坐标编辑临时覆盖、拖拽记录与参数导出
     world/map.ts    ← 地表网格生成 / 道路广场 / 树木与装饰坐标配置
     world/skins.ts  ← 角色→皮肤映射（普通成员按 id 哈希确定性取色，可被 WorldActorMeta 覆盖）
     world/time.ts   ← 北京时间 / 调试小时 / 昼夜深度等时间规则
     world/workshops.ts ← 作坊贴图、活跃态、保留时长、交互距离等规则
     ui/overlay.ts   ← DOM 覆盖层：tooltip + HUD
+    ui/scaleSettings.ts ← 网页端素材比例/坐标调试按钮、拖拽滑杆与参数复制
     ui/drawer.ts    ← 底部信息面板外壳：标签页容器、头像区、通用 DOM 小件
     ui/drawer/      ← 面板功能模块：成员、作坊、建筑视图 + 面板类型、样式、转义工具
       actions.ts    ← 抽屉写操作适配层：把 REST API 绑定成 DrawerActions
@@ -130,7 +132,7 @@ game/
 `generated*.ts` 中的帧尺寸/素材生成适配属于资源契约，不需要为显示比例而修改。
 
 网页端也提供临时调试入口：点击世界左下角 **“⚙ 素材设置”**，拖动各类素材的
-倍率滑杆，点击“应用预览”重新加载世界场景确认效果，再点击“复制参数”把
+倍率滑杆会自动重新加载世界场景预览（也可点击“应用预览”立即刷新），再点击“复制参数”把
 `VISUAL_SCALE_OVERRIDES` 代码块发回开发者。覆盖值只保存在当前浏览器的
 `localStorage`，不会自动改写源码；确认比例后再把复制内容合并回
 `src/world/visualScale.ts`，并点击“恢复默认”清除临时覆盖。
