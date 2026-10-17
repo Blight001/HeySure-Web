@@ -5,7 +5,7 @@ import { stripMarkdownFormatting } from '@/utils/chatMarkdown'
 const props = defineProps<{
   text: string
   plainTextMode?: boolean
-  mentionTokens?: Array<{ token: string; type: 'mcp' | 'file'; detail?: string }>
+  mentionTokens?: Array<{ token: string; type: 'mcp' | 'file' | 'skill'; detail?: string }>
 }>()
 
 const escapeHtml = (raw: string) => String(raw || '')
@@ -25,8 +25,10 @@ const highlightMentions = (html: string) => {
     const escapedToken = escapeHtml(mention.token)
     const visibleLabel = escapedToken.startsWith('@') ? escapedToken.slice(1) : escapedToken
     const title = escapeHtml(mention.detail || '')
-    const type = mention.type === 'file' ? 'file' : 'mcp'
-    const className = mention.type === 'mcp' ? 'md-mention md-mention-mcp' : 'md-mention md-mention-file'
+        const type = mention.type === 'file' ? 'file' : mention.type === 'skill' ? 'skill' : 'mcp'
+        const className = mention.type === 'mcp'
+          ? 'md-mention md-mention-mcp'
+          : mention.type === 'skill' ? 'md-mention md-mention-skill' : 'md-mention md-mention-file'
     return result.replace(
       new RegExp(`${escapeRegExp(escapedToken)}(?![\\w.+/\\-])`, 'g'),
       `<span class="${className}" data-mention-label="${visibleLabel}" data-mention-type="${type}" data-mention-detail="${title}">${visibleLabel}</span>`,
@@ -429,12 +431,20 @@ const plainRenderedHtml = computed(() => highlightMentions(escapeHtml(plainTextC
   color: rgb(2 132 199);
 }
 
+.markdown-text :deep(.md-mention-skill) {
+  color: rgb(124 58 237);
+}
+
 .dark .markdown-text :deep(.md-mention-mcp) {
   color: rgb(110 231 183);
 }
 
 .dark .markdown-text :deep(.md-mention-file) {
   color: rgb(125 211 252);
+}
+
+.dark .markdown-text :deep(.md-mention-skill) {
+  color: rgb(196 181 253);
 }
 
 .dark .markdown-text :deep(.md-inline-code) {

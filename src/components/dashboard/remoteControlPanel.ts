@@ -4,11 +4,11 @@ export const PANEL_CHROME_PX = 160
 export const PANEL_SIDE_PAD_PX = 24
 
 export function isDesktopLikeMode(mode: RcMode) {
-  return mode === 'desktop' || mode === 'browser'
+  return mode === 'desktop' || mode === 'browser' || mode === 'custom'
 }
 
 export function remoteModeLabel(mode: RcMode) {
-  return mode === 'browser' ? '（浏览器）' : mode === 'desktop' ? '（桌面）' : ''
+  return mode === 'browser' ? '（浏览器）' : mode === 'desktop' ? '（桌面）' : mode === 'custom' ? '（自定义设备）' : ''
 }
 
 export function panelConstraintsStyle(isDesktopLike: boolean) {

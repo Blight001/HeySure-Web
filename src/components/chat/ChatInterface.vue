@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { getAuthToken } from '@/api/http'
+import { listSkillMentions, type SkillMentionItem } from '@/api/librarian'
 import { useMessage } from '@/composables/useMessage'
 import { useChatWorkspace } from '@/composables/chat/useChatWorkspace'
 import type { ChatInterfaceProps } from '@/types/chat'
@@ -12,11 +14,21 @@ import ChatInput from './ChatInput.vue'
 import ChatQueuePanel from './ChatQueuePanel.vue'
 import FrontPromptPreview from './FrontPromptPreview.vue'
 import CodexEventTimeline from './CodexEventTimeline.vue'
-import { resolveRemoteScreenDevice } from '@/utils/chatRemoteScreen'
 
 const ChatRemoteScreenBackdrop = defineAsyncComponent(() => import('./ChatRemoteScreenBackdrop.vue'))
 
 const props = defineProps<ChatInterfaceProps>()
+const skillMentions = ref<SkillMentionItem[]>([])
+const loadSkillMentions = async () => {
+  if (!getAuthToken()) return
+  try {
+    skillMentions.value = (await listSkillMentions('', 100, props.aiConfigId)).items || []
+  } catch {
+    skillMentions.value = []
+  }
+}
+onMounted(loadSkillMentions)
+watch(() => props.aiConfigId, loadSkillMentions)
 const { alert, confirm } = useMessage(() => props.embeddedDialogs ? (props.dialogHost || 'chat') : 'global')
 const emit = defineEmits<{
   (e: 'update:selectedFiles', value: string[]): void
@@ -120,11 +132,6 @@ const {
   addChatMention,
 } = useChatWorkspace(props, emit, { alert, confirm })
 
-const remoteScreenDevice = computed(() => resolveRemoteScreenDevice(
-  props.remoteScreenDevices || [],
-  currentMcpDeviceId.value,
-  chatMessages.value,
-))
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 
 // Codex is a device-backed execution provider, so it is useful even when the
@@ -244,9 +251,10 @@ const editQueuedItem = async (itemId: string) => {
     <!-- 聊天内容区：消息 + 输入（任务流程已移到顶部标题边上，水平显示） -->
     <div class="relative flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
       <ChatRemoteScreenBackdrop
-        v-if="remoteScreenDevice"
+        v-if="props.remoteScreenDevices?.length"
         class="z-0"
-        :device-id="remoteScreenDevice.id"
+        :devices="props.remoteScreenDevices"
+        :preferred-device-id="currentMcpDeviceId"
       />
       <div ref="chatScrollRef" class="chat-scroll-viewport relative z-10 flex-1 overflow-y-auto">
         <!-- 空白对话欢迎页：logo + 最近对话 -->
@@ -389,6 +397,7 @@ const editQueuedItem = async (itemId: string) => {
         :currentPath="currentPath"
         :selectable-file-root="selectableFileRoot"
         :toolGroups="attachableToolGroups"
+        :skills="skillMentions"
         :selectedToolGroups="selectedToolGroupKeys"
         :selectedToolNames="selectedMcpToolNames"
         :mentions="chatMentions"
@@ -413,6 +422,7 @@ const editQueuedItem = async (itemId: string) => {
         @removeUpload="removeUploadedAttachment"
         @selectModel="switchConversationModel"
         @addMention="addChatMention"
+        @refreshMentions="loadSkillMentions"
       />
     </div>
   </div>
@@ -428,4 +438,4 @@ const editQueuedItem = async (itemId: string) => {
     padding-bottom: var(--chat-keyboard-inset, 0px);
   }
 }
-</style>
+</style>\n

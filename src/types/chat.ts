@@ -80,6 +80,7 @@ export interface CodexEventRecord {
 
 export interface ChatRemoteScreenDevice {
   id: string
+  name?: string
   online?: boolean
   capabilities?: string[]
 }

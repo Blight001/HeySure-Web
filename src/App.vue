@@ -99,9 +99,9 @@ const revealApp = () => {
   }, 650)
 }
 
-const onLoginSuccess = (userData: User, token: string) => {
+const onLoginSuccess = (userData: User, token: string, agentSocketUrl?: string) => {
   openAdminOnDashboard.value = adminLoginRequested.value
-  handleLoginSuccess(userData, token)
+  handleLoginSuccess(userData, token, agentSocketUrl)
   adminLoginRequested.value = false
   showLogin.value = false
 }

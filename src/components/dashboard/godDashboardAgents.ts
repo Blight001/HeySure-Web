@@ -8,6 +8,17 @@ export type ChatDeviceHint = {
   capabilities?: string[]
 }
 
+export function devicesBoundToAiConfig(devices: ChatDeviceHint[], aiConfigId?: number | null) {
+  const target = Number(aiConfigId)
+  if (!Number.isFinite(target) || target <= 0) return []
+  return devices.filter(device => {
+    const ids = [device.aiConfigId, ...(device.boundAiConfigIds || [])]
+      .map(value => Number(value))
+      .filter(value => Number.isFinite(value))
+    return ids.includes(target)
+  })
+}
+
 export function findFreshAgent(agents: Agent[], agent: Agent | null) {
   if (!agent) return null
   const configId = Number(agent.aiConfigId)

@@ -22,6 +22,7 @@ function main() {
   const skipTypecheck = process.argv.includes('--skip-typecheck')
   const checks = [
     ['complexity guardrails', process.execPath, [join('scripts', 'check_guardrails.mjs')]],
+    ['unit and security tests', process.execPath, [join('node_modules', 'vitest', 'vitest.mjs'), 'run']],
   ]
   if (!skipTypecheck) {
     const vueTsc = join('node_modules', 'vue-tsc', 'bin', 'vue-tsc.js')

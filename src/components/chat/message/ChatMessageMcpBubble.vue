@@ -4,7 +4,8 @@ import type { ChatAttachment } from '@/api/chat'
 import ChatCollapsible from '../ChatCollapsible.vue'
 import ChatMessageImagePreview from './ChatMessageImagePreview.vue'
 import ChatMessageMcpDetails from './ChatMessageMcpDetails.vue'
-import { buildMcpToolSummary, mcpMediaRefsFromText, type McpMediaRef } from '@/utils/chatMessageView'
+import RemoteScreenBubble from './RemoteScreenBubble.vue'
+import { buildMcpToolSummary, mcpImageUrlFromText, mcpMediaRefsFromText, type McpMediaRef } from '@/utils/chatMessageView'
 import { useCopiedTarget } from '@/utils/chatMessageCopy'
 
 const props = defineProps<{
@@ -17,6 +18,7 @@ const props = defineProps<{
 }>()
 
 const summary = computed(() => buildMcpToolSummary(props.text))
+const mcpImageUrl = computed(() => mcpImageUrlFromText(props.text))
 const inlineMedia = computed(() => mcpMediaRefsFromText(props.text))
 const attachmentMedia = computed<McpMediaRef[]>(() => (props.attachments || [])
   .map((item) => ({ item, mime: String(item.mime_type || '').toLowerCase() }))
@@ -57,6 +59,12 @@ const closeImagePreview = async () => {
 
 <template>
   <div class="text-[13px] leading-snug">
+    <RemoteScreenBubble
+      v-if="mcpImageUrl && !mediaRefs.some((media) => media.url === mcpImageUrl)"
+      :src="mcpImageUrl"
+      title="远程画面"
+      alt="设备远程画面"
+    />
     <div v-if="mediaRefs.length" class="mcp-media-list">
       <template v-for="(media, mediaIdx) in mediaRefs" :key="`${media.url}-${mediaIdx}`">
         <button
@@ -208,4 +216,4 @@ const closeImagePreview = async () => {
 .dark .mcp-generated-video {
   border-color: rgb(63 63 70);
 }
-</style>
+</style>\n

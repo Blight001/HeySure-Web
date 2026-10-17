@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Agent } from '@/types'
-import type { ChatDeviceHint } from './godDashboardAgents'
+import { devicesBoundToAiConfig, type ChatDeviceHint } from './godDashboardAgents'
 import ChatInterface from '@/components/chat/ChatInterface.vue'
 import ChatTokenUsageBar from '@/components/chat/ChatTokenUsageBar.vue'
 import TaskProgressPanel from '@/components/chat/TaskProgressPanel.vue'
@@ -37,6 +37,7 @@ const taskPlanRefreshSignal = ref(0)
 const liveTokenUsed = ref(0)
 const dialogHost = computed(() => `chat-${props.windowId}`)
 const aiKind = computed<'core'>(() => 'core')
+const boundChatDevices = computed(() => devicesBoundToAiConfig(props.connectedDevices, props.agent.aiConfigId))
 
 const onTotalTokensUpdate = (value: number) => {
   liveTokenUsed.value = Math.max(0, Number(value) || 0)
@@ -169,7 +170,7 @@ onBeforeUnmount(() => {
             :selectedFiles="selectedFiles"
             :allFiles="allFiles"
             :selectable-file-root="selectableFileRoot"
-            :remote-screen-devices="connectedDevices"
+            :remote-screen-devices="boundChatDevices"
             @update:selectedFiles="selectedFiles = $event"
             @update:currentSessionId="currentSessionId = $event"
             @taskPlanRefresh="taskPlanRefreshSignal = $event"

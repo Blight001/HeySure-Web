@@ -20,7 +20,7 @@ defineProps<{
   actionResults: Record<string, string>
   actionResultsBySignature: Record<string, string>
   plainTextMode?: boolean
-  mentionTokens: Array<{ token: string; type: 'mcp' | 'file'; detail?: string }>
+  mentionTokens: Array<{ token: string; type: 'mcp' | 'file' | 'skill'; detail?: string }>
 }>()
 
 const emit = defineEmits<{

@@ -14,9 +14,10 @@ interface RegisterPayload extends LoginPayload {
   email_code?: string
 }
 
-interface LoginResponse {
+export interface LoginResponse {
   user: User
   access_token: string
+  agent_socket_url?: string
 }
 
 export type RegistrationMode = 'open' | 'email' | 'closed'

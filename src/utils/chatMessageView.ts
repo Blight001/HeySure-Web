@@ -215,7 +215,7 @@ export const parseAttachedFiles = (tags?: string): string[] => {
 const asChatMention = (item: unknown): ChatMention[] => {
   if (!item || typeof item !== 'object') return []
   const raw = item as { type?: string; label?: string; reference?: string; detail?: string }
-  const type = raw.type === 'mcp' || raw.type === 'file' ? raw.type : null
+  const type = raw.type === 'mcp' || raw.type === 'file' || raw.type === 'skill' ? raw.type : null
   const label = String(raw.label || '').trim()
   const reference = String(raw.reference || '').trim()
   if (!type || !label || !reference) return []
@@ -233,7 +233,9 @@ export const mentionTokenViews = (mentions: ChatMention[]) => mentions.map(menti
   type: mention.type,
   detail: mention.type === 'mcp'
     ? `${mention.reference}\n${mention.detail}`
-    : mention.detail,
+    : mention.type === 'skill'
+      ? `${mention.reference}\n${mention.detail}`
+      : mention.detail,
 }))
 
 export const visibleAttachedFiles = (files: string[], mentions: ChatMention[]) => {

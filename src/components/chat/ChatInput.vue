@@ -18,7 +18,7 @@ import {
   renderEditorValue,
   serializeEditor,
 } from '@/utils/chatInputEditor'
-import { buildMentionCandidates, type UploadAttachmentItem } from '@/utils/chatInputMentions'
+import { buildMentionCandidates, type SkillMentionCandidate, type UploadAttachmentItem } from '@/utils/chatInputMentions'
 import type { McpCatalogToolGroup } from '@/utils/mcpToolCatalog'
 
 interface ChatModelOption {
@@ -38,6 +38,7 @@ const props = defineProps<{
   currentPath: string
   selectableFileRoot?: string
   toolGroups?: McpCatalogToolGroup[]
+  skills?: SkillMentionCandidate[]
   selectedToolGroups?: string[]
   selectedToolNames?: string[]
   mentions?: ChatMention[]
@@ -66,6 +67,7 @@ const emit = defineEmits<{
   (e: 'removeUpload', clientId: string): void
   (e: 'selectModel', modelId: string): void
   (e: 'addMention', mention: ChatMention): void
+  (e: 'refreshMentions'): void
 }>()
 
 const inputValue = computed({
@@ -89,6 +91,7 @@ const activeMentionIndex = ref(0)
 const mentionDismissed = ref(false)
 const mentionQuery = ref('')
 const mentionDomRange = ref<Range | null>(null)
+let lastMentionRefreshAt = 0
 const TEXTAREA_MIN_HEIGHT = 36
 const TEXTAREA_MAX_HEIGHT = 256
 const { mentionTooltip, showMentionTooltip, hideMentionTooltip, keepMentionTooltip } = useChatMentionTooltip()
@@ -99,6 +102,7 @@ const mentionCandidates = computed(() => buildMentionCandidates(
   props.allFiles,
   props.selectableFileRoot,
   mentionQuery.value,
+  props.skills,
 ))
 const mentionOpen = computed(() => !!mentionDomRange.value && mentionCandidates.value.length > 0)
 
@@ -107,6 +111,10 @@ const updateMentionState = () => {
   const resolved = mentionRangeFromSelection(editorRef.value)
   mentionQuery.value = resolved?.query || ''
   mentionDomRange.value = resolved?.range || null
+  if (resolved && Date.now() - lastMentionRefreshAt > 1000) {
+    lastMentionRefreshAt = Date.now()
+    emit('refreshMentions')
+  }
 }
 
 const selectMention = async (candidate = mentionCandidates.value[activeMentionIndex.value]) => {
@@ -392,11 +400,19 @@ watch(() => [props.modelValue, props.mentions] as const, async ([value]) => {
   color: rgb(2 132 199);
 }
 
+.chat-input-textarea :deep(.chat-input-mention-skill) {
+  color: rgb(124 58 237);
+}
+
 .dark .chat-input-textarea :deep(.chat-input-mention-mcp) {
   color: rgb(110 231 183);
 }
 
 .dark .chat-input-textarea :deep(.chat-input-mention-file) {
   color: rgb(125 211 252);
+}
+
+.dark .chat-input-textarea :deep(.chat-input-mention-skill) {
+  color: rgb(196 181 253);
 }
 </style>

@@ -182,5 +182,6 @@ export function openRemoteControl(rt: WorkshopRuntime, device: ConnectedDevice) 
     deviceId: device.id,
     name: deviceDisplayName(device, rt.display),
     mode: remoteControlMode(device),
+    capabilities: device.capabilities,
   }
 }

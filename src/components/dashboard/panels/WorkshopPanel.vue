@@ -72,6 +72,7 @@ const wp = useWorkshopPanel(props)
       :device-id="wp.rcTarget.deviceId"
       :device-name="wp.rcTarget.name"
       :mode="wp.rcTarget.mode"
+      :capabilities="wp.rcTarget.capabilities"
       @close="wp.rcTarget = null"
     />
 

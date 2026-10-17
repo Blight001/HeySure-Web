@@ -12,15 +12,17 @@ export const createMentionElement = (document: Document, mention: ChatMention) =
     : mention.detail
   element.className = mention.type === 'mcp'
     ? 'chat-input-mention chat-input-mention-mcp'
-    : 'chat-input-mention chat-input-mention-file'
+    : mention.type === 'skill'
+      ? 'chat-input-mention chat-input-mention-skill'
+      : 'chat-input-mention chat-input-mention-file'
   element.textContent = mention.label
   return element
 }
 
 export const mentionFromCandidate = (candidate: MentionCandidate): ChatMention => ({
-  type: candidate.type === 'tool' ? 'mcp' : 'file',
+  type: candidate.type === 'tool' ? 'mcp' : candidate.type === 'skill' ? 'skill' : 'file',
   label: candidate.label,
-  reference: candidate.type === 'tool' ? candidate.label : candidate.detail,
+  reference: candidate.type === 'tool' ? candidate.label : candidate.type === 'skill' ? candidate.key.slice('skill:'.length) : candidate.detail,
   detail: candidate.detail,
 })
 

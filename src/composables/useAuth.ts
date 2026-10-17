@@ -9,6 +9,7 @@ import {
 } from '@/api/http'
 import type { User } from '@/types'
 import { createExpiryScheduler } from './useAuthHelpers'
+import { clearConnectorSocketUrl, setConnectorSocketUrl } from './connectorSocket'
 
 export const useAuth = () => {
   const user = ref<User | null>(null)
@@ -17,11 +18,16 @@ export const useAuth = () => {
     clearAuthToken()
   })
 
-  const clearLocalSession = () => scheduler.clearLocalSession(() => { user.value = null })
+  const clearLocalSession = () => scheduler.clearLocalSession(() => {
+    user.value = null
+    clearConnectorSocketUrl()
+  })
 
-  const handleLoginSuccess = (userData: User, token: string) => {
+  const handleLoginSuccess = (userData: User, token: string, agentSocketUrl?: string) => {
     user.value = userData
     setAuthToken(token)
+    clearConnectorSocketUrl()
+    setConnectorSocketUrl(agentSocketUrl)
     scheduler.scheduleExpiry(token)
   }
 

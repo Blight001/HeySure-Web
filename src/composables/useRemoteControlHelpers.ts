@@ -1,16 +1,8 @@
-import { io, type Socket } from 'socket.io-client'
+import type { Socket } from 'socket.io-client'
 import { getAuthToken } from '@/api/http'
 import { fetchIceServers, DEFAULT_ICE_SERVERS, type IceServer } from '@/api/rtc'
 import type { RcBrowserState, RcQualityPreset, RcStatus } from './useRemoteControl'
-
-export const connectorSocketUrl = () => {
-  const url = new URL(window.location.href)
-  url.port = '3002'
-  url.pathname = ''
-  url.search = ''
-  url.hash = ''
-  return url.origin
-}
+import { createConnectorSocket } from './connectorSocket'
 
 export type RemoteControlCtx = {
   status: { value: RcStatus }
@@ -21,18 +13,90 @@ export type RemoteControlCtx = {
   controlReady: { value: boolean }
   connectionState: { value: RTCPeerConnectionState }
   browserState: { value: RcBrowserState | null }
+  webStateReady: { value: boolean }
+  webResourceReady: { value: boolean }
+  controllerFastReady: { value: boolean }
   socket: Socket | null
   pc: RTCPeerConnection | null
   iceServers: IceServer[]
   controlChannel: RTCDataChannel | null
+  webStateChannel: RTCDataChannel | null
+  webResourceChannel: RTCDataChannel | null
+  controllerFastChannel: RTCDataChannel | null
   sessionId: string
   requestedQualityPreset: RcQualityPreset
+  requestWebMirror: boolean
   pendingIce: RTCIceCandidateInit[]
+  controlMessageHandler: ((data: unknown) => void) | null
+  webStateHandler: ((data: unknown) => void) | null
+  webResourceHandler: ((data: unknown) => void) | null
 }
 
 export function failSession(ctx: RemoteControlCtx, message: string) {
   ctx.errorMessage.value = message
   ctx.status.value = 'error'
+}
+
+const parseControlMessage = (ctx: RemoteControlCtx, raw: unknown) => {
+  if (typeof raw !== 'string' || raw.length > 256 * 1024) return
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed?.kind === 'browser-state') ctx.browserState.value = parsed.state
+    else ctx.controlMessageHandler?.(parsed)
+  } catch { /* ignore malformed control messages */ }
+}
+
+const detachRemoteDataChannel = (channel: RTCDataChannel | null) => {
+  if (!channel) return
+  channel.onopen = null
+  channel.onclose = null
+  channel.onmessage = null
+  channel.onbufferedamountlow = null
+}
+
+const attachControlChannel = (ctx: RemoteControlCtx, channel: RTCDataChannel) => {
+  detachRemoteDataChannel(ctx.controlChannel)
+  ctx.controlChannel = channel
+  ctx.controlReady.value = channel.readyState === 'open'
+  channel.onopen = () => {
+    if (ctx.controlChannel !== channel) return
+    ctx.controlReady.value = true
+    try { channel.send(JSON.stringify({ kind: 'quality', preset: ctx.requestedQualityPreset })) } catch { /* closed concurrently */ }
+  }
+  channel.onclose = () => { if (ctx.controlChannel === channel) ctx.controlReady.value = false }
+  channel.onmessage = event => { if (ctx.controlChannel === channel) parseControlMessage(ctx, event.data) }
+}
+
+const attachWebStateChannel = (ctx: RemoteControlCtx, channel: RTCDataChannel) => {
+  detachRemoteDataChannel(ctx.webStateChannel)
+  ctx.webStateChannel = channel
+  channel.onopen = () => { if (ctx.webStateChannel === channel) ctx.webStateReady.value = true }
+  channel.onclose = () => { if (ctx.webStateChannel === channel) ctx.webStateReady.value = false }
+  channel.onmessage = event => { if (ctx.webStateChannel === channel) ctx.webStateHandler?.(event.data) }
+}
+
+const attachWebResourceChannel = (ctx: RemoteControlCtx, channel: RTCDataChannel) => {
+  detachRemoteDataChannel(ctx.webResourceChannel)
+  ctx.webResourceChannel = channel
+  channel.binaryType = 'arraybuffer'
+  channel.onopen = () => { if (ctx.webResourceChannel === channel) ctx.webResourceReady.value = true }
+  channel.onclose = () => { if (ctx.webResourceChannel === channel) ctx.webResourceReady.value = false }
+  channel.onmessage = event => { if (ctx.webResourceChannel === channel) ctx.webResourceHandler?.(event.data) }
+}
+
+const attachControllerFastChannel = (ctx: RemoteControlCtx, channel: RTCDataChannel) => {
+  detachRemoteDataChannel(ctx.controllerFastChannel)
+  ctx.controllerFastChannel = channel
+  channel.bufferedAmountLowThreshold = 16 * 1024
+  channel.onopen = () => { if (ctx.controllerFastChannel === channel) ctx.controllerFastReady.value = true }
+  channel.onclose = () => { if (ctx.controllerFastChannel === channel) ctx.controllerFastReady.value = false }
+}
+
+export const attachRemoteDataChannel = (ctx: RemoteControlCtx, channel: RTCDataChannel) => {
+  if (channel.label === 'control') attachControlChannel(ctx, channel)
+  else if (channel.label === 'web-state') attachWebStateChannel(ctx, channel)
+  else if (channel.label === 'web-resource') attachWebResourceChannel(ctx, channel)
+  else if (channel.label === 'controller-fast') attachControllerFastChannel(ctx, channel)
 }
 
 export function attachPeerHandlers(ctx: RemoteControlCtx, connection: RTCPeerConnection) {
@@ -45,20 +109,7 @@ export function attachPeerHandlers(ctx: RemoteControlCtx, connection: RTCPeerCon
     }
   }
   connection.ondatachannel = (event) => {
-    if (event.channel.label !== 'control') return
-    ctx.controlChannel = event.channel
-    ctx.controlReady.value = ctx.controlChannel.readyState === 'open'
-    ctx.controlChannel.onopen = () => {
-      ctx.controlReady.value = true
-      ctx.controlChannel?.send(JSON.stringify({ kind: 'quality', preset: ctx.requestedQualityPreset }))
-    }
-    ctx.controlChannel.onclose = () => { ctx.controlReady.value = false }
-    ctx.controlChannel.onmessage = (msg) => {
-      try {
-        const parsed = JSON.parse(String(msg.data))
-        if (parsed?.kind === 'browser-state') ctx.browserState.value = parsed.state
-      } catch { /* ignore malformed */ }
-    }
+    attachRemoteDataChannel(ctx, event.channel)
   }
   connection.onconnectionstatechange = () => {
     const state = connection.connectionState
@@ -96,21 +147,33 @@ export async function handleRemoteIce(ctx: RemoteControlCtx, data: { candidate: 
   ctx.pendingIce.push(data.candidate)
 }
 
+export function applyRemoteReady(
+  ctx: Pick<RemoteControlCtx, 'deviceWidth' | 'deviceHeight'>,
+  data: { width?: unknown; height?: unknown; rotation?: unknown } | null | undefined,
+) {
+  const dimension = (value: unknown) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+  }
+  ctx.deviceWidth.value = dimension(data?.width)
+  ctx.deviceHeight.value = dimension(data?.height)
+}
+
 export function attachSocketHandlers(ctx: RemoteControlCtx, deviceId: string) {
-  ctx.socket = io(connectorSocketUrl(), { transports: ['websocket', 'polling'] })
+  ctx.socket = createConnectorSocket()
   ctx.socket.on('connect', () => {
     ctx.socket?.emit('rc:start', {
       deviceId,
       token: getAuthToken(),
       qualityPreset: ctx.requestedQualityPreset,
+      ...(ctx.requestWebMirror ? { requestedSurfaces: ['dom', 'video'], protocolVersions: [1] } : {}),
     })
   })
   ctx.socket.on('connect_error', () => failSession(ctx, '信令通道连接失败'))
   ctx.socket.on('rc:started', (data: { sessionId: string }) => { ctx.sessionId = data.sessionId })
   ctx.socket.on('rc:error', (data: { message?: string }) => failSession(ctx, data?.message || '远程控制启动失败'))
-  ctx.socket.on('rc:ready', (data: { width: number; height: number }) => {
-    ctx.deviceWidth.value = Number(data?.width) || 0
-    ctx.deviceHeight.value = Number(data?.height) || 0
+  ctx.socket.on('rc:ready', (data: { width?: unknown; height?: unknown; rotation?: unknown }) => {
+    applyRemoteReady(ctx, data)
   })
   ctx.socket.on('rc:offer', (data: { sessionId: string; sdp: string }) => { void handleRemoteOffer(ctx, data) })
   ctx.socket.on('rc:ice', (data: { candidate: RTCIceCandidateInit }) => { void handleRemoteIce(ctx, data) })
@@ -122,8 +185,18 @@ export function attachSocketHandlers(ctx: RemoteControlCtx, deviceId: string) {
 
 export function teardownSession(ctx: RemoteControlCtx, notifyServer: boolean) {
   if (notifyServer && ctx.socket && ctx.sessionId) ctx.socket.emit('rc:stop', { sessionId: ctx.sessionId })
+  detachRemoteDataChannel(ctx.controlChannel)
+  detachRemoteDataChannel(ctx.webStateChannel)
+  detachRemoteDataChannel(ctx.webResourceChannel)
+  detachRemoteDataChannel(ctx.controllerFastChannel)
   ctx.controlChannel = null
+  ctx.webStateChannel = null
+  ctx.webResourceChannel = null
+  ctx.controllerFastChannel = null
   ctx.controlReady.value = false
+  ctx.webStateReady.value = false
+  ctx.webResourceReady.value = false
+  ctx.controllerFastReady.value = false
   ctx.connectionState.value = 'closed'
   ctx.browserState.value = null
   ctx.pendingIce.length = 0
@@ -142,14 +215,24 @@ export function teardownSession(ctx: RemoteControlCtx, notifyServer: boolean) {
     ctx.socket = null
   }
   ctx.sessionId = ''
+  ctx.controlMessageHandler = null
+  ctx.webStateHandler = null
+  ctx.webResourceHandler = null
 }
 
 export function emptyRemoteControlState() {
   return {
     iceServers: DEFAULT_ICE_SERVERS as IceServer[],
     controlChannel: null as RTCDataChannel | null,
+    webStateChannel: null as RTCDataChannel | null,
+    webResourceChannel: null as RTCDataChannel | null,
+    controllerFastChannel: null as RTCDataChannel | null,
     sessionId: '',
     requestedQualityPreset: 'balanced' as RcQualityPreset,
+    requestWebMirror: false,
+    controlMessageHandler: null as ((data: unknown) => void) | null,
+    webStateHandler: null as ((data: unknown) => void) | null,
+    webResourceHandler: null as ((data: unknown) => void) | null,
     pendingIce: [] as RTCIceCandidateInit[],
     socket: null as Socket | null,
     pc: null as RTCPeerConnection | null,

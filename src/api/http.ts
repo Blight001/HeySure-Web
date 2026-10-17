@@ -10,7 +10,7 @@
  * import from `@/api/<module>` instead so cross-cutting concerns stay in one place.
  */
 
-class ApiError extends Error {
+export class ApiError extends Error {
   readonly status: number
   readonly payload: unknown
 

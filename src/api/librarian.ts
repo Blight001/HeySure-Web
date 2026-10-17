@@ -223,6 +223,23 @@ export const listEntries = (
     fallbackError: '知识库加载失败',
   })
 
+export interface SkillMentionItem {
+  slug: string
+  name: string
+  summary: string
+  triggers: string[]
+  scope?: string
+  risk?: string
+  version?: string | null
+  endpoint_kind?: 'any' | 'desktop' | 'browser'
+}
+
+export const listSkillMentions = (q = '', limit = 50, aiConfigId?: number) =>
+  get<{ items: SkillMentionItem[]; total: number }>('/api/librarian/skills', {
+    query: { q, limit: String(limit), ai_config_id: aiConfigId === undefined ? undefined : String(aiConfigId) },
+    fallbackError: 'Skill 列表加载失败',
+  })
+
 export const readEntry = (token: string, memoryId: string) =>
   get<KnowledgeEntryItem>(`/api/librarian/entries/${encodeURIComponent(memoryId)}`, {
     token,
