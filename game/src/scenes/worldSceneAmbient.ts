@@ -4,7 +4,8 @@ import { bgmTracks, type BgmTrack } from '../assets'
 import { TILE, WORLD_H, WORLD_W, mulberry32 } from '../world/layout'
 import { generateGroundMap } from '../world/map'
 import { nightnessForHour, resolveWorldHour } from '../world/time'
-import { updateHud, worldMinZoom } from './worldSceneShared'
+import { VISUAL_SCALE } from '../world/visualScale'
+import { updateHud, worldFitZoom } from './worldSceneShared'
 import type { WorldSceneHost } from './worldSceneTypes'
 
 export const createGround = (scene: WorldSceneHost) => {
@@ -14,9 +15,15 @@ export const createGround = (scene: WorldSceneHost) => {
     y: p.y,
     startsAsA: ground.grid[p.y]?.[p.x] === TILES.waterA,
   }))
-  const map = scene.make.tilemap({ data: ground.grid, tileWidth: TILE, tileHeight: TILE })
-  const tiles = map.addTilesetImage('tileset.png', 'tileset.png', TILE, TILE)
-  if (tiles) scene.groundLayer = (map.createLayer(0, tiles, 0, 0) ?? null) as Phaser.Tilemaps.TilemapLayer | null
+  // tileset.png is a 128px high-resolution raster; retain the 32px world
+  // footprint by rendering at 1/4 scale.
+  const runtimeTile = TILE * VISUAL_SCALE.terrain.runtimeTileFactor
+  const map = scene.make.tilemap({ data: ground.grid, tileWidth: runtimeTile, tileHeight: runtimeTile })
+  const tiles = map.addTilesetImage('tileset.png', 'tileset.png', runtimeTile, runtimeTile)
+  if (tiles) {
+    scene.groundLayer = (map.createLayer(0, tiles, 0, 0) ?? null) as Phaser.Tilemaps.TilemapLayer | null
+    scene.groundLayer?.setScale(VISUAL_SCALE.terrain.tile)
+  }
   placeTrees(scene, ground.trees)
   placeBushes(scene, ground.bushes)
   scene.time.addEvent({
@@ -32,8 +39,15 @@ const placeTrees = (
 ) => {
   for (const t of trees) {
     const tree = scene.add.image(t.x, t.y, 'tree.png', t.variant)
+    // Keep natural variation, but prevent landmark trees from overwhelming
+    // characters and buildings when a high-resolution frame is used.
+    const displayScale = Phaser.Math.Clamp(
+      t.scale * VISUAL_SCALE.tree.display * VISUAL_SCALE.tree.rasterFactor,
+      VISUAL_SCALE.tree.min,
+      VISUAL_SCALE.tree.max,
+    )
     tree.setOrigin(0.5, 0.94)
-    tree.setScale(t.scale)
+    tree.setScale(displayScale)
     tree.setFlipX(t.flip)
     tree.setDepth(t.y)
     scene.swayTrees.push({
@@ -41,7 +55,7 @@ const placeTrees = (
       phase: (t.x * 0.037 + t.y * 0.021) % (Math.PI * 2),
       amp: t.variant === TREE_VARIANTS.pine ? 0.55 : 1.1,
     })
-    if (t.variant === TREE_VARIANTS.sakura) scene.sakuraSpots.push({ x: t.x, y: t.y, scale: t.scale })
+    if (t.variant === TREE_VARIANTS.sakura) scene.sakuraSpots.push({ x: t.x, y: t.y, scale: displayScale })
   }
 }
 
@@ -52,7 +66,8 @@ const placeBushes = (
   for (const b of bushes) {
     const bush = scene.add.image(b.x, b.y, 'bush.png', b.variant)
     bush.setOrigin(0.5, 0.9)
-    bush.setScale(b.scale)
+    // 灌木运行时帧提升为 2x，按逻辑尺寸缩回；树木单独放大以改善可读性。
+    bush.setScale(b.scale * VISUAL_SCALE.bush.rasterFactor * VISUAL_SCALE.bush.display)
     bush.setFlipX(b.flip)
     bush.setDepth(b.y)
   }
@@ -122,6 +137,7 @@ export const burstSparkle = (scene: WorldSceneHost, x: number, y: number) => {
   for (let i = 0; i < 5; i++) {
     const s = scene.sparklePool.pop() ?? scene.add.sprite(0, 0, 'effect_sparkle.png', 0)
     s.setPosition(x + (Math.random() - 0.5) * 40, y + (Math.random() - 0.5) * 30)
+      .setScale(VISUAL_SCALE.effect.sparkle)
       .setActive(true).setVisible(true).setDepth(99000)
     s.play('effect_sparkle.png:loop')
     scene.time.delayedCall(600 + i * 150, () => {
@@ -288,7 +304,7 @@ const scatterClouds = (scene: WorldSceneHost, w: number, h: number) => {
       )
       cloud.setScrollFactor(0)
       cloud.setDepth(400000 + i)
-      cloud.setScale(3 + rnd() * 2.4)
+      cloud.setScale(VISUAL_SCALE.effect.cloud.min + rnd() * VISUAL_SCALE.effect.cloud.range)
       cloud.setAlpha(0.94 + rnd() * 0.06)
       if (rnd() > 0.5) cloud.setFlipX(true)
       if (rnd() < 0.5) driftCloud(scene, cloud, rnd)
@@ -319,7 +335,7 @@ export const revealWorld = (scene: WorldSceneHost) => {
 const playRevealTweens = (scene: WorldSceneHost) => {
   const cam = scene.cameras.main
   cam.pan(WORLD_W / 2, WORLD_H / 2, 2200, 'Sine.easeInOut')
-  cam.zoomTo(worldMinZoom(scene), 2200, 'Sine.easeInOut')
+  cam.zoomTo(worldFitZoom(scene), 2200, 'Sine.easeInOut')
   const cx = scene.scale.width / 2
   const rnd = mulberry32(7)
   for (const cloud of scene.clouds) {
@@ -330,7 +346,7 @@ const playRevealTweens = (scene: WorldSceneHost) => {
       x: cloud.x + dir * (scene.scale.width * 0.45 + rnd() * 300),
       y: cloud.y - 30 - rnd() * 60,
       alpha: 0,
-      scale: cloud.scale * 1.25,
+      scale: cloud.scale * VISUAL_SCALE.effect.cloud.revealFactor,
       delay: rnd() * 350,
       duration: 1500 + rnd() * 900,
       ease: 'Sine.easeIn',

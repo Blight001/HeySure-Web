@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>游戏素材本地验收</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+      body { margin: 24px; background: #101923; color: #edf4ec; }
+      h1 { margin: 0 0 8px; font-size: 22px; } p { color: #a9b9b0; }
+      #summary { padding: 10px 14px; border-radius: 8px; font-weight: 700; background: #22342a; }
+      #checks { display: grid; gap: 5px; margin: 14px 0 24px; font-size: 13px; }
+      .pass { color: #91e29a; } .fail { color: #ff9999; }
+      h2 { margin-top: 30px; font-size: 16px; color: #f2cd8e; }
+      .grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+      figure { margin: 0; padding: 9px; background: #192735; border: 1px solid #314658; border-radius: 9px; }
+      figcaption { margin-bottom: 7px; color: #b9c7d1; font-size: 12px; }
+      canvas { image-rendering: pixelated; background: repeating-conic-gradient(#263746 0 25%, #1b2a38 0 50%) 0 / 16px 16px; }
+      .character { width: 256px; height: 480px; } .terrain { width: 1024px; height: 384px; }
+      .prop { max-width: 320px; max-height: 160px; }
+    </style>
+  </head>
+  <body>
+    <h1>素材归一化本地验收</h1>
+    <p>只读取运行时 Canvas，不连接 API 或修改数据。</p>
+    <div id="summary">检查中…</div><div id="checks"></div>
+    <h2>人物 20 帧（2×）</h2><div id="characters" class="grid"></div>
+    <h2>环境与道具</h2><div id="props" class="grid"></div>
+    <h2>地面 tileset（2×）</h2><div id="terrain" class="grid"></div>
+    <script type="module">
+      import { CHARACTER_FILES, loadCharacterSheet } from '../src/generatedCharacters.ts'
+      import { GENERATED_ASSETS, loadGeneratedAssetImage } from '../src/generatedAssets.ts'
+      import { SHEETS } from '../src/assetManifest.ts'
+      import { loadTerrainSheet } from '../src/generatedTerrain.ts'
+
+      const checks = document.querySelector('#checks')
+      const summary = document.querySelector('#summary')
+      const manifest = new Map(SHEETS.map(item => [item.file, item]))
+      let failed = 0
+
+      const check = (ok, label, detail = '') => {
+        failed += ok ? 0 : 1
+        const line = document.createElement('div')
+        line.className = ok ? 'pass' : 'fail'
+        line.textContent = `${ok ? 'PASS' : 'FAIL'} · ${label}${detail ? ` — ${detail}` : ''}`
+        checks.append(line)
+      }
+
+      const context = canvas => canvas.getContext('2d', { willReadFrequently: true })
+      const frameData = (canvas, x, y, width, height) => context(canvas).getImageData(x, y, width, height).data
+      const nonEmpty = data => data.some((value, index) => index % 4 === 3 && value > 20)
+      const hash = data => {
+        let value = 2166136261
+        for (const byte of data) value = Math.imul(value ^ byte, 16777619)
+        return value >>> 0
+      }
+      const bbox = (data, width, height) => {
+        let left = width, top = height, right = -1, bottom = -1
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          if (data[(y * width + x) * 4 + 3] <= 20) continue
+          left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y)
+        }
+        return right < 0 ? null : { left, top, right, bottom, width: right - left + 1, height: bottom - top + 1 }
+      }
+      const preview = (target, label, canvas, className = 'prop') => {
+        const figure = document.createElement('figure'); const caption = document.createElement('figcaption')
+        const enlarged = document.createElement('canvas')
+        enlarged.width = canvas.width * 2; enlarged.height = canvas.height * 2; enlarged.className = className
+        const ctx = context(enlarged); ctx.imageSmoothingEnabled = false; ctx.drawImage(canvas, 0, 0, enlarged.width, enlarged.height)
+        caption.textContent = label; figure.append(caption, enlarged); target.append(figure)
+      }
+
+      const verifyCharacter = async file => {
+        try {
+          const canvas = await loadCharacterSheet(file)
+          preview(document.querySelector('#characters'), file, canvas, 'character')
+          check(canvas.width === 256 && canvas.height === 480, `${file} 尺寸`, `${canvas.width}×${canvas.height}`)
+          const frames = Array.from({ length: 20 }, (_, index) => frameData(canvas, (index % 4) * 64, Math.floor(index / 4) * 96, 64, 96))
+          check(frames.every(nonEmpty), `${file} 20 帧非空`)
+          const directions = new Set([0, 4, 8, 12].map(index => hash(frames[index])))
+          check(directions.size === 4, `${file} 四方向不同`, `${directions.size}/4`)
+          const motion = [0, 1, 2, 3].every(row => new Set(frames.slice(row * 4, row * 4 + 4).map(hash)).size >= 3)
+          check(motion, `${file} 每行走路至少 3 种帧`)
+          const lying = bbox(frames[19], 64, 96)
+          const safe = lying && lying.width > lying.height && lying.left > 0 && lying.top > 0 && lying.right < 63 && lying.bottom < 95
+          check(Boolean(safe), `${file} 躺姿横向且留边`, lying ? `${lying.width}×${lying.height}` : 'empty')
+        } catch (error) { check(false, `${file} missing`, error.message) }
+      }
+
+      const verifyProps = async () => {
+        const entries = Object.entries(GENERATED_ASSETS).filter(([, def]) => def.file === 'town-props-v2.png')
+        for (const [file, def] of entries) try {
+          const canvas = await loadGeneratedAssetImage(file)
+          preview(document.querySelector('#props'), file, canvas)
+          const expected = manifest.get(file)
+          const sizeOk = expected && canvas.width === expected.frameWidth * expected.columns && canvas.height === expected.frameHeight * expected.rows
+          check(Boolean(sizeOk), `${file} manifest 尺寸`, `${canvas.width}×${canvas.height}`)
+          check(nonEmpty(frameData(canvas, 0, 0, canvas.width, canvas.height)), `${file} 非空`)
+          if (file === 'lamp.png') check(hash(frameData(canvas, 0, 0, 48, 112)) !== hash(frameData(canvas, 48, 0, 48, 112)), 'lamp 两帧不同')
+          if (file === 'bench.png') check(nonEmpty(frameData(canvas, 0, 0, 80, 48)), 'newbench 非空')
+        } catch (error) { check(false, `${file} missing`, error.message) }
+      }
+
+      const edgeMatch = (data, index) => {
+        const tile = 128; const left = (index % 8) * tile; const top = Math.floor(index / 8) * tile
+        for (let p = 0; p < tile; p++) for (let channel = 0; channel < 3; channel++) {
+          const at = (x, y) => data[(y * 1024 + x) * 4 + channel]
+          if (Math.abs(at(left, top + p) - at(left + tile - 1, top + p)) > 1 || Math.abs(at(left + p, top) - at(left + p, top + tile - 1)) > 1) return false
+        }
+        return true
+      }
+
+      const verifyTerrain = async () => {
+        try {
+          const canvas = await loadTerrainSheet(); preview(document.querySelector('#terrain'), 'tileset.png', canvas, 'terrain')
+          const data = frameData(canvas, 0, 0, canvas.width, canvas.height)
+          check(canvas.width === 1024 && canvas.height === 384, '地面尺寸', `${canvas.width}×${canvas.height}`)
+          check(data.every((value, index) => index % 4 !== 3 || value === 255), '地面像素全不透明')
+          check([0, 13, 9].every(index => edgeMatch(data, index)), '草 / 石板 / 水边缘无缝')
+          check(hash(frameData(canvas, 128, 128, 128, 128)) !== hash(frameData(canvas, 256, 128, 128, 128)), '两水帧不同')
+        } catch (error) { check(false, 'terrain missing', error.message) }
+      }
+
+      await Promise.all([Promise.all(Object.keys(CHARACTER_FILES).map(verifyCharacter)), verifyProps(), verifyTerrain()])
+      summary.textContent = failed ? `验收完成：${failed} 项失败` : '验收完成：全部通过'
+      summary.className = failed ? 'fail' : 'pass'
+    </script>
+  </body>
+</html>

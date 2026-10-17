@@ -6,6 +6,8 @@
  */
 
 const boot = async () => {
+  const { prepareWorldAssets } = await import('./assets')
+  await prepareWorldAssets()
   const params = new URLSearchParams(window.location.search)
   if (params.get('preview') === '1') {
     document.body.classList.add('preview-mode')

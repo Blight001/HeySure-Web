@@ -61,7 +61,9 @@ const emit = defineEmits<{
   (e: 'update:mcpMaxSteps', value: number): void
   (e: 'update:mcpHistoryResultMaxChars', value: number): void
   (e: 'update:conversationAutoCompressEnabled', value: boolean): void
-  (e: 'save'): void
+  (e: 'save-model'): void
+  (e: 'save-chat'): void
+  (e: 'save-page'): void
 }>()
 
 const themeModeValue = computed({
@@ -170,10 +172,11 @@ const conversationAutoCompressEnabledValue = computed({
   set: value => emit('update:conversationAutoCompressEnabled', value)
 })
 
-type SettingsCategory = 'model_chat' | 'page'
-const activeSettingsCategory = ref<SettingsCategory>('model_chat')
+type SettingsCategory = 'model' | 'chat' | 'page'
+const activeSettingsCategory = ref<SettingsCategory>('model')
 const settingsCategories: Array<{ key: SettingsCategory; label: string }> = [
-  { key: 'model_chat', label: '模型与对话' },
+  { key: 'model', label: '模型设置' },
+  { key: 'chat', label: '对话与其它设置' },
   { key: 'page', label: '页面设置' },
 ]
 
@@ -182,7 +185,7 @@ const mainZIndex = usePopupZIndex(() => props.show)
 
 watch(() => props.show, visible => {
   if (!visible) {
-    activeSettingsCategory.value = 'model_chat'
+    activeSettingsCategory.value = 'model'
     selectedModelPresetIndex.value = 0
   }
 })
@@ -205,7 +208,7 @@ watch(selectedModelPresetIndex, resetModelTest)
           </button>
         </div>
 
-        <div class="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-zinc-200 bg-zinc-100/70 p-1 dark:border-zinc-700 dark:bg-zinc-800/70">
+        <div class="mb-5 grid grid-cols-3 gap-1 rounded-xl border border-zinc-200 bg-zinc-100/70 p-1 dark:border-zinc-700 dark:bg-zinc-800/70">
           <button
             v-for="category in settingsCategories"
             :key="category.key"
@@ -263,9 +266,12 @@ watch(selectedModelPresetIndex, resetModelTest)
               </div>
               <p class="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">背景粒子星座与鼠标跟随光晕 / 粒子联动，全站即时生效。</p>
             </div>
+            <div class="mt-4 flex justify-end border-t border-zinc-100 pt-4 dark:border-zinc-700">
+              <button type="button" class="rounded-xl bg-zinc-900 px-5 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 dark:bg-white dark:text-zinc-900" @click="emit('save-page')">保存设置</button>
+            </div>
           </div>
 
-          <div v-show="activeSettingsCategory === 'model_chat'" class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
+          <div v-show="activeSettingsCategory === 'chat'" class="p-4 bg-zinc-50/60 rounded-xl dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800">
             <h4 class="text-sm font-semibold text-zinc-800 mb-3 dark:text-zinc-100 flex items-center gap-2">对话与其它 MCP 设置</h4>
             <div class="space-y-3">
               <label class="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
@@ -309,9 +315,12 @@ watch(selectedModelPresetIndex, resetModelTest)
                 <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">范围 20-10000，默认 8000。新一轮始终携带工具名和完整参数；普通工具返回跨轮完整保留，仅当单条历史返回超过此上限才会被缩短，防止超大返回撑爆上下文。数据库和聊天界面的原始 MCP 记录不会被截断。</p>
               </div>
             </div>
+            <div class="mt-4 flex justify-end border-t border-zinc-100 pt-4 dark:border-zinc-700">
+              <button type="button" class="rounded-xl bg-zinc-900 px-5 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 dark:bg-white dark:text-zinc-900" @click="emit('save-chat')">保存设置</button>
+            </div>
           </div>
 
-          <div v-show="activeSettingsCategory === 'model_chat'" class="order-first rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-800/50">
+          <div v-show="activeSettingsCategory === 'model'" class="rounded-xl border border-zinc-100 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-800/50">
             <div class="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h4 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">服务器模型</h4>
@@ -416,7 +425,6 @@ watch(selectedModelPresetIndex, resetModelTest)
                     >
                       {{ modelTestStatus === 'testing' ? '测试中…' : '测试连接' }}
                     </button>
-                    <button type="button" class="rounded-lg bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:opacity-90 dark:bg-white dark:text-zinc-900" @click="emit('save')">保存模型配置</button>
                   </div>
                 </div>
               </div>
@@ -426,11 +434,10 @@ watch(selectedModelPresetIndex, resetModelTest)
               <div class="text-sm font-semibold text-zinc-600 dark:text-zinc-300">还没有服务器模型</div>
               <button type="button" class="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white" @click="addModelPreset">添加第一个模型</button>
             </div>
+            <div class="mt-4 flex justify-end border-t border-zinc-100 pt-4 dark:border-zinc-700">
+              <button type="button" class="rounded-xl bg-zinc-900 px-5 py-2 text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95 dark:bg-white dark:text-zinc-900" @click="emit('save-model')">保存模型设置</button>
+            </div>
           </div>
-        </div>
-
-        <div class="mt-8 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
-          <button @click="emit('save'); emit('update:show', false)" class="px-6 py-2 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-xl text-sm font-bold hover:opacity-90 active:scale-95 transition-all shadow-lg">完成</button>
         </div>
       </div>
 

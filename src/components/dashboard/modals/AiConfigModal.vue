@@ -44,6 +44,12 @@ const editingConfigId = computed(() => {
   return Number.isFinite(cfgId) && cfgId > 0 ? cfgId : 0
 })
 
+const appearanceRole = computed(() => {
+  if (props.form?.is_librarian) return 'librarian'
+  if (props.form?.switch_key === 'assistant_default') return 'core_admin'
+  return props.form?.digital_member_role || props.form?.ai_role_group
+})
+
 const boundEndpointAgents = computed<ConnectedDevice[]>(() => {
   const cfgId = Number(props.form?.id)
   if (!Number.isFinite(cfgId) || cfgId <= 0) return []
@@ -226,7 +232,7 @@ watch(() => props.show, show => {
               <AiConfigAppearancePanel
                 v-else-if="settingsSection === 'appearance'"
                 :editing-config-id="editingConfigId"
-                :role-group="form.ai_role_group"
+                :role-group="appearanceRole"
               />
               <AiConfigExternalMcpPanel
                 v-else-if="settingsSection === 'external-mcp'"

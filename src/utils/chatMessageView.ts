@@ -274,6 +274,93 @@ export const getMcpProviderName = (tool: string) => {
 export const mcpImageUrlFromText = (text: string) =>
   String(text.match(SCREENSHOT_MARKER_RE)?.[1] || '').trim()
 
+export interface McpMediaRef {
+  url: string
+  type: 'image' | 'video'
+  name?: string
+}
+
+const MEDIA_KEY_RE = /(?:image|video|media|public|download|preview|thumbnail|cover)/i
+const IMAGE_KEY_RE = /(?:image|picture|photo|thumbnail|cover|screenshot|截图|图片)/i
+const VIDEO_KEY_RE = /(?:video|movie|mp4|webm|mov|m4v|avi)/i
+const IMAGE_EXT_RE = /\.(?:png|jpe?g|webp|gif|avif|bmp)(?:[?#].*)?$/i
+const VIDEO_EXT_RE = /\.(?:mp4|webm|mov|m4v|avi|mkv|ogv)(?:[?#].*)?$/i
+
+const mediaTypeFromValue = (key: string, value: string, mime = ''): McpMediaRef['type'] | null => {
+  const normalizedKey = String(key || '').toLowerCase()
+  const normalizedMime = String(mime || '').toLowerCase()
+  if (normalizedMime.startsWith('video/') || normalizedMime === 'video' || VIDEO_KEY_RE.test(normalizedKey) || VIDEO_EXT_RE.test(value)) return 'video'
+  if (normalizedMime.startsWith('image/') || normalizedMime === 'image' || IMAGE_KEY_RE.test(normalizedKey) || IMAGE_EXT_RE.test(value)) return 'image'
+  return null
+}
+
+const isMediaUrl = (value: string) => {
+  const url = String(value || '').trim()
+  return url.startsWith('data:image/') || url.startsWith('data:video/')
+    || url.startsWith('http://') || url.startsWith('https://')
+    || /^\/(?:api|tmp-images|media|uploads)\//i.test(url)
+}
+
+/**
+ * Extract media returned by a device MCP tool. Results have historically been
+ * plain text (including the [截图] marker), while newer tools return nested
+ * JSON envelopes such as {result:{uploaded_files:[{url,mime_type}]}}. Keep the
+ * parser deliberately permissive so the chat bubble can render either shape.
+ */
+type McpMediaAdder = (value: string, key?: string, mime?: string, name?: string) => void
+
+const collectMcpMediaString = (value: string, key: string, mime: string, name: string, add: McpMediaAdder) => {
+  const candidate = value.trim()
+  if (!isMediaUrl(candidate)) return
+  if (!MEDIA_KEY_RE.test(key) && !IMAGE_EXT_RE.test(candidate) && !VIDEO_EXT_RE.test(candidate)) return
+  add(candidate, key, mime, name)
+}
+
+const collectMcpMediaChildren = (record: Record<string, unknown>, mime: string, name: string, depth: number, add: McpMediaAdder) => {
+  const nextMime = String(record.mime_type || record.mimeType || record.content_type || record.media_type || mime)
+  const nextName = String(record.file_name || record.filename || record.name || name)
+  Object.entries(record).forEach(([key, child]) => walkMcpMediaValue(child, key, nextMime, nextName, depth + 1, add))
+}
+
+const walkMcpMediaValue = (value: unknown, key: string, mime: string, name: string, depth: number, add: McpMediaAdder): void => {
+  if (depth > 7 || value === null || value === undefined) return
+  if (typeof value === 'string') return collectMcpMediaString(value, key, mime, name, add)
+  if (Array.isArray(value)) {
+    value.forEach((item) => walkMcpMediaValue(item, key, mime, name, depth + 1, add))
+    return
+  }
+  if (typeof value === 'object') collectMcpMediaChildren(value as Record<string, unknown>, mime, name, depth, add)
+}
+
+const parseMcpMediaResult = (text: string, add: McpMediaAdder) => {
+  const rawResult = parseMcpToolBubbleDetails(text, 'MCP 工具').result
+  try {
+    return { value: JSON.parse(rawResult) as unknown, raw: rawResult }
+  } catch {
+    const urlRe = /(?:https?:\/\/|\/api\/|\/tmp\/)[^\s"'<>]+/gi
+    for (const match of rawResult.matchAll(urlRe)) add(match[0])
+    return { value: null, raw: rawResult }
+  }
+}
+
+export const mcpMediaRefsFromText = (text: string): McpMediaRef[] => {
+  const refs: McpMediaRef[] = []
+  const seen = new Set<string>()
+  const add: McpMediaAdder = (value, key = '', mime = '', name = '') => {
+    const url = String(value || '').trim().replace(/[),.;]+$/, '')
+    if (!url || !isMediaUrl(url)) return
+    const type = mediaTypeFromValue(key, url, mime)
+    if (!type || seen.has(url)) return
+    seen.add(url)
+    refs.push({ url, type, name: String(name || '').trim() || undefined })
+  }
+  const markerRe = /\[(?:截图|图片|视频|媒体)\]\s*(?:\r?\n)+\s*(\S+)/gi
+  for (const match of String(text || '').matchAll(markerRe)) add(match[1], match[0].slice(1, match[0].indexOf(']')))
+  const parsed = parseMcpMediaResult(text, add)
+  walkMcpMediaValue(parsed.value, '', '', '', 0, add)
+  return refs.slice(0, 12)
+}
+
 export interface McpToolSummary {
   sections: McpToolBubbleSections
   tool: string

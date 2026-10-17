@@ -410,7 +410,7 @@ export class WorldStore {
       const meta: WorldActorAppearance = {
         skin: String(item.skin || ''),
         tint: hex.test(tint) ? tint : '',
-        scale: scale >= 0.7 && scale <= 1.4 ? scale : 1,
+        scale: scale >= 0.45 && scale <= 1.4 ? scale : 1,
         aura: hex.test(aura) ? aura : '',
       }
       if (meta.skin || meta.tint || meta.aura || meta.scale !== 1) {

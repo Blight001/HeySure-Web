@@ -2,16 +2,18 @@ import Phaser from 'phaser'
 import { hudHtml } from '../ui/worldText'
 import { WORLD_H, WORLD_W } from '../world/layout'
 import { clockLabel } from '../world/time'
+import { VISUAL_SCALE } from '../world/visualScale'
 import type { WorldSnapshot } from '../world/store'
 import type { WorkshopView } from './types'
 import type { WorldSceneHost } from './worldSceneTypes'
 
 export const DEVICE_ICON_CACHE_BUST = Date.now().toString(36)
-export const CUSTOM_WORKSHOP_ICON_SIZE = 138
-export const CUSTOM_LIBRARY_ICON_SIZE = 168
+export const CUSTOM_WORKSHOP_ICON_SIZE = VISUAL_SCALE.building.customIconMax.workshop
+export const CUSTOM_LIBRARY_ICON_SIZE = VISUAL_SCALE.building.customIconMax.library
 export const WORKSHOP_BASE_ORIGIN_Y = 1
 export const WORKSHOP_LABEL_GAP = 8
 export const WORKSHOP_LABEL_WRAP_WIDTH = 170
+export const WORLD_MAX_ZOOM = 4
 
 export const deviceIconLoadUrl = (url: string): string => {
   if (!url.startsWith('/device_png/')) return url
@@ -34,9 +36,13 @@ export const positionWorkshopLabel = (view: WorkshopView) => {
   view.label.setDepth(view.sprite.depth + 12)
 }
 
-export const worldMinZoom = (scene: Phaser.Scene): number => {
+/** Zoom that fits the complete logical world in the current viewport. */
+export const worldFitZoom = (scene: Phaser.Scene): number => {
   return Math.max(scene.scale.width / WORLD_W, scene.scale.height / WORLD_H)
 }
+
+/** Do not zoom out below the initial world-fit view; zooming is for detail inspection. */
+export const worldMinZoom = (scene: Phaser.Scene): number => worldFitZoom(scene)
 
 export const postToDashboard = (message: Record<string, unknown>) => {
   if (window.parent !== window) {

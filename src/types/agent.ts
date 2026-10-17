@@ -41,6 +41,8 @@ export interface Agent {
   managementScope?: string
   workspaceRoot?: string
   aiConfigId?: number
+  isLibrarian?: boolean
+  switchKey?: string
   enabled?: boolean
   mcpEnabled?: boolean
   mcpTools?: string

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
+import type { ChatAttachment } from '@/api/chat'
 import ChatCollapsible from '../ChatCollapsible.vue'
 import ChatMessageImagePreview from './ChatMessageImagePreview.vue'
 import ChatMessageMcpDetails from './ChatMessageMcpDetails.vue'
-import { buildMcpToolSummary, mcpImageUrlFromText } from '@/utils/chatMessageView'
+import { buildMcpToolSummary, mcpMediaRefsFromText, type McpMediaRef } from '@/utils/chatMessageView'
 import { useCopiedTarget } from '@/utils/chatMessageCopy'
 
 const props = defineProps<{
@@ -12,21 +13,43 @@ const props = defineProps<{
   tokenLabel: string
   tokenTitle: string
   timeLabel: string
+  attachments?: ChatAttachment[]
 }>()
 
 const summary = computed(() => buildMcpToolSummary(props.text))
-const mcpImageUrl = computed(() => mcpImageUrlFromText(props.text))
+const inlineMedia = computed(() => mcpMediaRefsFromText(props.text))
+const attachmentMedia = computed<McpMediaRef[]>(() => (props.attachments || [])
+  .map((item) => ({ item, mime: String(item.mime_type || '').toLowerCase() }))
+  .filter(({ item, mime }) => item?.url && (item.is_image || item.is_video || mime.startsWith('video/') || mime.startsWith('image/')))
+  .map(({ item, mime }) => ({
+    url: String(item.url),
+    type: item.is_video || mime.startsWith('video/') ? 'video' : 'image',
+    name: item.file_name,
+  })))
+const mediaRefs = computed(() => {
+  if (attachmentMedia.value.length) return attachmentMedia.value
+  const refs = [...attachmentMedia.value, ...inlineMedia.value]
+  const seen = new Set<string>()
+  return refs.filter((item) => {
+    if (seen.has(item.url)) return false
+    seen.add(item.url)
+    return true
+  })
+})
+const imagePreviewUrl = ref('')
 const { copiedTarget, copyTarget } = useCopiedTarget()
 const imagePreviewOpen = ref(false)
 let imagePreviewTrigger: HTMLElement | null = null
 
-const openImagePreview = async (event: MouseEvent) => {
+const openImagePreview = async (url: string, event: MouseEvent) => {
   imagePreviewTrigger = event.currentTarget as HTMLElement | null
+  imagePreviewUrl.value = url
   imagePreviewOpen.value = true
 }
 
 const closeImagePreview = async () => {
   imagePreviewOpen.value = false
+  imagePreviewUrl.value = ''
   await nextTick()
   imagePreviewTrigger?.focus()
 }
@@ -34,16 +57,29 @@ const closeImagePreview = async () => {
 
 <template>
   <div class="text-[13px] leading-snug">
-    <button
-      v-if="mcpImageUrl"
-      type="button"
-      class="mcp-screenshot-link"
-      title="点击放大图片"
-      aria-label="放大查看截图"
-      @click="openImagePreview"
-    >
-      <img :src="mcpImageUrl" alt="截图" class="mcp-screenshot" loading="lazy" />
-    </button>
+    <div v-if="mediaRefs.length" class="mcp-media-list">
+      <template v-for="(media, mediaIdx) in mediaRefs" :key="`${media.url}-${mediaIdx}`">
+        <button
+          v-if="media.type === 'image'"
+          type="button"
+          class="mcp-screenshot-link"
+          :title="media.name ? `点击放大 ${media.name}` : '点击放大图片'"
+          :aria-label="media.name ? `放大查看 ${media.name}` : '放大查看图片'"
+          @click="openImagePreview(media.url, $event)"
+        >
+          <img :src="media.url" :alt="media.name || '生成图片'" class="mcp-screenshot" loading="lazy" />
+        </button>
+        <video
+          v-else
+          class="mcp-generated-video"
+          :title="media.name || '生成视频'"
+          controls
+          playsinline
+          preload="metadata"
+          :src="media.url"
+        ></video>
+      </template>
+    </div>
     <ChatCollapsible
       details-class="mcp-details group/mcp"
       summary-class="flex w-full items-center gap-2 whitespace-nowrap cursor-pointer select-none leading-5 py-0.5 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
@@ -85,7 +121,7 @@ const closeImagePreview = async () => {
         @copy="copyTarget"
       />
     </ChatCollapsible>
-    <ChatMessageImagePreview :open="imagePreviewOpen" :src="mcpImageUrl" @close="closeImagePreview" />
+    <ChatMessageImagePreview :open="imagePreviewOpen" :src="imagePreviewUrl" @close="closeImagePreview" />
   </div>
 </template>
 
@@ -137,6 +173,14 @@ const closeImagePreview = async () => {
   cursor: zoom-in;
 }
 
+.mcp-media-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-bottom: 6px;
+}
+
 .dark .mcp-screenshot-link {
   border-color: rgb(63 63 70);
   background: rgb(24 24 27);
@@ -149,5 +193,19 @@ const closeImagePreview = async () => {
   width: auto;
   height: auto;
   object-fit: contain;
+}
+
+.mcp-generated-video {
+  display: block;
+  width: min(560px, 100%);
+  max-height: 360px;
+  border: 1px solid rgb(228 228 231);
+  border-radius: 10px;
+  background: rgb(9 9 11);
+  object-fit: contain;
+}
+
+.dark .mcp-generated-video {
+  border-color: rgb(63 63 70);
 }
 </style>

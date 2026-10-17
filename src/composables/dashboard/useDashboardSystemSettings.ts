@@ -27,6 +27,83 @@ interface UseDashboardSystemSettingsOptions {
   onRefreshUser: (user: User) => void
 }
 
+interface SystemSettingsValues {
+  globalMcpCallMethod: string
+  mcpNamespaceHints: string
+  mcpDynamicRule: string
+  globalMcpFormatErrorHint: string
+  tavilyApiKey: string
+  modelPresets: ModelPreset[]
+  mcpMaxSteps: number
+  mcpHistoryResultMaxChars: number
+  conversationAutoCompressEnabled: boolean
+  defaultStartTaskPrompt: string
+  defaultResumeTaskPrompt: string
+  defaultSupervisionPrompt: string
+  defaultSupervisionIdleSeconds: number
+  defaultCompressionPrompt: string
+  promptAiMessageNotify: string
+  promptAiMessageInquiry: string
+  aiMessageInquiryReminderSeconds: number
+  promptAiMessageInquiryReminder: string
+  promptAiMessageReply: string
+  promptAiMessageReplySuccess: string
+  promptUserMessageNotice: string
+  themeMode: ThemeMode
+  fontSize: FontSize
+  brainViewMode: BrainViewMode
+}
+
+const saveSettingsPayload = async (
+  options: UseDashboardSystemSettingsOptions,
+  payload: Record<string, unknown>,
+  successMessage: string,
+  refreshUser = true,
+) => {
+  if (!options.getCurrentUser()) return
+
+  try {
+    const updatedUser = await updateProfile(payload)
+    void options.alert({ message: successMessage, type: 'success' })
+    if (refreshUser) options.onRefreshUser(updatedUser)
+  } catch (err: any) {
+    console.error('Failed to save settings:', err)
+    void options.alert({ message: `保存失败: ${err?.message || '未知错误'}`, type: 'error' })
+  }
+}
+
+const modelSettingsPayload = (values: SystemSettingsValues) => ({
+  model_presets: JSON.stringify(normalizeModelPresets(values.modelPresets)),
+})
+
+const conversationSettingsPayload = (values: SystemSettingsValues) => ({
+  mcp_call_method: stripLegacyOneToolRule(values.globalMcpCallMethod),
+  mcp_namespace_hints: values.mcpNamespaceHints,
+  mcp_dynamic_rule: values.mcpDynamicRule,
+  mcp_format_error_hint: values.globalMcpFormatErrorHint,
+  tavily_api_key: values.tavilyApiKey,
+  mcp_max_steps: clampMcpMaxSteps(values.mcpMaxSteps),
+  mcp_history_result_max_chars: clampMcpHistoryResultChars(values.mcpHistoryResultMaxChars),
+  conversation_auto_compress_enabled: values.conversationAutoCompressEnabled,
+  default_start_task_prompt: values.defaultStartTaskPrompt,
+  default_resume_task_prompt: values.defaultResumeTaskPrompt,
+  default_supervision_prompt: values.defaultSupervisionPrompt,
+  default_supervision_idle_seconds: clampIdleSeconds(values.defaultSupervisionIdleSeconds),
+  default_compression_prompt: values.defaultCompressionPrompt,
+  prompt_ai_message_notify: values.promptAiMessageNotify,
+  prompt_ai_message_inquiry: values.promptAiMessageInquiry,
+  ai_message_inquiry_reminder_seconds: clampReminderSeconds(values.aiMessageInquiryReminderSeconds),
+  prompt_ai_message_inquiry_reminder: values.promptAiMessageInquiryReminder,
+  prompt_ai_message_reply: values.promptAiMessageReply,
+  prompt_ai_message_reply_success: values.promptAiMessageReplySuccess,
+  prompt_user_message_notice: values.promptUserMessageNotice,
+})
+
+const pageSettingsPayload = (values: SystemSettingsValues) => ({
+  ui_theme_mode: values.themeMode,
+  ui_font_size: values.fontSize,
+})
+
 export const useDashboardSystemSettings = (options: UseDashboardSystemSettingsOptions) => {
   const themeMode = ref<ThemeMode>('dark')
   const fontSize = ref<FontSize>('md')
@@ -148,44 +225,45 @@ Rules:
   const normalizeSystemAutoControl = (raw: unknown) =>
     normalizeTaskSystemAutoControl(raw, getSystemAutoControlDefaults())
 
-  const saveSystemSettings = async () => {
-    const currentUser = options.getCurrentUser()
-    if (!currentUser) return
+  const getSettingsValues = (): SystemSettingsValues => ({
+    globalMcpCallMethod: globalMcpCallMethod.value,
+    mcpNamespaceHints: mcpNamespaceHints.value,
+    mcpDynamicRule: mcpDynamicRule.value,
+    globalMcpFormatErrorHint: globalMcpFormatErrorHint.value,
+    tavilyApiKey: tavilyApiKey.value,
+    modelPresets: modelPresets.value,
+    mcpMaxSteps: mcpMaxSteps.value,
+    mcpHistoryResultMaxChars: mcpHistoryResultMaxChars.value,
+    conversationAutoCompressEnabled: conversationAutoCompressEnabled.value,
+    defaultStartTaskPrompt: defaultStartTaskPrompt.value,
+    defaultResumeTaskPrompt: defaultResumeTaskPrompt.value,
+    defaultSupervisionPrompt: defaultSupervisionPrompt.value,
+    defaultSupervisionIdleSeconds: defaultSupervisionIdleSeconds.value,
+    defaultCompressionPrompt: defaultCompressionPrompt.value,
+    promptAiMessageNotify: promptAiMessageNotify.value,
+    promptAiMessageInquiry: promptAiMessageInquiry.value,
+    aiMessageInquiryReminderSeconds: aiMessageInquiryReminderSeconds.value,
+    promptAiMessageInquiryReminder: promptAiMessageInquiryReminder.value,
+    promptAiMessageReply: promptAiMessageReply.value,
+    promptAiMessageReplySuccess: promptAiMessageReplySuccess.value,
+    promptUserMessageNotice: promptUserMessageNotice.value,
+    themeMode: themeMode.value,
+    fontSize: fontSize.value,
+    brainViewMode: brainViewMode.value,
+  })
 
-    try {
-      const updatedUser = await updateProfile({
-        mcp_call_method: stripLegacyOneToolRule(globalMcpCallMethod.value),
-        mcp_namespace_hints: mcpNamespaceHints.value,
-        mcp_dynamic_rule: mcpDynamicRule.value,
-        mcp_format_error_hint: globalMcpFormatErrorHint.value,
-        tavily_api_key: tavilyApiKey.value,
-        model_presets: JSON.stringify(normalizeModelPresets(modelPresets.value)),
-        mcp_max_steps: clampMcpMaxSteps(mcpMaxSteps.value),
-        mcp_history_result_max_chars: clampMcpHistoryResultChars(mcpHistoryResultMaxChars.value),
-        conversation_auto_compress_enabled: conversationAutoCompressEnabled.value,
-        default_start_task_prompt: defaultStartTaskPrompt.value,
-        default_resume_task_prompt: defaultResumeTaskPrompt.value,
-        default_supervision_prompt: defaultSupervisionPrompt.value,
-        default_supervision_idle_seconds: clampIdleSeconds(defaultSupervisionIdleSeconds.value),
-        default_compression_prompt: defaultCompressionPrompt.value,
-        prompt_ai_message_notify: promptAiMessageNotify.value,
-        prompt_ai_message_inquiry: promptAiMessageInquiry.value,
-        ai_message_inquiry_reminder_seconds: clampReminderSeconds(aiMessageInquiryReminderSeconds.value),
-        prompt_ai_message_inquiry_reminder: promptAiMessageInquiryReminder.value,
-        prompt_ai_message_reply: promptAiMessageReply.value,
-        prompt_ai_message_reply_success: promptAiMessageReplySuccess.value,
-        prompt_user_message_notice: promptUserMessageNotice.value,
-        ui_theme_mode: themeMode.value,
-        ui_font_size: fontSize.value,
-        ui_brain_view_mode: brainViewMode.value,
-      })
-      void options.alert({ message: '系统设置已保存', type: 'success' })
-      options.onRefreshUser(updatedUser)
-    } catch (err: any) {
-      console.error('Failed to save settings:', err)
-      void options.alert({ message: `保存失败: ${err?.message || '未知错误'}`, type: 'error' })
-    }
-  }
+  // 分栏保存只提交当前栏目；不回填完整 User 响应，避免覆盖其它栏目尚未保存的草稿。
+  const saveModelSettings = () => saveSettingsPayload(options, modelSettingsPayload(getSettingsValues()), '模型设置已保存', false)
+  const saveConversationSettings = () => saveSettingsPayload(options, conversationSettingsPayload(getSettingsValues()), '对话与其它设置已保存', false)
+  const savePageSettings = () => saveSettingsPayload(options, pageSettingsPayload(getSettingsValues()), '页面设置已保存', false)
+
+  // 保留统一保存入口，供旧调用方兼容；设置面板使用上面的分栏保存入口。
+  const saveSystemSettings = () => saveSettingsPayload(options, {
+    ...modelSettingsPayload(getSettingsValues()),
+    ...conversationSettingsPayload(getSettingsValues()),
+    ...pageSettingsPayload(getSettingsValues()),
+    ui_brain_view_mode: brainViewMode.value,
+  }, '系统设置已保存')
 
   const saveBrainViewMode = async (mode: BrainViewMode) => {
     const next = mode === 'all' ? 'all' : 'sections'
@@ -252,6 +330,9 @@ Rules:
     promptUserMessageNotice,
     normalizeSystemAutoControl,
     saveSystemSettings,
+    saveModelSettings,
+    saveConversationSettings,
+    savePageSettings,
     saveBrainViewMode,
   }
 }

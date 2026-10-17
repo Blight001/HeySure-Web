@@ -14,6 +14,7 @@ import {
   type Point,
   type Rect,
 } from './layout'
+import { VISUAL_SCALE } from './visualScale'
 
 export interface TreeSpot extends Point {
   /** tree.png 帧索引（TREE_VARIANTS） */
@@ -49,12 +50,12 @@ const POND_X2 = 11
 const POND_Y1 = 4
 const POND_Y2 = 10
 
-// 出生地泉水建筑贴图（64×64）的固定显示尺寸，用于推导寻路碰撞盒
-const SPAWN_BUILDING_FRAME = 64
+// 出生地泉水建筑贴图（128×128）的固定运行时帧尺寸，用于推导寻路碰撞盒。
+const SPAWN_BUILDING_FRAME = 128
 // 碰撞盒比贴图略收一点：底座圆角/顶部尖塔留作可踩的草地与遮挡，
 // 但泉池上方那段（原先只挡椭圆水池、露出的空当）必须封死，
 // 否则随机寻路会把目标点丢进建筑内部，角色走进去站住看似"卡死"。
-const SPAWN_HALF_W = 46
+const SPAWN_HALF_W = 60
 const SPAWN_TOP_INSET = 14 // 顶部尖塔留白
 const SPAWN_BOTTOM_INSET = 0
 
@@ -93,9 +94,29 @@ export const WORKSHOP_STREET_LAMPS: Point[] = Array.from({ length: WORKSHOP_COLS
 }).flat()
 
 export const NIGHT_GLOW_SOURCES: NightGlowSource[] = [
-  { x: LIBRARY_DEVICE_POS.x, y: LIBRARY_DEVICE_POS.y + 8, color: 0xffd8a3, scaleX: 5.2, base: 0.24 },
-  { x: 194, y: 732, color: 0xb9e9ff, scaleX: 4, scaleY: 3, base: 0.3, pulse: 0.1 },
-  { x: 194, y: 764, color: 0xbfffe8, scaleX: 6.2, scaleY: 2, base: 0.12, pulse: 0.05 },
+  {
+    x: LIBRARY_DEVICE_POS.x,
+    y: LIBRARY_DEVICE_POS.y + 8,
+    color: 0xffd8a3,
+    ...VISUAL_SCALE.effect.nightGlow.library,
+    base: 0.24,
+  },
+  {
+    x: 194,
+    y: 732,
+    color: 0xb9e9ff,
+    ...VISUAL_SCALE.effect.nightGlow.spawnUpper,
+    base: 0.3,
+    pulse: 0.1,
+  },
+  {
+    x: 194,
+    y: 764,
+    color: 0xbfffe8,
+    ...VISUAL_SCALE.effect.nightGlow.spawnLower,
+    base: 0.12,
+    pulse: 0.05,
+  },
 ]
 
 export const SIGNPOST_POS: Point = { x: 236, y: 764 }
@@ -369,6 +390,11 @@ const scatterTrees = (grid: number[][]): TreeSpot[] => {
   const rnd = mulberry32(7)
   const trees: TreeSpot[] = []
   const usedTiles = new Set<string>()
+  const variedScale = (min: number, range: number) => min + rnd() * range
+  const edgeScale = () => variedScale(VISUAL_SCALE.tree.scatter.edgeMin, VISUAL_SCALE.tree.scatter.edgeRange)
+  const sideScale = () => variedScale(VISUAL_SCALE.tree.scatter.sideMin, VISUAL_SCALE.tree.scatter.sideRange)
+  const groveScale = () => variedScale(VISUAL_SCALE.tree.scatter.groveMin, VISUAL_SCALE.tree.scatter.groveRange)
+  const lonelyScale = () => variedScale(VISUAL_SCALE.tree.scatter.lonelyMin, VISUAL_SCALE.tree.scatter.lonelyRange)
 
   const tryPlant = (px: number, py: number, variant: number, scale: number, force = false) => {
     if (!force && inPlantBlocked(px, py)) return
@@ -399,15 +425,15 @@ const scatterTrees = (grid: number[][]): TreeSpot[] => {
   //    间距随机并留 ~15% 缺口，避免排成整齐的树篱
   for (let x = 30; x < WORLD_W - 20; x += 30 + rnd() * 42) {
     if (rnd() > 0.85) continue
-    tryPlant(x + rnd() * 14, 84 + rnd() * 60, pickVariant(true), 1.05 + rnd() * 0.4)
+    tryPlant(x + rnd() * 14, 84 + rnd() * 60, pickVariant(true), edgeScale())
     if (rnd() > 0.85) continue
-    tryPlant(x + rnd() * 14, WORLD_H - 16 - rnd() * 52, pickVariant(true), 1.05 + rnd() * 0.4)
+    tryPlant(x + rnd() * 14, WORLD_H - 16 - rnd() * 52, pickVariant(true), edgeScale())
   }
   for (let y = 150; y < WORLD_H - 70; y += 34 + rnd() * 40) {
     if (rnd() > 0.85) continue
-    tryPlant(24 + rnd() * 46, y + rnd() * 12, pickVariant(true), 1.0 + rnd() * 0.4)
+    tryPlant(24 + rnd() * 46, y + rnd() * 12, pickVariant(true), sideScale())
     if (rnd() > 0.85) continue
-    tryPlant(WORLD_W - 22 - rnd() * 50, y + rnd() * 12, pickVariant(true), 1.0 + rnd() * 0.4)
+    tryPlant(WORLD_W - 22 - rnd() * 50, y + rnd() * 12, pickVariant(true), sideScale())
   }
   // 2) 内部树丛：随机丛心，每丛 2~5 棵聚成小林子（比均匀散点自然）
   for (let g = 0; g < 22; g++) {
@@ -415,16 +441,16 @@ const scatterTrees = (grid: number[][]): TreeSpot[] => {
     const cy = 90 + rnd() * (WORLD_H - 180)
     const n = 2 + Math.floor(rnd() * 4)
     for (let i = 0; i < n; i++) {
-      tryPlant(cx + (rnd() - 0.5) * 170, cy + (rnd() - 0.5) * 130, pickVariant(false), 0.85 + rnd() * 0.45)
+      tryPlant(cx + (rnd() - 0.5) * 170, cy + (rnd() - 0.5) * 130, pickVariant(false), groveScale())
     }
   }
   // 3) 零星独树填空
   for (let i = 0; i < 26; i++) {
-    tryPlant(40 + rnd() * (WORLD_W - 80), 60 + rnd() * (WORLD_H - 120), pickVariant(false), 0.85 + rnd() * 0.4)
+    tryPlant(40 + rnd() * (WORLD_W - 80), 60 + rnd() * (WORLD_H - 120), pickVariant(false), lonelyScale())
   }
   // 4) 手植地标樱花：池塘东南 + 出生地西北各一棵大树
-  tryPlant(392, 300, TREE_VARIANTS.sakura, 1.55)
-  tryPlant(88, 620, TREE_VARIANTS.sakura, 1.45, true)
+  tryPlant(392, 300, TREE_VARIANTS.sakura, VISUAL_SCALE.tree.scatter.landmarkSakura[0])
+  tryPlant(88, 620, TREE_VARIANTS.sakura, VISUAL_SCALE.tree.scatter.landmarkSakura[1], true)
   return trees
 }
 
@@ -440,7 +466,7 @@ const scatterBushes = (grid: number[][], trees: TreeSpot[]): BushSpot[] => {
       x: px,
       y: py,
       variant: Math.floor(rnd() * 3),
-      scale: 0.8 + rnd() * 0.5,
+      scale: VISUAL_SCALE.bush.scatterMin + rnd() * VISUAL_SCALE.bush.scatterRange,
       flip: rnd() > 0.5,
     })
   }

@@ -130,6 +130,7 @@ const userMessageCopyText = computed(() => kind.value.text)
           :token-label="segmentTokenLabel"
           :token-title="segmentTokenTitle"
           :time-label="segmentTimeLabel"
+          :attachments="extras.uploads"
         />
         <ChatMessageBody
           v-else

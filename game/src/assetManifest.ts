@@ -44,8 +44,8 @@ const character = (file: string, label: string): SheetDef => ({
   file,
   label,
   kind: 'character',
-  frameWidth: 32,
-  frameHeight: 48,
+  frameWidth: 64,
+  frameHeight: 96,
   columns: 4,
   rows: 5,
   anims: characterAnims,
@@ -78,8 +78,8 @@ export const SHEETS: SheetDef[] = [
     file: 'tileset.png',
     label: '地形瓦片（草原 / 路 / 水 / 点缀）',
     kind: 'tileset',
-    frameWidth: 32,
-    frameHeight: 32,
+    frameWidth: 64,
+    frameHeight: 64,
     columns: 8,
     rows: 3,
     anims: { water: { frames: [9, 10], fps: 2, repeat: true } },
@@ -88,22 +88,22 @@ export const SHEETS: SheetDef[] = [
     file: 'tree.png',
     label: '树 x4 变体（橡树/松树/白桦/樱花，帧=变体非动画）',
     kind: 'tileset',
-    frameWidth: 48,
-    frameHeight: 72,
+    frameWidth: 192,
+    frameHeight: 288,
     columns: 4,
     rows: 1,
     anims: {},
   },
 
   // ---- 固定建筑 ----
-  strip('building_spawn.png', '出生地（泉水）', 'building', 64, 64, 4),
-  strip('building_library.png', '设备·图书馆 · 帧1=在线亮灯', 'building', 96, 96, 2, 2),
+  strip('building_spawn.png', '出生地（泉水）', 'building', 128, 128, 4),
+  strip('building_library.png', '设备·图书馆 · 帧1=在线亮灯', 'building', 192, 192, 2, 2),
 
   // ---- 动态作坊 ----
-  strip('building_workshop_desktop.png', '作坊·机械坊（桌面 agent）', 'building', 64, 64, 4),
-  strip('building_workshop_browser.png', '作坊·瞭望塔（浏览器 agent）', 'building', 64, 80, 4),
-  strip('building_workshop_knowledge.png', '作坊·知识与进化', 'building', 64, 80, 4),
-  strip('building_workshop_android.png', '作坊·移动信号坊（安卓 agent）', 'building', 64, 80, 4),
+  strip('building_workshop_desktop.png', '作坊·机械坊（桌面 agent）', 'building', 128, 128, 4),
+  strip('building_workshop_browser.png', '作坊·瞭望塔（浏览器 agent）', 'building', 128, 160, 4),
+  strip('building_workshop_knowledge.png', '作坊·知识与进化', 'building', 128, 160, 4),
+  strip('building_workshop_android.png', '作坊·移动信号坊（安卓 agent）', 'building', 128, 160, 4),
 
   // ---- 角色 ----
   character('char_admin.png', '核心管理员（紫袍金冠）'),
@@ -112,28 +112,30 @@ export const SHEETS: SheetDef[] = [
   character('char_member_red.png', '数字成员 · 红'),
   character('char_member_amber.png', '数字成员 · 黄'),
   character('char_member_slate.png', '数字成员 · 灰'),
+  strip('resident_gardener.png', '花园居民 · 园艺师（环境角色）', 'character', 64, 96, 1),
 
   // ---- 特效 / UI ----
   strip('envelope.png', '信封（AI 互发消息的信使）', 'effect', 24, 18, 1),
   strip('cloud.png', '云朵（开场加载层，2 形态）', 'effect', 128, 64, 2),
 
   // ---- 装饰 ----
-  strip('lamp.png', '灯柱（帧1=夜晚点亮）', 'tileset', 24, 56, 2),
-  strip('decor_library_obelisk.png', '图书馆装饰·知识方尖碑', 'tileset', 36, 64, 1),
-  strip('decor_library_banner.png', '图书馆装饰·学院旗帜', 'tileset', 28, 56, 1),
-  strip('decor_book_stand.png', '图书馆装饰·展开书台', 'tileset', 36, 36, 1),
+  strip('lamp.png', '灯柱（帧1=夜晚点亮）', 'tileset', 48, 112, 2),
+  strip('decor_library_obelisk.png', '图书馆装饰·知识方尖碑', 'tileset', 72, 128, 1),
+  strip('decor_library_banner.png', '图书馆装饰·学院旗帜', 'tileset', 56, 112, 1),
+  strip('decor_book_stand.png', '图书馆装饰·展开书台', 'tileset', 72, 72, 1),
   {
     file: 'bush.png',
     label: '灌木丛 x3 变体（圆灌木/浆果/花灌木，帧=变体非动画）',
     kind: 'tileset',
-    frameWidth: 32,
-    frameHeight: 24,
+    frameWidth: 128,
+    frameHeight: 96,
     columns: 3,
     rows: 1,
     anims: {},
   },
-  strip('bench.png', '长椅', 'tileset', 40, 24, 1),
-  strip('signpost.png', '路牌', 'tileset', 32, 40, 1),
+  strip('bench.png', '长椅', 'tileset', 80, 48, 1),
+  strip('signpost.png', '路牌', 'tileset', 64, 80, 1),
+  strip('decor_planter.png', '薰衣草陶盆', 'tileset', 64, 72, 1),
   strip('butterfly.png', '蝴蝶（扇翅，运行时 tint 变色）', 'effect', 16, 16, 2, 8),
   strip('glow.png', '径向光晕（夜间灯光/萤火虫，ADD 混合）', 'effect', 32, 32, 1),
   {
@@ -149,7 +151,7 @@ export const SHEETS: SheetDef[] = [
   strip('effect_petal.png', '樱花花瓣（飘落翻转）', 'effect', 16, 16, 2, 3),
   strip('effect_smoke.png', '烟雾', 'effect', 16, 16, 4, 5),
   strip('effect_sparkle.png', '火花', 'effect', 16, 16, 4, 8),
-  strip('effect_toolbox_bag.png', '工具箱挎包（绑定工具箱的 AI 成员侧挂饰）', 'effect', 12, 16, 1),
+  strip('effect_toolbox_bag.png', '工具箱挎包（绑定工具箱的 AI 成员侧挂饰）', 'effect', 24, 32, 1),
 ]
 
 /** 普通成员可选皮肤（值 = spritesheet 注册 key，即文件名） */

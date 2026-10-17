@@ -105,6 +105,7 @@ game/
     world/store.ts  ← 数据绑定层（REST 轮询 + Socket.IO → WorldSnapshot，只读）
     world/bindings.ts ← 拖拽绑定/解绑动作：作坊、端侧 agent 的写接口适配
     world/layout.ts ← 地图尺寸 / 建筑坐标 / 锚区矩形 / 作坊插槽
+    world/visualScale.ts ← 世界素材统一显示比例（树木 / 灌木 / 角色 / 建筑 / 装饰 / 特效）
     world/map.ts    ← 地表网格生成 / 道路广场 / 树木与装饰坐标配置
     world/skins.ts  ← 角色→皮肤映射（普通成员按 id 哈希确定性取色，可被 WorldActorMeta 覆盖）
     world/time.ts   ← 北京时间 / 调试小时 / 昼夜深度等时间规则
@@ -121,7 +122,16 @@ game/
     generate_sfx.py    ← 8-bit 音效生成器（标准库 wave，输出 assets/sfx/*.wav）
 ```
 
+### 统一调整素材比例
+
+社会显示中的素材显示倍率集中在 `src/world/visualScale.ts`。需要调整树木、
+草丛（灌木）、角色、建筑或独立装饰时，优先修改该文件对应分组；每棵树/灌木
+保留的随机变化和成员外观中的逻辑倍率会继续生效。`assetManifest.ts` 与
+`generated*.ts` 中的帧尺寸/素材生成适配属于资源契约，不需要为显示比例而修改。
+
 ## 重新生成资产
+
+2026-09-09：新增 ImageGen 建筑、树木和园艺师素材，存放在 `assets/town-*-v2.png`，完整生成提示词与图格顺序见 [`assets/IMAGEGEN.md`](assets/IMAGEGEN.md)。`src/generatedAssets.ts` 在首次打开世界或素材预览时按透明边界归一，输出原有帧尺寸并缓存，游戏与头像共用同一素材入口。新增池塘涟漪、缓慢云影、林缘光池、飞鸟，以及花园小屋旁的园艺师与飘落花瓣；环境角色不计入实际成员或设备。触屏及系统“减少动态效果”时，新环境层保持静态光影。基础 PNG 与下述生成器保留为加载失败时的回退；重新运行生成器不会覆盖 AI 图集。
 
 ```bash
 pip install Pillow
@@ -133,8 +143,10 @@ python3 game/tools/generate_assets.py
 
 ## 资产规范
 
+第二轮已统一全部六类 AI 人物、地板与水面、板凳、昼夜路灯、路牌、灌木、书台、旗帜、方尖碑和工具挎包。运行时适配拆分在 `generatedCharacters.ts`、`generatedTerrain.ts`、`generatedProps.ts`；角色使用 `town-character-*-actions-v3.png` 的真实 4×5 行走/动作图集，v2 四方向图仅作加载失败回退。外观设置预览同源更新。完整素材记录和提示词见 `assets/IMAGEGEN.md` 与 `assets/ACTION-ANIMATION.md`。
+
 - 1x 内部分辨率手绘，NEAREST 放大 2 倍输出；瓦片标准 32px，角色 32x48。
-- 角色 sheet：4 列 x 5 行 —— 行 0-3 = 走路 下/左/右/上（第 0 帧兼站立），行 4 = 闭眼 idle / 坐 / 跪倒 / 躺倒。
+- 角色 sheet：4 列 x 5 行 —— 行 0-3 = 走路 下/左/右/上，行 4 = 待机 / 挥手 / 专属动作 / 横向躺姿。
 - 统一描边色 `(34,32,52)`；调色板集中在生成器顶部，新颜色先进调色板。
 
 ## game 侧 7 大设计原则

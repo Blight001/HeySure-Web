@@ -77,11 +77,22 @@ const tryMergeOptimisticUser = (ctx: HistoryCtx, msg: ChatMessage) => {
   return true
 }
 
+const mergeExistingMessageAttachments = (ctx: HistoryCtx, msg: ChatMessage) => {
+  if (!msg.id || !Array.isArray(msg.attachments) || msg.attachments.length === 0) return false
+  const existing = ctx.state.chatMessages.value.find(item => item.id === msg.id)
+  if (!existing) return false
+  existing.attachments = msg.attachments
+  return true
+}
+
 const upsertHistoryMessages = async (ctx: HistoryCtx, incoming: ChatMessage[]) => {
   if (!incoming.length) return
   const existingIds = new Set(ctx.state.chatMessages.value.map(m => m.id).filter(Boolean))
   for (const msg of incoming) {
-    if (msg.id && existingIds.has(msg.id)) continue
+    if (msg.id && existingIds.has(msg.id)) {
+      mergeExistingMessageAttachments(ctx, msg)
+      continue
+    }
     if (tryMergeOptimisticUser(ctx, msg)) continue
     if (tryMergeAssistant(ctx, msg)) continue
     ctx.state.chatMessages.value.push(mapHistoryMessage(msg))

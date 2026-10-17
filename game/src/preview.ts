@@ -6,6 +6,7 @@
  */
 import { SHEETS, type SheetDef } from './assetManifest'
 import { urlForAsset } from './assets'
+import { VISUAL_SCALE } from './world/visualScale'
 
 const loadImage = (url: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -14,8 +15,6 @@ const loadImage = (url: string): Promise<HTMLImageElement> =>
     img.onerror = () => reject(new Error(`加载失败: ${url}`))
     img.src = url
   })
-
-const DISPLAY_SCALE = 3
 
 interface Player {
   ctx: CanvasRenderingContext2D
@@ -46,8 +45,8 @@ const makeCard = (title: string): HTMLDivElement => {
 
 const makeCanvas = (sheet: SheetDef): HTMLCanvasElement => {
   const canvas = document.createElement('canvas')
-  canvas.width = sheet.frameWidth * DISPLAY_SCALE
-  canvas.height = sheet.frameHeight * DISPLAY_SCALE
+  canvas.width = sheet.frameWidth * VISUAL_SCALE.preview
+  canvas.height = sheet.frameHeight * VISUAL_SCALE.preview
   return canvas
 }
 

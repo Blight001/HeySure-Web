@@ -122,7 +122,9 @@ const emit = defineEmits<{
     v-model:mcpMaxSteps="system.mcpMaxSteps"
     v-model:mcpHistoryResultMaxChars="system.mcpHistoryResultMaxChars"
     v-model:conversationAutoCompressEnabled="system.conversationAutoCompressEnabled"
-    @save="system.saveSystemSettings"
+    @save-model="system.saveModelSettings"
+    @save-chat="system.saveConversationSettings"
+    @save-page="system.savePageSettings"
   />
 
   <AdminModal

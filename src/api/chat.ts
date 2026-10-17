@@ -39,6 +39,8 @@ export interface ChatAttachment {
   mime_type: string
   bytes: number
   is_image: boolean
+  is_video?: boolean
+  is_audio?: boolean
   url?: string
 }
 

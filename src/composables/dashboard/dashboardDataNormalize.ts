@@ -291,6 +291,8 @@ export function mapAiCardToAgent(
     workspaceRoot: row.workspace_root || row.workspaceRoot || '',
     tokensUsed: row.token_used || 0,
     aiConfigId: configId,
+    isLibrarian: Boolean(row.is_librarian),
+    switchKey: String(row.switch_key || ''),
     enabled: !!row.enabled,
     mcpEnabled: !!row.mcp_enabled,
     mcpTools: row.mcp_tools || '[]',

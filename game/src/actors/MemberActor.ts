@@ -8,6 +8,7 @@
 import Phaser from 'phaser'
 import { EMOTES } from '../assetManifest'
 import { clampToWorld, type Point, type Rect } from '../world/layout'
+import { VISUAL_SCALE } from '../world/visualScale'
 import type { WorldMember } from '../world/store'
 import { tickMember } from './memberActorTick'
 import {
@@ -44,6 +45,7 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
   prevRender: WorldMember | null = null
   shadow!: Phaser.GameObjects.Graphics
   sprite!: Phaser.GameObjects.Sprite
+  logicalScale = 1
   bag!: Phaser.GameObjects.Image
   bagGlow!: Phaser.GameObjects.Image
   nightness = 0
@@ -114,7 +116,7 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
     this.bagGlow = scene.add.image(start.x, start.y, 'glow.png', 0)
     this.bagGlow.setBlendMode(Phaser.BlendModes.ADD)
     this.bagGlow.setTint(0xffcf8a)
-    this.bagGlow.setScale(3.0, 2.1)
+    this.bagGlow.setScale(VISUAL_SCALE.character.bagGlowX, VISUAL_SCALE.character.bagGlowY)
     this.bagGlow.setDepth(155050)
     this.bagGlow.setAlpha(0)
     this.bagGlow.setVisible(false)
@@ -126,24 +128,32 @@ export class MemberActor extends Phaser.GameObjects.Container implements MemberA
   private attachHud(scene: Phaser.Scene, member: WorldMember) {
     this.tokenBar = scene.add.graphics()
     this.add(this.tokenBar)
-    this.nameTag = scene.add.text(0, -52, member.name || `#${member.id}`, {
+    this.nameTag = scene.add.text(0, -56, member.name || `#${member.id}`, {
       fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
-      fontSize: '10px',
+      // Render Chinese names on a larger backing canvas so fractional camera
+      // zoom does not soften the glyph edges.
+      fontSize: '14px',
+      resolution: 4,
       color: '#eef2ff',
       backgroundColor: '#0f1420cc',
-      padding: { x: 4, y: 2 },
+      padding: { x: 5, y: 3 },
     })
     this.nameTag.setOrigin(0.5, 0)
+    const spriteTop = this.sprite.y - this.sprite.displayHeight * this.sprite.originY
+    this.nameTag.setY(spriteTop - this.nameTag.height - 5)
     this.add(this.nameTag)
     this.emote = scene.add.image(0, -84, 'emotes.png', 0)
+    this.emote.setScale(VISUAL_SCALE.effect.emote)
     this.emote.setVisible(false)
+    this.emote.setY(this.nameTag.y - this.emote.displayHeight / 2 - 4)
     this.add(this.emote)
     this.speechBubble = scene.add.graphics()
     this.speechBubble.setVisible(false)
     this.add(this.speechBubble)
     this.speechText = scene.add.text(0, 0, '', {
       fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
-      fontSize: '11px',
+      fontSize: '12px',
+      resolution: 3,
       color: '#20242c',
       lineSpacing: 2,
       wordWrap: { width: SPEECH_W - 16, useAdvancedWrap: true },

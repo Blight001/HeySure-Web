@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type CSSProperties } from 'vue'
 import { listWorldActorMeta, setWorldActorMeta, type WorldActorAppearance } from '@/api/world'
-import { appearanceSkinUrl, DEFAULT_APPEARANCE, MEMBER_SKIN_OPTIONS } from './aiConfigSkins'
+import { appearanceSkinUrl, DEFAULT_APPEARANCE, loadAppearanceSkinUrl, loadSkinPreviewUrl, MEMBER_SKIN_OPTIONS } from './aiConfigSkins'
 
 const props = defineProps<{
   editingConfigId: number
@@ -13,15 +13,37 @@ const appearanceLoading = ref(false)
 const appearanceSaving = ref(false)
 const appearanceError = ref('')
 const appearanceNotice = ref('')
+const generatedPreviewUrl = ref('')
+const generatedSkinUrls = ref<Record<string, string>>({})
+let previewRevision = 0
 
 const appearancePreviewStyle = computed<CSSProperties>(() => ({
-  backgroundImage: `url(${appearanceSkinUrl(props.roleGroup, appearanceDraft.value, props.editingConfigId)})`,
+  backgroundImage: `url(${generatedPreviewUrl.value || appearanceSkinUrl(props.roleGroup, appearanceDraft.value, props.editingConfigId)})`,
   backgroundPosition: '0 0',
   backgroundRepeat: 'no-repeat',
   backgroundSize: '256px auto',
   imageRendering: 'pixelated',
   transform: `scale(${appearanceDraft.value.scale})`,
 }))
+
+const skinOptionUrl = (key: string, fallback: string) => generatedSkinUrls.value[key] || fallback
+
+const refreshGeneratedPreviews = async () => {
+  const revision = ++previewRevision
+  const draft = { ...appearanceDraft.value }
+  const configId = props.editingConfigId
+  const role = props.roleGroup
+  const preview = await loadAppearanceSkinUrl(role, draft, configId)
+  if (revision !== previewRevision) return
+  generatedPreviewUrl.value = preview
+  const next = { ...generatedSkinUrls.value }
+  await Promise.all(MEMBER_SKIN_OPTIONS.map(async skin => {
+    const file = skin.key || draft.skin
+    const url = file ? await loadSkinPreviewUrl(file) : preview
+    if (url) next[skin.key] = url
+  }))
+  if (revision === previewRevision) generatedSkinUrls.value = next
+}
 
 const loadAppearance = async () => {
   appearanceNotice.value = ''
@@ -75,6 +97,11 @@ const resetAppearanceDraft = () => {
 }
 
 watch(() => props.editingConfigId, () => { void loadAppearance() }, { immediate: true })
+watch(
+  () => [props.roleGroup, props.editingConfigId, appearanceDraft.value.skin],
+  () => { void refreshGeneratedPreviews() },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -111,7 +138,13 @@ watch(() => props.editingConfigId, () => { void loadAppearance() }, { immediate:
               : 'border-zinc-200 bg-white/70 text-zinc-500 hover:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-400'"
             @click="appearanceDraft.skin = skin.key"
           >
-            {{ skin.label }}
+            <span
+              v-if="skinOptionUrl(skin.key, skin.url)"
+              class="mx-auto mb-1 block h-9 w-6 [background-size:96px_auto] [image-rendering:pixelated]"
+              :style="{ backgroundImage: `url(${skinOptionUrl(skin.key, skin.url)})` }"
+              :aria-label="`${skin.label}人物`"
+            ></span>
+            <span>{{ skin.label }}</span>
           </button>
         </div>
       </div>
@@ -144,7 +177,7 @@ watch(() => props.editingConfigId, () => { void loadAppearance() }, { immediate:
           <span>人物体型</span>
           <span>{{ Number(appearanceDraft.scale).toFixed(2) }}×</span>
         </div>
-        <input v-model.number="appearanceDraft.scale" type="range" min="0.7" max="1.4" step="0.05" class="w-full accent-indigo-600" />
+        <input v-model.number="appearanceDraft.scale" type="range" min="0.45" max="1.4" step="0.05" class="w-full accent-indigo-600" />
       </div>
 
       <div v-if="appearanceError" class="text-xs text-rose-500">{{ appearanceError }}</div>

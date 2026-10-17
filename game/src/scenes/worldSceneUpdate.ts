@@ -1,4 +1,6 @@
 import { WORLD_H, WORLD_W } from '../world/layout'
+import { VISUAL_SCALE } from '../world/visualScale'
+import { updateAtmosphere } from './worldSceneAtmosphere'
 import { anchorFor } from './worldSceneMembers'
 import type { WorldButterfly, WorldSceneHost } from './worldSceneTypes'
 
@@ -10,6 +12,7 @@ export const updateWorldScene = (scene: WorldSceneHost, time: number, delta: num
   updateWorkshopPads(scene, time)
   updateSwayTrees(scene, time)
   updateButterflies(scene, time, delta)
+  updateAtmosphere(scene, time, delta)
   updateNightGlows(scene, time)
   updateFireflies(scene, time, delta)
 }
@@ -55,7 +58,10 @@ const updateWorkshopTaskGlows = (scene: WorldSceneHost, time: number) => {
     const taskLight = view.taskActive ? 0.18 + pulse * 0.2 : 0
     view.taskGlow.setAlpha(buildingLight + taskLight)
     const taskScale = view.taskActive ? pulse : 0
-    view.taskGlow.setScale(5.4 + taskScale * 1.2, 4.1 + taskScale * 0.9)
+    view.taskGlow.setScale(
+      VISUAL_SCALE.effect.workshopTaskGlow.baseX + taskScale * VISUAL_SCALE.effect.workshopTaskGlow.pulseX,
+      VISUAL_SCALE.effect.workshopTaskGlow.baseY + taskScale * VISUAL_SCALE.effect.workshopTaskGlow.pulseY,
+    )
   }
 }
 
@@ -63,7 +69,10 @@ const updateWorkshopPads = (scene: WorldSceneHost, time: number) => {
   for (const p of scene.workshopPads) {
     const pulse = 0.5 + 0.5 * Math.sin(time * Math.PI / p.halfPeriod + p.phase)
     p.img.setAlpha(0.12 + pulse * 0.10)
-    p.img.setScale(3.4 + pulse * 0.5, 1.05)
+    p.img.setScale(
+      VISUAL_SCALE.effect.workshopPad.x + pulse * VISUAL_SCALE.effect.workshopPad.pulseX,
+      VISUAL_SCALE.effect.workshopPad.y,
+    )
   }
 }
 

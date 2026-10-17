@@ -1,6 +1,6 @@
 import Phaser from 'phaser'
 import { WORLD_H, WORLD_W } from '../world/layout'
-import { worldMinZoom } from './worldSceneShared'
+import { worldFitZoom, worldMinZoom, WORLD_MAX_ZOOM } from './worldSceneShared'
 import type { WorldSceneHost } from './worldSceneTypes'
 
 interface CamDragState {
@@ -54,7 +54,7 @@ const onCamPointerDown = (
 const applyPinchZoom = (scene: WorldSceneHost, cam: Phaser.Cameras.Scene2D.Camera) => {
   if (scene.pinchStartDist <= 8) return
   const scale = pinchDistance(scene) / scene.pinchStartDist
-  const next = Phaser.Math.Clamp(scene.pinchStartZoom * scale, worldMinZoom(scene), 2)
+  const next = Phaser.Math.Clamp(scene.pinchStartZoom * scale, worldMinZoom(scene), WORLD_MAX_ZOOM)
   cam.setZoom(next)
 }
 
@@ -95,7 +95,7 @@ const onCamPointerMove = (
 export const attachWorldCamera = (scene: WorldSceneHost) => {
   const cam = scene.cameras.main
   cam.setBounds(0, 0, WORLD_W, WORLD_H)
-  cam.setZoom(worldMinZoom(scene))
+  cam.setZoom(worldFitZoom(scene))
   cam.centerOn(WORLD_W / 2, WORLD_H / 2)
   cam.roundPixels = true
   const drag: CamDragState = { lastX: 0, lastY: 0 }
@@ -115,7 +115,7 @@ export const attachWorldCamera = (scene: WorldSceneHost) => {
   scene.input.on(
     'wheel',
     (_p: Phaser.Input.Pointer, _objs: unknown, _dx: number, dy: number) => {
-      const next = Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.1), worldMinZoom(scene), 2)
+      const next = Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.1), worldMinZoom(scene), WORLD_MAX_ZOOM)
       cam.setZoom(next)
     },
   )

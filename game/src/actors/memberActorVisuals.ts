@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { EMOTES } from '../assetManifest'
 import { speechPreview } from '../world/format'
+import { VISUAL_SCALE } from '../world/visualScale'
 import type { WorldMember } from '../world/store'
 import {
   BAG_DROP_Y,
@@ -23,10 +24,16 @@ export const applyAppearance = (actor: MemberActorHost, a: ActorAppearance) => {
   const tint = hexToColor(a.tint)
   if (tint !== null) actor.sprite.setTint(tint)
   else actor.sprite.clearTint()
-  const scale = Phaser.Math.Clamp(Number.isFinite(a.scale) && a.scale > 0 ? a.scale : 1, 0.7, 1.4)
-  actor.sprite.setScale(scale)
-  actor.sprite.y = -24 * scale
-  actor.bag.setScale(scale)
+  const scale = Phaser.Math.Clamp(
+    Number.isFinite(a.scale) && a.scale > 0 ? a.scale : 1,
+    VISUAL_SCALE.character.logicalMin,
+    VISUAL_SCALE.character.logicalMax,
+  )
+  actor.logicalScale = scale
+  actor.sprite.setScale(scale * VISUAL_SCALE.character.display)
+  actor.sprite.y = -(actor.sprite.displayHeight * 0.5) - 1
+  positionNameTag(actor)
+  actor.bag.setScale(scale * VISUAL_SCALE.character.bag)
   applyBagSide(actor)
   actor.shadow.clear()
   actor.shadow.fillStyle(0x000000, 0.2)
@@ -34,12 +41,22 @@ export const applyAppearance = (actor: MemberActorHost, a: ActorAppearance) => {
   applyAura(actor, a, scale)
 }
 
+const positionNameTag = (actor: MemberActorHost) => {
+  if (!actor.nameTag) return
+  // 用实际渲染尺寸定位，避免切换高分辨率帧后名称与角色重叠。
+  const spriteTop = actor.sprite.y - actor.sprite.displayHeight * actor.sprite.originY
+  actor.nameTag.setY(spriteTop - actor.nameTag.height - 5)
+  if (actor.emote) {
+    actor.emote.setY(actor.nameTag.y - actor.emote.displayHeight / 2 - 4)
+  }
+}
+
 const applyAura = (actor: MemberActorHost, a: ActorAppearance, scale: number) => {
   const auraColor = hexToColor(a.aura)
   actor.auraOn = auraColor !== null
   if (auraColor !== null) {
     actor.aura.setTint(auraColor)
-    actor.aura.setScale(1.6 * scale, 0.9 * scale)
+    actor.aura.setScale(VISUAL_SCALE.character.auraX * scale, VISUAL_SCALE.character.auraY * scale)
     actor.aura.setVisible(true)
     return
   }
@@ -57,7 +74,7 @@ export const setFacing = (actor: MemberActorHost, dir: Facing) => {
 }
 
 export const applyBagSide = (actor: MemberActorHost) => {
-  const scale = actor.sprite.scaleX || 1
+  const scale = actor.logicalScale || 1
   if (actor.facing === 'left') {
     actor.bag.x = -BAG_PROFILE_X * scale
     actor.bag.setFlipX(true)
@@ -109,7 +126,7 @@ export const refreshTokenBar = (actor: MemberActorHost) => {
   const m = actor.member
   if (actor.controlled || m.tokenLimit <= 0) return
   const x = -TOKEN_BAR_W / 2
-  const y = -66
+  const y = actor.nameTag.y - TOKEN_BAR_H - 4
   g.fillStyle(0x1f2933, 0.86)
   g.fillRect(x - 1, y - 1, TOKEN_BAR_W + 2, TOKEN_BAR_H + 2)
   const usedRatio = Phaser.Math.Clamp(m.tokensUsed / m.tokenLimit, 0, 1)
@@ -165,8 +182,8 @@ export const flashClick = (actor: MemberActorHost) => {
   const baseScaleY = actor.sprite.scaleY
   actor.scene.tweens.add({
     targets: actor.sprite,
-    scaleX: baseScaleX * 0.80,
-    scaleY: baseScaleY * 0.80,
+    scaleX: baseScaleX * VISUAL_SCALE.interaction.clickShrink,
+    scaleY: baseScaleY * VISUAL_SCALE.interaction.clickShrink,
     duration: 55,
     yoyo: true,
     ease: 'Sine.easeOut',
@@ -207,7 +224,7 @@ export const syncBag = (actor: MemberActorHost) => {
   if (!actor.bag.visible) return
   const frame = Number(actor.sprite.frame?.name)
   if (Number.isFinite(frame)) setFacing(actor, facingFromFrame(frame))
-  actor.bag.y = actor.sprite.y + BAG_DROP_Y * actor.sprite.scaleX
+  actor.bag.y = actor.sprite.y + BAG_DROP_Y * (actor.logicalScale || 1)
 }
 
 export const refreshBagGlow = (actor: MemberActorHost, time: number) => {

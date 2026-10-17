@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { MemberActor } from '../actors/MemberActor'
 import { applyMemberDropBinding } from '../world/bindings'
+import { VISUAL_SCALE } from '../world/visualScale'
 import { memberTooltipData } from '../ui/worldText'
 import type { TooltipData } from '../ui/overlay'
 import { playSfx } from './worldSceneAmbient'
@@ -119,8 +120,8 @@ const bounceBuilding = (scene: WorldSceneHost, key: string) => {
   const sy = bSprite.scaleY
   scene.tweens.add({
     targets: bSprite,
-    scaleX: sx * 0.92,
-    scaleY: sy * 0.92,
+    scaleX: sx * VISUAL_SCALE.interaction.buildingBounce,
+    scaleY: sy * VISUAL_SCALE.interaction.buildingBounce,
     duration: 75,
     yoyo: true,
     ease: 'Sine.easeOut',

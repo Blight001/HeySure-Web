@@ -60,6 +60,8 @@ export interface MemberActorHost extends Phaser.GameObjects.Container {
   prevRender: WorldMember | null
   shadow: Phaser.GameObjects.Graphics
   sprite: Phaser.GameObjects.Sprite
+  /** 外观配置中的逻辑缩放（与 64x96 运行时帧的渲染 scale 分离）。 */
+  logicalScale: number
   bag: Phaser.GameObjects.Image
   bagGlow: Phaser.GameObjects.Image
   nightness: number

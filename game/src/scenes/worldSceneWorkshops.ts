@@ -2,10 +2,9 @@ import Phaser from 'phaser'
 import { workshopDisplayName, workshopTooltipData } from '../ui/worldText'
 import {
   LIBRARY_DEVICE_POS,
-  LIBRARY_DEVICE_SCALE,
-  WORKSHOP_SCALE,
   workshopSlotPos,
 } from '../world/layout'
+import { VISUAL_SCALE } from '../world/visualScale'
 import type { WorldMember, WorldSnapshot, WorldWorkshop } from '../world/store'
 import {
   OFFLINE_KEEP_MS,
@@ -152,7 +151,9 @@ export const applyWorkshopTexture = (scene: WorldSceneHost, view: WorkshopView) 
     const size = view.data.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
     setSpriteMaxDisplaySize(view.sprite, size)
   } else {
-    view.sprite.setScale(view.data.type === 'workshop' ? LIBRARY_DEVICE_SCALE : WORKSHOP_SCALE)
+    view.sprite.setScale(
+      view.data.type === 'workshop' ? VISUAL_SCALE.building.library : VISUAL_SCALE.building.workshop,
+    )
   }
   view.sprite.setAlpha(view.offlineSince !== null || !view.data.online ? 0.62 : 1)
   syncWorkshopLabel(view)
@@ -247,7 +248,7 @@ const createWorkshopGlow = (
   const taskGlow = scene.add.image(pos.x, pos.y - 24, 'glow.png', 0)
   taskGlow.setBlendMode(Phaser.BlendModes.ADD)
   taskGlow.setTint(workshopGlowTintForType(w.type))
-  taskGlow.setScale(6.8, 5.2)
+  taskGlow.setScale(VISUAL_SCALE.effect.workshopTaskGlow.x, VISUAL_SCALE.effect.workshopTaskGlow.y)
   taskGlow.setDepth(155100)
   taskGlow.setAlpha(0)
   return taskGlow
@@ -266,7 +267,9 @@ const createWorkshopSprite = (
     const size = w.type === 'workshop' ? CUSTOM_LIBRARY_ICON_SIZE : CUSTOM_WORKSHOP_ICON_SIZE
     setSpriteMaxDisplaySize(sprite, size)
   } else {
-    sprite.setScale(w.type === 'workshop' ? LIBRARY_DEVICE_SCALE : WORKSHOP_SCALE)
+    sprite.setScale(
+      w.type === 'workshop' ? VISUAL_SCALE.building.library : VISUAL_SCALE.building.workshop,
+    )
   }
   sprite.setDepth(pos.y)
   sprite.setInteractive({ pixelPerfect: !customIconLoaded })
@@ -281,6 +284,7 @@ const createWorkshopLabel = (
   const label = scene.add.text(pos.x, pos.y, workshopDisplayName(w), {
     fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
     fontSize: '12px',
+    resolution: 3,
     color: '#fff4d2',
     backgroundColor: '#14100dcc',
     padding: { x: 5, y: 2 },

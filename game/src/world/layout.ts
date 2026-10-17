@@ -1,3 +1,5 @@
+import { VISUAL_SCALE } from './visualScale'
+
 /**
  * 世界布局：地图尺寸、固定建筑坐标、锚区矩形、作坊插槽。
  * 全部用世界像素坐标（TILE=32）。P0 用代码生成地图，不依赖 Tiled。
@@ -33,15 +35,12 @@ export interface FixedBuildingDef {
 
 export const FIXED_BUILDINGS: FixedBuildingDef[] = [
   // 出生地下移并左移到主路 T 形路口左侧，让出脚下的南北主路。
-  { key: 'spawn', sheet: 'building_spawn.png', label: '出生地', pos: { x: 194, y: 736 }, scale: 1.7 },
+  // 128px runtime frame × 1.15 ≈ 147px world height，约为成员的 2.6 倍。
+  { key: 'spawn', sheet: 'building_spawn.png', label: '出生地', pos: { x: 194, y: 736 }, scale: VISUAL_SCALE.building.fixed.spawn },
 ]
 
 /** 在线图书馆设备：固定放在出生地上方原知识库地块。 */
 export const LIBRARY_DEVICE_POS: Point = { x: 290, y: 410 }
-
-/** 动态作坊（机械坊 / 瞭望塔 / 图书馆设备）的世界显示放大倍数 */
-export const WORKSHOP_SCALE = 1.45
-export const LIBRARY_DEVICE_SCALE = 1.7
 
 /** 角色锚区（成员在矩形内游荡） */
 export const ZONES: Record<string, Rect> = {

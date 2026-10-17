@@ -7,6 +7,7 @@ import type { MemberActor } from '../actors/MemberActor'
 import type { Overlay, TooltipData } from '../ui/overlay'
 import { WorldStore, type WorldSnapshot } from '../world/store'
 import { createWorldAnims, preloadWorldAssets } from './assetSetup'
+import { createAtmosphere } from './worldSceneAtmosphere'
 import {
   createAmbientLife,
   createAudio,
@@ -111,6 +112,7 @@ export class WorldScene extends Phaser.Scene implements WorldSceneFields {
     createWorldAnims(this)
     createGround(this)
     createDecor(this)
+    createAtmosphere(this)
     createBuildings(this)
     attachWorldCamera(this)
     createDayNight(this)

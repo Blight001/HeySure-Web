@@ -2,7 +2,7 @@
  * 头像渲染：把角色 / 建筑 spritesheet 的某一帧完整裁出，
  * 放大画进一个像素风 canvas，供右侧信息面板顶部显示。
  *
- * 像素资产很小（角色 32x48 / 建筑 64~96），直接用 canvas drawImage 裁剪 + 整数放大，
+ * 角色运行时帧为 64x96（建筑 64~96），直接用 canvas drawImage 裁剪 + 整数放大，
  * 关闭平滑保持像素颗粒。图片按 URL 缓存，避免重复解码。
  */
 import { SHEETS } from '../assetManifest'
