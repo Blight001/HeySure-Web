@@ -25,6 +25,7 @@ import {
   WORKSHOP_BASE_ORIGIN_Y,
   WORKSHOP_LABEL_WRAP_WIDTH,
   deviceIconLoadUrl,
+  groundDepth,
   positionWorkshopLabel,
   setSpriteMaxDisplaySize,
 } from './worldSceneShared'
@@ -294,7 +295,7 @@ const createWorkshopSprite = (
       w.type === 'workshop' ? VISUAL_SCALE.building.library : VISUAL_SCALE.building.workshop,
     ))
   }
-  sprite.setDepth(pos.y)
+  sprite.setDepth(groundDepth(sprite))
   sprite.setInteractive({ pixelPerfect: !customIconLoaded })
   return sprite
 }
@@ -410,7 +411,7 @@ export const relayoutWorkshopSlots = (scene: WorldSceneHost) => {
     const key = view.data.type === 'workshop' ? 'building:library' : `workshop:${view.data.deviceId}`
     const next = positionBy(key, view.data.type === 'workshop' ? LIBRARY_DEVICE_POS : pos)
     view.sprite.setPosition(next.x, next.y)
-    view.sprite.setDepth(next.y)
+    view.sprite.setDepth(groundDepth(view.sprite))
     view.taskGlow.setPosition(next.x, next.y - 24)
     positionWorkshopLabel(view)
     applyWorkshopTexture(scene, view)

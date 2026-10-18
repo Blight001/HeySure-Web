@@ -4,14 +4,14 @@
 
 ## 建筑
 
-文件：`town-buildings-v2.png`；1536 × 1024，3 列 × 2 行。
+文件：`town-buildings.png`；1536 × 1024，3 列 × 2 行。
 
 依次为图书馆、机械坊、观测塔、学者小屋、信号塔、喷泉。帧输出保持原有尺寸，局部灯光与水光由运行时渲染。
 
 最终提示词：
 
 ```text
-Create a gorgeous cozy pixel-art game asset atlas. Genuine transparent background. A regular 3 columns by 2 rows layout, six separate isolated full objects, generous spacing. Top row: ivory stone library with navy roof and golden rose window; timber workshop with terracotta roof and copper chimney; teal-roofed observatory with telescope. Bottom row: violet-roofed scholar cottage with a magical open book; sage signal tower with copper antenna; aqua tiered stone fountain. Consistent orthographic three-quarter overhead RPG camera, warm sunlight, rich tiny details, crisp refined 32-bit pixel clusters. No text, no grid lines, no scenery behind assets, no checkerboard baked in. Landscape atlas, each cell square, aligned object bases.
+Create a gorgeous cozy pixel-art game asset atlas. Genuine transparent background. A regular 3 columns by 2 rows layout, six separate isolated full objects, generous spacing. Top row: ivory stone library with navy roof and golden rose window; timber workshop with terracotta roof and copper chimney; teal-roofed observatory with telescope. Bottom row: violet-roofed scholar cottage with a magical open book; sage signal tower with copper antenna; aqua tiered stone fountain. Consistent straight-on front-facing orthographic RPG camera, warm sunlight, rich tiny details, crisp refined 32-bit pixel clusters. No visible side facade, no text, no grid lines, no scenery behind assets, no checkerboard baked in. Landscape atlas, each cell square, aligned object bases.
 ```
 
 ## 环境

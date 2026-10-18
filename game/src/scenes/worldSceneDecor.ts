@@ -31,6 +31,7 @@ import {
 import { VISUAL_SCALE } from '../world/visualScale'
 import { scaleBy } from '../world/visualScaleRuntime'
 import { markVisualPositionObject } from '../world/visualPositionRuntime'
+import { groundDepth } from './worldSceneShared'
 import type { DecoFn, NightGlowSpec, WorldSceneHost } from './worldSceneTypes'
 
 const makeDeco = (scene: WorldSceneHost): DecoFn => {
@@ -40,7 +41,7 @@ const makeDeco = (scene: WorldSceneHost): DecoFn => {
     img.setOrigin(0.5, 0.9)
     // 环境图集使用 2x 运行时帧，默认缩回逻辑像素尺寸。
     img.setScale(scaleBy('prop', VISUAL_SCALE.prop.default))
-    img.setDepth(y)
+    img.setDepth(groundDepth(img))
     const stem = key.replace(/\.png$/, '')
     const index = counts.get(stem) ?? 0
     counts.set(stem, index + 1)
@@ -49,7 +50,7 @@ const makeDeco = (scene: WorldSceneHost): DecoFn => {
       label: `${stem} ${index + 1}`,
       source: 'prop',
     })
-    img.setDepth(img.y)
+    img.setDepth(groundDepth(img))
     img.setInteractive({ pixelPerfect: true })
     scene.input.setDraggable(img)
     return img
@@ -424,7 +425,7 @@ export const createBuildings = (scene: WorldSceneHost) => {
     const sprite = scene.add.sprite(def.pos.x, def.pos.y, def.sheet, 0)
     sprite.setOrigin(0.5, 0.55)
     sprite.setScale(scaleBy('building', def.scale))
-    sprite.setDepth(def.pos.y + sprite.displayHeight * 0.4)
+    sprite.setDepth(groundDepth(sprite))
     sprite.setInteractive({ pixelPerfect: true })
     sprite.setData('tooltip', () => buildingTooltipData(def.key, def.label, scene.snap))
     sprite.setData('buildingKey', def.key)
@@ -433,7 +434,7 @@ export const createBuildings = (scene: WorldSceneHost) => {
       label: def.label,
       source: 'building',
     })
-    sprite.setDepth(sprite.y + sprite.displayHeight * 0.4)
+    sprite.setDepth(groundDepth(sprite))
     scene.input.setDraggable(sprite)
     scene.buildings.set(def.key, sprite)
   }

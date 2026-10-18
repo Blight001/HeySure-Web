@@ -7,7 +7,7 @@ import { nightnessForHour, resolveWorldHour } from '../world/time'
 import { VISUAL_SCALE } from '../world/visualScale'
 import { scaleBy } from '../world/visualScaleRuntime'
 import { markVisualPositionObject } from '../world/visualPositionRuntime'
-import { updateHud, worldFitZoom } from './worldSceneShared'
+import { groundDepth, updateHud, worldFitZoom } from './worldSceneShared'
 import type { WorldSceneHost } from './worldSceneTypes'
 
 export const createGround = (scene: WorldSceneHost) => {
@@ -51,13 +51,13 @@ const placeTrees = (
     tree.setOrigin(0.5, 0.94)
     tree.setScale(displayScale)
     tree.setFlipX(t.flip)
-    tree.setDepth(t.y)
+    tree.setDepth(groundDepth(tree))
     markVisualPositionObject(tree, {
       key: `tree:${index}`,
       label: `树木 ${index + 1}`,
       source: 'tree',
     })
-    tree.setDepth(tree.y)
+    tree.setDepth(groundDepth(tree))
     tree.setInteractive({ pixelPerfect: true })
     scene.input.setDraggable(tree)
     scene.swayTrees.push({
@@ -79,13 +79,13 @@ const placeBushes = (
     // 灌木运行时帧提升为 2x，按逻辑尺寸缩回；树木单独放大以改善可读性。
     bush.setScale(scaleBy('bush', b.scale * VISUAL_SCALE.bush.rasterFactor * VISUAL_SCALE.bush.display))
     bush.setFlipX(b.flip)
-    bush.setDepth(b.y)
+    bush.setDepth(groundDepth(bush))
     markVisualPositionObject(bush, {
       key: `bush:${index}`,
       label: `灌木 ${index + 1}`,
       source: 'bush',
     })
-    bush.setDepth(bush.y)
+    bush.setDepth(groundDepth(bush))
     bush.setInteractive({ pixelPerfect: true })
     scene.input.setDraggable(bush)
   }

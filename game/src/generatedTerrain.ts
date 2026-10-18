@@ -8,7 +8,11 @@ const TILE = 128
 const LOGICAL_TILE = TILE / 2
 const OUTPUT_COLUMNS = 8
 const OUTPUT_ROWS = 3
-const LOAD_TIMEOUT_MS = 10_000
+// Large atlases can take a few seconds to decode on the first visit, while
+// Vite is also transforming the game bundle. Give the browser enough time to
+// finish the initial decode instead of silently falling back to the tiny legacy
+// tileset (which does not contain all 24 runtime tiles).
+const LOAD_TIMEOUT_MS = 20_000
 
 type TerrainImage = HTMLImageElement | HTMLCanvasElement
 type TerrainKind = 'grass' | 'path' | 'plaza' | 'water'
@@ -23,7 +27,10 @@ let sheetPromise: Promise<HTMLCanvasElement> | null = null
 
 /** 载入新地表并转换；错误交给入口决定是否回退。 */
 export const loadTerrainSheet = (): Promise<HTMLCanvasElement> => {
-  sheetPromise ??= loadTerrainAtlas().then(renderTerrainSheet)
+  sheetPromise ??= loadTerrainAtlas().then(renderTerrainSheet).catch(error => {
+    sheetPromise = null
+    throw error
+  })
   return sheetPromise
 }
 

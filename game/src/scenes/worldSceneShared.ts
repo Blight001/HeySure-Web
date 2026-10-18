@@ -30,6 +30,10 @@ export const setSpriteMaxDisplaySize = (sprite: Phaser.GameObjects.Sprite, maxSi
   sprite.setScale(Math.min(maxSize / width, maxSize / height))
 }
 
+/** Depth key for sprites whose origin is placed on the ground footprint. */
+export const groundDepth = (object: { y: number; displayHeight: number; originY: number }): number =>
+  object.y + object.displayHeight * (1 - object.originY)
+
 export const positionWorkshopLabel = (view: WorkshopView) => {
   const topY = view.sprite.y - view.sprite.displayHeight * view.sprite.originY
   view.label.setPosition(view.sprite.x, topY - WORKSHOP_LABEL_GAP)

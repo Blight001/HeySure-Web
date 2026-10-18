@@ -105,12 +105,15 @@ const loadAtlas = (file: CharacterFile, action: boolean): Promise<HTMLImageEleme
   if (previous) return previous
   const pending = new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image()
-    const timer = window.setTimeout(() => reject(new Error(`人物素材加载超时: ${file}`)), 10000)
+    const timer = window.setTimeout(() => reject(new Error(`人物素材加载超时: ${file}`)), 20_000)
     image.onload = () => { window.clearTimeout(timer); resolve(image) }
     image.onerror = () => { window.clearTimeout(timer); reject(new Error(`人物素材加载失败: ${file}`)) }
     image.src = url
   })
   cache.set(file, pending)
+  pending.catch(() => {
+    if (cache.get(file) === pending) cache.delete(file)
+  })
   return pending
 }
 
@@ -127,6 +130,9 @@ export const loadCharacterSheet = (file: string): Promise<HTMLCanvasElement> => 
     ? loadAtlas(characterFile, true).then(image => renderActionSheet(characterFile, image))
     : loadAtlas(characterFile, false).then(image => renderCharacterSheet(characterFile, image))
   sheetCache.set(characterFile, pending)
+  pending.catch(() => {
+    if (sheetCache.get(characterFile) === pending) sheetCache.delete(characterFile)
+  })
   return pending
 }
 

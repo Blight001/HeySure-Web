@@ -65,7 +65,7 @@ function building(
   pulse: Exclude<GeneratedAssetDef['pulse'], null>,
 ): GeneratedAssetDef {
   return {
-    file: 'town-buildings-pixel-v3.png', columns: 3, rows: 2, cells: BUILDING_CELLS, cell,
+    file: 'town-buildings.png', columns: 3, rows: 2, cells: BUILDING_CELLS, cell,
     frameWidth, frameHeight, frameColumns, frameRows: 1, pulse,
   }
 }
@@ -97,12 +97,15 @@ const loadAtlas = (file: string): Promise<HTMLImageElement> => {
   const url = atlasUrlFor(file)
   const promise = new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image()
-    const timer = window.setTimeout(() => reject(new Error(`生成素材加载超时: ${file}`)), 10000)
+    const timer = window.setTimeout(() => reject(new Error(`生成素材加载超时: ${file}`)), 20_000)
     image.onload = () => { window.clearTimeout(timer); resolve(image) }
     image.onerror = () => { window.clearTimeout(timer); reject(new Error(`生成素材加载失败: ${file}`)) }
     image.src = url
   })
   imageCache.set(file, promise)
+  promise.catch(() => {
+    if (imageCache.get(file) === promise) imageCache.delete(file)
+  })
   return promise
 }
 

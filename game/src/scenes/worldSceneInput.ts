@@ -14,7 +14,7 @@ import { memberTooltipData } from '../ui/worldText'
 import type { TooltipData } from '../ui/overlay'
 import { playSfx } from './worldSceneAmbient'
 import { focusMemberCard, reconcileMembers } from './worldSceneMembers'
-import { positionWorkshopLabel, postToDashboard } from './worldSceneShared'
+import { groundDepth, positionWorkshopLabel, postToDashboard } from './worldSceneShared'
 import {
   clearDragHighlight,
   finishWorkshopDrag,
@@ -265,10 +265,14 @@ const onVisualPositionDragEnd = (scene: WorldSceneHost, obj: Phaser.GameObjects.
   recordVisualPosition(positioned)
   const workshop = workshopForObject(scene, obj)
   if (workshop) {
-    workshop.sprite.setDepth(y)
+    workshop.sprite.setDepth(groundDepth(workshop.sprite))
     workshop.taskGlow.setPosition(x, y - 24)
     positionWorkshopLabel(workshop)
-  } else positioned.setDepth?.(obj instanceof MemberActor ? obj.y + 1 : y)
+  } else if (obj instanceof MemberActor) positioned.setDepth?.(obj.y + 1)
+  else if ('displayHeight' in obj && 'originY' in obj) {
+    const grounded = obj as typeof obj & { y: number; displayHeight: number; originY: number }
+    positioned.setDepth?.(groundDepth(grounded))
+  } else positioned.setDepth?.(y)
   scene.visualPositionDragObject = null
 }
 
