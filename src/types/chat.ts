@@ -91,7 +91,7 @@ export interface StoredChatDraft {
   updatedAt: number
 }
 
-export type ChatRunStatus = 'idle' | 'queued' | 'running' | 'completed' | 'error' | 'stopped'
+export type ChatRunStatus = 'idle' | 'queued' | 'running' | 'completed' | 'error' | 'stopped' | 'paused'
 export type ChatRunPhase = 'idle' | 'generating' | 'waiting_mcp'
 
 export interface ChatInterfaceProps {

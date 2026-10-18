@@ -94,6 +94,7 @@ const {
   actionResults,
   actionResultsBySignature,
   isTyping,
+  isConversationPaused,
   isSubmitting,
   onConversationDelete,
   onConversationRecall,
@@ -119,6 +120,7 @@ const {
   toggleMcpTool,
   handleChatSend,
   stopCurrentRun,
+  resumeCurrentRun,
   handleToggleFileSelector,
   navigateTo,
   navigatePath,
@@ -389,6 +391,7 @@ const editQueuedItem = async (itemId: string) => {
         :class="{ '!pt-1': pendingQueue.length > 0 }"
         v-model="chatInput"
         :isTyping="isTyping"
+        :is-paused="isConversationPaused"
         :isSubmitting="isSubmitting"
         :queueMode="isRunActive || pendingQueue.length > 0"
         :isFileSelectorOpen="isFileSelectorOpen"
@@ -410,6 +413,7 @@ const editQueuedItem = async (itemId: string) => {
         @toggleTool="toggleMcpTool"
         @send="handleChatSend"
         @stop="stopCurrentRun"
+        @resume="resumeCurrentRun"
         @toggleFileSelector="handleToggleFileSelector"
         @closeFileSelector="isFileSelectorOpen = false"
         @navigateTo="navigateTo"

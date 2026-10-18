@@ -30,6 +30,7 @@ import type { ChatLiveAssistantApi } from './useChatLiveAssistant'
 import type { ChatRunTimersApi } from './useChatRunTimers'
 import type { ChatSessionsApi } from './useChatSessions'
 import type { ChatWorkspaceState } from './useChatWorkspaceState'
+import { resumeChatRun } from './useChatRunResume'
 
 export interface ChatRunControlDeps {
   props: ChatInterfaceProps
@@ -214,10 +215,10 @@ const finishRun = async (ctl: RunCtl, runId: string, status: string, errorMessag
   stopRunPolling(ctl)
   const epoch = ctl.runPollEpoch
   ctl.deps.state.isTyping.value = false
+  ctl.deps.state.isConversationPaused.value = false
   ctl.deps.state.currentRunStatus.value = normalizeRunStatus(status)
   ctl.deps.timers.finalizeRunTimers()
-  ctl.deps.state.currentRunPhase.value = 'idle'
-  ctl.deps.state.currentMcpTool.value = ''
+  ctl.deps.state.currentRunPhase.value = 'idle'; ctl.deps.state.currentMcpTool.value = ''
   resetLiveBoundaryTrackers(ctl.trackers)
   await ctl.deps.history.fetchRunHistoryIncrementalOnce()
   await ensureFinalAssistantMessage(ctl, epoch)
@@ -385,21 +386,18 @@ const stopCurrentRun = async (ctl: RunCtl) => {
     await chatApi.stopRun(ctl.deps.state.currentRunId.value)
     ctl.lastFinishedRunId = ctl.deps.state.currentRunId.value
     stopRunPolling(ctl)
-    ctl.deps.state.isTyping.value = false
-    ctl.deps.state.currentRunStatus.value = 'stopped'
+    ctl.deps.state.isTyping.value = false; ctl.deps.state.currentRunStatus.value = 'paused'; ctl.deps.state.isConversationPaused.value = true
     ctl.deps.timers.finalizeRunTimers()
-    ctl.deps.state.currentRunPhase.value = 'idle'
-    ctl.deps.state.currentMcpTool.value = ''
-    ctl.deps.live.clearLiveAssistantView()
-    resetLiveBoundaryTrackers(ctl.trackers)
-    await ctl.deps.history.fetchRunHistoryIncrementalOnce()
-    await ctl.deps.sessions.loadTotalTokens()
+    ctl.deps.state.currentRunPhase.value = 'idle'; ctl.deps.state.currentMcpTool.value = ''
+    ctl.deps.live.clearLiveAssistantView(); resetLiveBoundaryTrackers(ctl.trackers)
+    await ctl.deps.history.fetchRunHistoryIncrementalOnce(); await ctl.deps.sessions.loadTotalTokens()
     ctl.deps.timers.stopTimeTicker()
-    await ctl.drainQueue()
   } catch (err: any) {
     await ctl.deps.dialogs.alert({ message: `终止失败: ${String(err?.message || '未知错误')}`, type: 'error' })
   }
 }
+
+const resumeCurrentRun = (ctl: RunCtl) => resumeChatRun(ctl.deps, ctl.deps.state.currentRunId.value, () => startRunPolling(ctl))
 
 const pollSessionSync = async (ctl: RunCtl, epoch: number) => {
   if (epoch !== ctl.sessionSyncPollEpoch) return
@@ -439,8 +437,7 @@ const resetRunUi = (ctl: RunCtl) => {
   ctl.deps.state.currentRunPhase.value = 'idle'
   ctl.deps.state.currentMcpTool.value = ''
   ctl.deps.state.currentMcpDeviceId.value = ''
-  ctl.deps.live.clearLiveAssistantView()
-  ctl.deps.state.isTyping.value = false
+  ctl.deps.live.clearLiveAssistantView(); ctl.deps.state.isTyping.value = false; ctl.deps.state.isConversationPaused.value = false
 }
 
 const createRunCtl = (deps: ChatRunControlDeps): RunCtl => ({
@@ -504,6 +501,7 @@ export const useChatRunControl = (deps: ChatRunControlDeps) => {
     stopSessionSyncPolling: () => stopSessionSyncPolling(ctl),
     checkActiveRun: () => checkActiveRun(ctl),
     stopCurrentRun: () => stopCurrentRun(ctl),
+    resumeCurrentRun: () => resumeCurrentRun(ctl),
     finishRun: (runId: string, status: string, errorMessage: string) => finishRun(ctl, runId, status, errorMessage),
     resetRunUi: () => resetRunUi(ctl),
     resetBoundaryTrackers: () => resetLiveBoundaryTrackers(ctl.trackers),

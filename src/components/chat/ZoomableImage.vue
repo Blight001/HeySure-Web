@@ -98,7 +98,7 @@ const onDoubleClick = () => setScale(scale.value > 1 ? 1 : 2)
       :style="{ transform: imageTransform }"
       draggable="false"
     />
-    <div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-black/65 p-1 text-white shadow-lg backdrop-blur">
+    <div class="zoom-controls absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-black/65 p-1 text-white shadow-lg backdrop-blur">
       <button type="button" class="h-8 w-8 rounded-lg text-lg font-normal hover:bg-white/15 disabled:opacity-40" :disabled="scale <= MIN_SCALE" aria-label="缩小" @pointerdown.stop @click.stop="zoomBy(-0.25)">−</button>
       <button type="button" class="min-w-14 rounded-lg px-2 py-1.5 text-xs font-normal hover:bg-white/15" aria-label="重置缩放" @pointerdown.stop @click.stop="reset">{{ scaleLabel }}</button>
       <button type="button" class="h-8 w-8 rounded-lg text-lg font-normal hover:bg-white/15 disabled:opacity-40" :disabled="scale >= MAX_SCALE" aria-label="放大" @pointerdown.stop @click.stop="zoomBy(0.25)">+</button>
@@ -110,5 +110,9 @@ const onDoubleClick = () => setScale(scale.value > 1 ? 1 : 2)
 .zoomable-image {
   touch-action: none;
   overscroll-behavior: contain;
+}
+
+.zoom-controls {
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
 }
 </style>

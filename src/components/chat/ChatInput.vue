@@ -30,6 +30,7 @@ interface ChatModelOption {
 const props = defineProps<{
   modelValue: string
   isTyping: boolean
+  isPaused?: boolean
   isSubmitting?: boolean
   queueMode?: boolean
   isFileSelectorOpen: boolean
@@ -53,6 +54,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'send'): void
   (e: 'stop'): void
+  (e: 'resume'): void
   (e: 'toggleFileSelector'): void
   (e: 'closeFileSelector'): void
   (e: 'navigateTo', path: string): void
@@ -82,6 +84,7 @@ const attachCount = computed(() => props.selectedFiles.length
 const hasContent = computed(() => !!inputValue.value.trim())
 const hasReadyUpload = computed(() => (props.uploadedAttachments || []).some(item => item.status === 'ready'))
 const showStop = computed(() => !props.isSubmitting && props.isTyping && !hasContent.value && !hasReadyUpload.value)
+const showResume = computed(() => !props.isSubmitting && !!props.isPaused && !hasContent.value && !hasReadyUpload.value)
 const canSend = computed(() => !props.isSubmitting && (hasContent.value || hasReadyUpload.value) && !props.uploadingCount)
 const editorRef = ref<HTMLDivElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
@@ -189,6 +192,10 @@ const handlePrimaryAction = () => {
   if (props.isSubmitting) return
   if (showStop.value) {
     emit('stop')
+    return
+  }
+  if (showResume.value) {
+    emit('resume')
     return
   }
   if (canSend.value) emit('send')
@@ -359,6 +366,7 @@ watch(() => [props.modelValue, props.mentions] as const, async ([value]) => {
 
       <ChatInputSendButton
         :show-stop="showStop"
+        :show-resume="showResume"
         :can-send="canSend"
         :submitting="!!isSubmitting"
         :queue-mode="!!queueMode"

@@ -19,6 +19,7 @@ const createMessageRefs = () => ({
   currentSessionId: ref(''),
   sessionList: ref<SessionItem[]>([]),
   isTyping: ref(false),
+  isConversationPaused: ref(false),
   isSubmitting: ref(false),
   pendingQueue: ref<QueuedChatMessage[]>([]),
   shownRunErrorIds: ref(new Set<string>()),

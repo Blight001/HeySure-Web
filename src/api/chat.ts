@@ -144,6 +144,10 @@ export const getActiveRun = (ctx: AiContext, sessionId: string) =>
 export const stopRun = (runId: string) =>
   post<void>(`/api/chat/run/${runId}/stop`, undefined, { fallbackError: '终止失败' })
 
+/** Resume a stopped run without adding another user message to the conversation. */
+export const resumeRun = (runId: string) =>
+  post<{ run_id: string; status: string }>(`/api/chat/run/${runId}/resume`, undefined, { fallbackError: '继续对话失败' })
+
 export const startRun = (payload: {
   visible_content: string
   model_content: string

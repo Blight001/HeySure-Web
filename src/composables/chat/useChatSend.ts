@@ -285,6 +285,7 @@ const buildSendPayload = (deps: ChatSendDeps, prepared: PreparedSend) => {
 
 const beginOutgoingRun = (deps: ChatSendDeps) => {
   deps.state.isTyping.value = true
+  deps.state.isConversationPaused.value = false
   deps.state.currentRunStatus.value = 'queued'
   deps.state.currentMcpTool.value = ''
   deps.live.clearLiveAssistantView()
