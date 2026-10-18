@@ -41,7 +41,17 @@ export interface ChatAttachment {
   is_image: boolean
   is_video?: boolean
   is_audio?: boolean
+  is_pdf?: boolean
+  is_text?: boolean
+  is_document?: boolean
+  is_spreadsheet?: boolean
+  kind?: string
+  resource_type?: string
+  can_preview?: boolean
   url?: string
+  resource_url?: string
+  preview_url?: string
+  download_url?: string
 }
 
 export const uploadChatAttachment = (

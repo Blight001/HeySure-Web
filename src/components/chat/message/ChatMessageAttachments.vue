@@ -38,8 +38,8 @@ const closeAttachmentPreview = async () => {
       @click="openAttachmentPreview(attachment, $event)"
     >
       <img
-        v-if="attachment.is_image && attachment.url"
-        :src="attachment.url"
+        v-if="attachment.is_image && (attachment.resource_url || attachment.preview_url || attachment.url)"
+        :src="attachment.resource_url || attachment.preview_url || attachment.url"
         :alt="attachment.file_name"
         class="h-16 w-16 shrink-0 rounded-lg object-cover"
         loading="lazy"
@@ -77,7 +77,7 @@ const closeAttachmentPreview = async () => {
     :path="attachmentPreview?.workspace_path || ''"
     :display-name="attachmentPreview?.file_name || ''"
     :size="attachmentPreview?.bytes || 0"
-    :source-url="attachmentPreview?.url || ''"
+    :source-url="attachmentPreview?.resource_url || attachmentPreview?.preview_url || attachmentPreview?.url || ''"
     @close="closeAttachmentPreview"
   />
 </template>
