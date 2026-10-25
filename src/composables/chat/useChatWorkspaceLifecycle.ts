@@ -74,8 +74,11 @@ const onSessionChange = async (ctx: WorkspaceLifecycleCtx, sid: string, oldSid: 
     ctx.emit('totalChatTokensUpdate', 0)
     return
   }
-  const cachedTokens = ctx.state.sessionList.value.find(item => item.id === sid)?.totalTokens || 0
-  ctx.emit('totalChatTokensUpdate', cachedTokens)
+  // ``sessions`` exposes cumulative accounting totals for the session list.
+  // Never use that value for the context bar: MCP continuations repeat the
+  // same prompt tokens on every model turn.  The authoritative active-context
+  // snapshot is loaded below.
+  ctx.emit('totalChatTokensUpdate', 0)
   void ctx.sessions.loadTotalTokens(sid)
   resumeSessionRuntime(ctx)
 }
