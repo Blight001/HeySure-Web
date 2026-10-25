@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { getAuthToken } from '@/api/http'
 import { saveIntrinsicProperties } from '@/api/librarian'
 import { getMcpToolParamRows } from '@/utils/mcpTools'
-import { callMcpTool } from '@/api/mcp'
+import { callMcpTool, cancelMcpJob, createMcpJob, getMcpJob } from '@/api/mcp'
 import { usePopupZIndex } from '@/composables/usePopupZIndex'
 import type { McpToolDefinition } from '@/types'
 
@@ -11,6 +11,8 @@ const props = defineProps<{
   show: boolean
   title: string
   items: McpToolDefinition[]
+  /** AI config whose device/MCP scope must be used for direct calls. */
+  aiConfigId?: number | null
 }>()
 
 const zIndex = usePopupZIndex(() => props.show)
@@ -79,6 +81,12 @@ const testArgsJsonM = ref('{}')
 const testResM = ref<any>(null)
 const testErrM = ref('')
 const testLoadingM = ref(false)
+const jobLoadingM = ref(false)
+const jobIdM = ref('')
+const jobStatusM = ref('')
+const jobResM = ref<any>(null)
+const jobErrM = ref('')
+let jobPollTimer: ReturnType<typeof setTimeout> | null = null
 
 const introItems = [
   {
@@ -194,7 +202,11 @@ const runTestInMcpModal = async () => {
   try {
     let args: Record<string, unknown> = {}
     try { args = JSON.parse(testArgsJsonM.value || '{}') } catch (e: any) { testErrM.value = 'JSON 错误: ' + (e.message || ''); return }
-    const res = await callMcpTool({ tool: testingToolName.value, arguments: args })
+    const res = await callMcpTool({
+      tool: testingToolName.value,
+      arguments: args,
+      ...(props.aiConfigId != null ? { ai_config_id: props.aiConfigId } : {}),
+    })
     testResM.value = res
   } catch (err: any) {
     testErrM.value = err?.message || '调用失败'
@@ -203,11 +215,76 @@ const runTestInMcpModal = async () => {
   }
 }
 
+const stopJobPolling = () => {
+  if (jobPollTimer) clearTimeout(jobPollTimer)
+  jobPollTimer = null
+}
+
+const pollMcpJob = async (jobId: string) => {
+  const terminal = new Set(['completed', 'error', 'timeout', 'cancelled'])
+  try {
+    const result = await getMcpJob(jobId)
+    jobStatusM.value = result.status
+    jobResM.value = result
+    if (!terminal.has(result.status)) {
+      jobPollTimer = setTimeout(() => { void pollMcpJob(jobId) }, 800)
+    } else {
+      jobLoadingM.value = false
+    }
+  } catch (err: any) {
+    jobErrM.value = err?.message || '后台任务状态加载失败'
+    jobLoadingM.value = false
+  }
+}
+
+const runAsyncTestInMcpModal = async () => {
+  if (!testingToolName.value) return
+  jobLoadingM.value = true
+  jobErrM.value = ''
+  jobResM.value = null
+  jobStatusM.value = ''
+  stopJobPolling()
+  try {
+    let args: Record<string, unknown> = {}
+    try { args = JSON.parse(testArgsJsonM.value || '{}') } catch (e: any) { jobErrM.value = 'JSON 错误: ' + (e.message || ''); jobLoadingM.value = false; return }
+    const result = await createMcpJob({
+      tool: testingToolName.value,
+      arguments: args,
+      ...(props.aiConfigId != null ? { ai_config_id: props.aiConfigId } : {}),
+    })
+    jobIdM.value = result.job_id
+    jobStatusM.value = result.status
+    await pollMcpJob(result.job_id)
+  } catch (err: any) {
+    jobErrM.value = err?.message || '后台任务创建失败'
+    jobLoadingM.value = false
+  }
+}
+
+const cancelAsyncMcpJob = async () => {
+  if (!jobIdM.value) return
+  stopJobPolling()
+  try {
+    const result = await cancelMcpJob(jobIdM.value)
+    jobStatusM.value = result.status
+    jobResM.value = result
+    jobLoadingM.value = false
+  } catch (err: any) {
+    jobErrM.value = err?.message || '后台任务取消失败'
+  }
+}
+
 const closeTestInMcp = () => {
+  stopJobPolling()
   testingToolName.value = ''
   testArgsJsonM.value = '{}'
   testResM.value = null
   testErrM.value = ''
+  jobLoadingM.value = false
+  jobIdM.value = ''
+  jobStatusM.value = ''
+  jobResM.value = null
+  jobErrM.value = ''
 }
 
 watch(() => props.show, (show) => {
@@ -365,11 +442,29 @@ watch(() => props.show, (show) => {
                         <textarea v-model="testArgsJsonM" rows="2" class="w-full text-[10px] font-mono border rounded px-1 py-0.5 dark:bg-zinc-900/60" />
                         <div class="flex gap-1 mt-1">
                           <button type="button" class="text-[9px] px-1.5 py-0.5 bg-emerald-600 text-white rounded" :disabled="testLoadingM" @click.stop="runTestInMcpModal">{{ testLoadingM ? '...' : '调用' }}</button>
+                          <button
+                            v-if="sourceOf(tool) !== 'server'"
+                            type="button"
+                            class="text-[9px] px-1.5 py-0.5 bg-indigo-600 text-white rounded"
+                            :disabled="jobLoadingM"
+                            @click.stop="runAsyncTestInMcpModal"
+                          >{{ jobLoadingM ? `${jobStatusM || '排队'}…` : '后台调用' }}</button>
+                          <button
+                            v-if="jobLoadingM && jobIdM"
+                            type="button"
+                            class="text-[9px] px-1.5 py-0.5 border border-rose-200 text-rose-600 rounded"
+                            @click.stop="cancelAsyncMcpJob"
+                          >停止后台任务</button>
                           <button type="button" class="text-[9px] px-1.5 py-0.5 border rounded" @click.stop="closeTestInMcp">取消</button>
                         </div>
                         <div v-if="testErrM" class="text-[9px] text-rose-600 mt-0.5">{{ testErrM }}</div>
                         <div v-if="testResM != null" class="mt-1 text-[9px]">
                           <pre class="bg-white/70 dark:bg-zinc-950 p-1 rounded overflow-auto max-h-20">{{ JSON.stringify(testResM, null, 2) }}</pre>
+                        </div>
+                        <div v-if="jobErrM" class="text-[9px] text-rose-600 mt-0.5">{{ jobErrM }}</div>
+                        <div v-if="jobIdM" class="mt-1 text-[9px]">
+                          <div class="text-zinc-500">后台任务 {{ jobIdM }} · {{ jobStatusM }}</div>
+                          <pre v-if="jobResM != null" class="bg-white/70 dark:bg-zinc-950 p-1 rounded overflow-auto max-h-20">{{ JSON.stringify(jobResM, null, 2) }}</pre>
                         </div>
                       </div>
                     </div>

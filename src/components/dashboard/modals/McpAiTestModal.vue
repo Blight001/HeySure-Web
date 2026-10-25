@@ -10,6 +10,8 @@ const props = defineProps<{
   show: boolean
   toolName: string
   deviceId: string
+  /** AI config whose device/MCP scope must be used for direct calls. */
+  aiConfigId?: number | null
   deviceType?: string
   description?: string
   inputSchema?: Record<string, any>
@@ -38,6 +40,28 @@ const directLoading = ref(false)
 const directError = ref('')
 
 const selectedPreset = computed(() => aiTestPresets.value.find(p => p.id === aiTestSelectedPresetId.value))
+
+const schemaParameters = (schema: Record<string, any>) => {
+  const properties = schema?.properties || {}
+  const required = schema?.required || []
+  return Object.keys(properties).map((name: string) => ({
+    name,
+    type: properties[name]?.type || 'string',
+    required: required.includes(name),
+    description: properties[name]?.description || '',
+  }))
+}
+
+const applyAiTestResult = (result: InheritanceMcpTestResult) => {
+  aiTestResult.value = result
+  if (!result.ok) {
+    aiTestError.value = result.detail || '测试未成功'
+    return
+  }
+  aiTestNotice.value = result.detail || '测试完成'
+  if (!result.tool_call?.arguments) return
+  try { directArgs.value = JSON.stringify(result.tool_call.arguments, null, 2) } catch {}
+}
 
 const deviceLabel = computed(() => {
   const t = (props.deviceType || 'desktop').toLowerCase()
@@ -99,35 +123,19 @@ const runAiTest = async () => {
   try {
     const desc = props.description || ''
     const schema = props.inputSchema || {}
-    // simple parameters from schema if possible
-    const properties = (schema as any)?.properties || {}
-    const required = (schema as any)?.required || []
-    const parameters = Object.keys(properties).map((name: string) => ({
-      name,
-      type: properties[name]?.type || 'string',
-      required: required.includes(name),
-      description: properties[name]?.description || '',
-    }))
 
     const result = await runInheritanceMcpTest({
       model_preset_id: presetId,
       tool: props.toolName,
       device_id: props.deviceId,
+      ...(props.aiConfigId != null ? { ai_config_id: props.aiConfigId } : {}),
       device_type: props.deviceType || 'desktop',
       description: desc,
-      parameters,
+      parameters: schemaParameters(schema),
       input_schema: schema,
       user_hint: aiTestUserHint.value.trim(),
     })
-    aiTestResult.value = result
-    if (result.ok) {
-      aiTestNotice.value = result.detail || '测试完成'
-      if (result.tool_call?.arguments) {
-        try { directArgs.value = JSON.stringify(result.tool_call.arguments, null, 2) } catch {}
-      }
-    } else {
-      aiTestError.value = result.detail || '测试未成功'
-    }
+    applyAiTestResult(result)
   } catch (err: any) {
     aiTestError.value = err?.message || 'AI 自动测试失败'
   } finally {
@@ -146,7 +154,11 @@ const runDirect = async () => {
       directError.value = 'JSON 错误: ' + (e.message || '')
       return
     }
-    const res = await callMcpTool({ tool: props.toolName, arguments: args })
+    const res = await callMcpTool({
+      tool: props.toolName,
+      arguments: args,
+      ...(props.aiConfigId != null ? { ai_config_id: props.aiConfigId } : {}),
+    })
     directResult.value = res
   } catch (err: any) {
     directError.value = err?.message || '直接调用失败'

@@ -1,4 +1,4 @@
-const assetUrls = import.meta.glob('../assets/*.png', {
+const assetUrls = import.meta.glob('../assets/{tileset.png,tree.png,building_*.png,char_*.png,resident_gardener.png,envelope.png,cloud.png,lamp.png,decor_*.png,bush.png,bench.png,signpost.png,butterfly.png,glow.png,emotes.png,effect_*.png}', {
   eager: true,
   query: '?url',
   import: 'default',

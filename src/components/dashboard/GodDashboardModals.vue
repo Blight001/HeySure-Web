@@ -25,6 +25,8 @@ defineProps<{
   deviceToolsInitialType?: 'desktop' | 'browser' | 'android'
   currentUser?: User | null
   modelPresets: ModelPreset[]
+  /** Active chat AI used to scope direct MCP calls from the global tool modal. */
+  activeAiConfigId?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -42,6 +44,7 @@ const emit = defineEmits<{
     :show="mcp.toolModalOpen"
     :title="mcp.toolModalTitle"
     :items="mcp.toolModalItems"
+    :ai-config-id="activeAiConfigId"
     @close="mcp.toolModalOpen = false"
   />
 

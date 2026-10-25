@@ -166,7 +166,7 @@ const deleteAiConfigAndRefresh = async () => {
 
 const openAllMcpToolsFromSystemSettings = async () => {
   if (Object.keys(mcpToolMetaByName.value || {}).length === 0) {
-    await ai.loadMcpTools()
+    await ai.loadMcpTools(chatActiveAiConfigId.value ?? undefined)
   }
   mcp.showAllServerMcpTools('当前服务器所有的mcp接口')
 }
@@ -348,6 +348,7 @@ onUnmounted(() => {
       :device-tools-initial-type="deviceToolsInitialType"
       :current-user="currentUser"
       :model-presets="system.modelPresets"
+      :active-ai-config-id="chatActiveAiConfigId"
       @update:admin-open="adminModalOpen = $event"
       @update:device-doc-open="deviceDocOpen = $event"
       @close-device-tools="closeDeviceToolsModal"

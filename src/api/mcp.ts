@@ -29,7 +29,8 @@ export interface McpToolsResponse {
 export interface McpCallPayload {
   tool: string
   arguments: Record<string, unknown>
-  ai_config_id?: number
+  /** Scope endpoint/device execution to this AI config when provided. */
+  ai_config_id?: number | null
 }
 
 export const listMcpTools = (options: { aiConfigId?: number } = {}) =>
@@ -45,6 +46,8 @@ export interface InheritanceMcpTestPayload {
   model_preset_id: string
   tool: string
   device_id: string
+  /** Optional AI scope for endpoint dispatch during the model-assisted test. */
+  ai_config_id?: number | null
   device_type?: string
   description?: string
   parameters?: Array<{
@@ -77,4 +80,38 @@ export interface InheritanceMcpTestResult {
 export const runInheritanceMcpTest = (payload: InheritanceMcpTestPayload) =>
   post<InheritanceMcpTestResult>('/api/mcp/inheritance-test', payload, {
     fallbackError: 'MCP 传承测试失败',
+  })
+
+export interface McpJobPayload {
+  tool: string
+  arguments?: Record<string, unknown>
+  ai_config_id?: number | null
+  timeout_seconds?: number
+}
+
+export interface McpJobResult {
+  job_id: string
+  status: string
+  success?: boolean | null
+  summary?: string | null
+  error?: string | null
+  result?: unknown
+  tool?: string
+  device_id?: string
+  ai_config_id?: number | null
+  created_at?: number
+  completed_at?: number | null
+}
+
+export const createMcpJob = (payload: McpJobPayload) =>
+  post<McpJobResult>('/api/mcp/jobs', payload, { fallbackError: 'MCP 后台任务创建失败' })
+
+export const getMcpJob = (jobId: string) =>
+  get<McpJobResult>(`/api/mcp/jobs/${encodeURIComponent(jobId)}`, {
+    fallbackError: 'MCP 后台任务状态加载失败',
+  })
+
+export const cancelMcpJob = (jobId: string, reason = 'cancelled by caller') =>
+  post<McpJobResult>(`/api/mcp/jobs/${encodeURIComponent(jobId)}/cancel`, { reason }, {
+    fallbackError: 'MCP 后台任务取消失败',
   })

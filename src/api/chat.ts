@@ -105,7 +105,7 @@ export const setSessionForwardToBot = (ctx: AiContext, sessionId: string, enable
   )
 
 export const getChatTotalTokens = (ctx: AiContext, sessionId?: string) =>
-  get<{ total_tokens: number }>('/api/chat/total-tokens', {
+  get<{ total_tokens: number; context_total_tokens?: number }>('/api/chat/total-tokens', {
     query: queryForAi(ctx, { session_id: sessionId }),
     fallbackError: 'Token 统计加载失败',
   })

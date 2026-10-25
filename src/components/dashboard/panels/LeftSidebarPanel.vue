@@ -52,6 +52,7 @@ interface Props {
   knowledgeFocusSignal?: number
   focusedDeviceId?: string
   deviceFocusSignal?: number
+  chatAiConfigId?: number | null
 }
 
 const props = defineProps<Props>()
@@ -152,6 +153,7 @@ watch(() => props.deviceFocusSignal, () => {
           no-glass
           :items="knowledgeItems"
           :total-count="knowledgeTotalCount"
+          :ai-config-id="chatAiConfigId"
           @refresh-user="emit('refresh-user', $event)"
           @view-all-mcp="emit('view-all-mcp')"
           @manage-device-tools="emit('manage-device-tools')"

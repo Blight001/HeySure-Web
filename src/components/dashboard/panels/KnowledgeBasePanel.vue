@@ -19,9 +19,11 @@ interface Props {
   items: KnowledgeItem[]
   totalCount: number
   noGlass?: boolean
+  /** Active chat AI used to scope direct MCP tests from this panel. */
+  aiConfigId?: number | null
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 const emit = defineEmits<{
   (e: 'refresh-user', user: User): void
   (e: 'view-all-mcp'): void
@@ -174,6 +176,7 @@ const kb = useKnowledgeBasePanel(emit)
       :device-type="kb.mcpTestTarget?.device?.device_type || 'desktop'"
       :description="kb.mcpTestTarget?.tool?.description || ''"
       :input-schema="kb.mcpTestInputSchema"
+      :ai-config-id="props.aiConfigId"
       @close="kb.closeMcpTestModal"
     />
     </Teleport>

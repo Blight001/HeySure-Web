@@ -19,8 +19,8 @@ const progressTone = computed(() => {
   return 'bg-gradient-to-r from-indigo-500 to-cyan-400'
 })
 const usageLabel = computed(() => unlimited.value
-  ? `Token ${formatTokenCount(usedTokens.value)} / 无上限`
-  : `Token ${formatTokenCount(usedTokens.value)} / ${formatTokenCount(tokenLimit.value)}`)
+  ? `Context ${formatTokenCount(usedTokens.value)} / unlimited`
+  : `Context ${formatTokenCount(usedTokens.value)} / ${formatTokenCount(tokenLimit.value)}`)
 const detailsOpen = ref(false)
 </script>
 

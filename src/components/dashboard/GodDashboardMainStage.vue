@@ -93,6 +93,7 @@ defineExpose({ getSocialRect })
           :knowledge-focus-signal="knowledgeFocusSignal"
           :focused-device-id="focusedDeviceId"
           :device-focus-signal="deviceFocusSignal"
+          :chat-ai-config-id="chatAiConfigId"
           @update:brain-view-mode="emit('update:brain-view-mode', $event)"
           @show-tasks="emit('show-tasks', $event)"
           @show-task-detail="emit('show-task-detail', $event)"

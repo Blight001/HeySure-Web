@@ -136,14 +136,17 @@ export function applyLoadedConfig(
 }
 
 export function mapMcpToolRows(data: any): McpToolDefinition[] {
-  if (!Array.isArray(data?.tools)) return []
-  return data.tools
+  // ``promptTools`` is the authoritative AI-scoped projection.  Fall back to
+  // the raw server catalog only for older gateways that do not provide it.
+  const source = Array.isArray(data?.promptTools) ? data.promptTools : data?.tools
+  if (!Array.isArray(source)) return []
+  return source
     .map((item: any) => ({
       name: String(item?.name || '').trim(),
       description: String(item?.description || '').trim(),
       inputSchema: item?.inputSchema && typeof item.inputSchema === 'object' ? item.inputSchema : { type: 'object', properties: {} },
       destructive: !!item?.destructive,
-      mcpSource: 'server' as const,
+      mcpSource: item?.mcpSource === 'desktop' || item?.mcpSource === 'browser' ? item.mcpSource : 'server' as const,
     }))
     .filter((item: McpToolDefinition) => !!item.name)
 }

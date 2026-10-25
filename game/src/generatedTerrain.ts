@@ -17,7 +17,7 @@ const LOAD_TIMEOUT_MS = 20_000
 type TerrainImage = HTMLImageElement | HTMLCanvasElement
 type TerrainKind = 'grass' | 'path' | 'plaza' | 'water'
 
-const terrainUrls = import.meta.glob('../assets/town-ground-v2.png', {
+const terrainWebpUrls = import.meta.glob('../assets/town-ground-v2.webp', {
   eager: true,
   query: '?url',
   import: 'default',
@@ -48,7 +48,7 @@ export const renderTerrainSheet = (image: TerrainImage): HTMLCanvasElement => {
 }
 
 const loadTerrainAtlas = (): Promise<HTMLImageElement> => {
-  const url = terrainUrls['../assets/town-ground-v2.png']
+  const url = terrainWebpUrls['../assets/town-ground-v2.webp']
   if (!url) return Promise.reject(new Error('生成地表素材尚未提供: town-ground-v2.png'))
   return new Promise((resolve, reject) => {
     const image = new Image()

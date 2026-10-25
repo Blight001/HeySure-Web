@@ -154,9 +154,12 @@ const loadTotalTokens = async (
     return 0
   }
   if (epoch !== ctx.tokenEpoch.value || ctx.state.currentSessionId.value !== sid) return 0
-  ctx.emit('totalChatTokensUpdate', data.total_tokens || 0)
+  // The bar represents the live context budget, not cumulative accounting
+  // usage.  Keep ``total_tokens`` available for reporting, but prefer the
+  // server-side active-context value when present.
+  ctx.emit('totalChatTokensUpdate', data.context_total_tokens ?? data.total_tokens ?? 0)
   await loadSessions(ctx.state)
-  return data.total_tokens || 0
+  return data.context_total_tokens ?? data.total_tokens ?? 0
 }
 
 export const useChatSessions = (

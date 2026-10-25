@@ -42,12 +42,12 @@ export const CHARACTER_DISPLAY_HEIGHT = CHARACTER_FRAME_HEIGHT * CHARACTER_DISPL
 const FRAME_WIDTH = CHARACTER_FRAME_WIDTH
 const FRAME_HEIGHT = CHARACTER_FRAME_HEIGHT
 const DIRECTIONS = 4
-const atlasUrls = import.meta.glob('../assets/town-character-*-v2.png', {
+const atlasWebpUrls = import.meta.glob('../assets/town-character-*-v2.webp', {
   eager: true,
   query: '?url',
   import: 'default',
 }) as Record<string, string>
-const actionAtlasUrls = import.meta.glob('../assets/town-character-*-actions-v*.png', {
+const actionAtlasWebpUrls = import.meta.glob('../assets/town-character-*-actions-v*.webp', {
   eager: true,
   query: '?url',
   import: 'default',
@@ -89,13 +89,13 @@ const imageSize = (image: ImageSource) => ({
 
 const atlasUrl = (file: CharacterFile): string => {
   const name = CHARACTER_FILES[file]
-  const url = atlasUrls[`../assets/${name}`]
+  const url = atlasWebpUrls[`../assets/${name.replace(/\.png$/, '.webp')}`]
   if (!url) throw new Error(`人物素材尚未提供: ${name}`)
   return url
 }
 
 const actionAtlasUrl = (file: CharacterFile): string | null =>
-  actionAtlasUrls[`../assets/${ACTION_FILES[file]}`] ?? null
+  actionAtlasWebpUrls[`../assets/${ACTION_FILES[file].replace(/\.png$/, '.webp')}`] ?? null
 
 const loadAtlas = (file: CharacterFile, action: boolean): Promise<HTMLImageElement> => {
   const cache = action ? actionAtlasCache : atlasCache

@@ -60,10 +60,10 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
   const aiConfigForm = ref<any>(null)
   const availableMcpTools = ref<string[]>([])
 
-  const loadMcpTools = async () => {
+  const loadMcpTools = async (aiConfigId?: number) => {
     if (!getAuthToken()) return
     try {
-      const rows = mapMcpToolRows(await listMcpTools())
+      const rows = mapMcpToolRows(await listMcpTools({ aiConfigId }))
       const map: Record<string, McpToolDefinition> = {}
       for (const row of rows) map[row.name] = row
       mcpToolMetaByName.value = map
@@ -82,9 +82,10 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigMode.value = 'create'
     aiConfigDeleteConfirm.value = false
     aiConfigSettingsSection.value = ''
-    if (!availableMcpTools.value.length) {
-      try { await loadMcpTools() } catch { /* fallback defaults */ }
-    }
+    // An earlier edit may have loaded a scoped catalog.  Always refresh the
+    // unscoped catalog for a new AI so stale device permissions are not shown
+    // as create-time choices.
+    try { await loadMcpTools() } catch { /* fallback defaults */ }
     aiConfigForm.value = {
       ...buildAiForm(role, modelPresets.value),
       system_auto_control: normalizeSystemAutoControl({}),
@@ -109,6 +110,10 @@ export const useAiConfigManagement = (options: UseAiConfigManagementOptions) => 
     aiConfigSettingsSection.value = ''
     aiConfigForm.value = buildEditForm(agent, modelPresets.value, normalizeSystemAutoControl)
     aiConfigModalOpen.value = true
+    // The runtime scope is resolved from the selected AI's bindings and
+    // device permissions.  Loading the global catalog here makes the editor
+    // show tools that this AI cannot actually call.
+    void loadMcpTools(agent.aiConfigId)
     void loadAiConfigDetail(agent.aiConfigId)
   }
 

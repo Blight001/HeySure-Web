@@ -72,7 +72,7 @@ function building(
 
 type RenderableImage = HTMLImageElement | HTMLCanvasElement
 
-const atlasUrls = import.meta.glob('../assets/town-*.png', {
+const atlasWebpUrls = import.meta.glob('../assets/town-*.webp', {
   eager: true,
   query: '?url',
   import: 'default',
@@ -86,7 +86,7 @@ const sourceSize = (image: RenderableImage) => ({
 })
 
 const atlasUrlFor = (file: string): string => {
-  const url = atlasUrls[`../assets/${file}`]
+  const url = atlasWebpUrls[`../assets/${file.replace(/\.png$/, '.webp')}`]
   if (!url) throw new Error(`生成素材尚未提供: ${file}`)
   return url
 }
