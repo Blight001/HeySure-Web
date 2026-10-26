@@ -390,6 +390,7 @@ const editQueuedItem = async (itemId: string) => {
         class="relative z-10"
         :class="{ '!pt-1': pendingQueue.length > 0 }"
         v-model="chatInput"
+        :aiConfigId="props.aiConfigId"
         :isTyping="isTyping"
         :is-paused="isConversationPaused"
         :isSubmitting="isSubmitting"

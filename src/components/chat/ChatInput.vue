@@ -28,6 +28,7 @@ interface ChatModelOption {
 }
 
 const props = defineProps<{
+  aiConfigId?: number
   modelValue: string
   isTyping: boolean
   isPaused?: boolean
@@ -325,6 +326,7 @@ watch(() => [props.modelValue, props.mentions] as const, async ([value]) => {
 
       <FileSelector
         :isOpen="isFileSelectorOpen"
+        :ai-config-id="aiConfigId"
         :allFiles="allFiles"
         :selectedFiles="selectedFiles"
         :currentPath="currentPath"

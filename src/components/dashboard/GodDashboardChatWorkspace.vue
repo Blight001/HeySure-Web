@@ -2,9 +2,9 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { BACKGROUND_POPUP_Z_INDEX, PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
+import { listWorkspaceFiles } from '@/api/workspace'
 import type { Agent, User } from '@/types'
 import {
-  aiWorkspaceDirname,
   applyConversationModel,
   chatMcpCatalogKey,
   findFreshAgent,
@@ -61,6 +61,8 @@ const { isMobile } = useBreakpoint()
 const selectedFiles = ref<string[]>([])
 const chatModalOpen = ref(false)
 const chatTarget = ref<Agent | null>(null)
+const workspaceFilesByConfig = ref<Record<string, string[]>>({})
+const workspaceFilesLoading = new Set<number>()
 const agentChatZIndex = computed(() =>
   chatFloating.value || chatPipActive.value ? PINNED_POPUP_Z_INDEX : BACKGROUND_POPUP_Z_INDEX,
 )
@@ -93,6 +95,33 @@ const chatSwitchAgents = computed(() => props.agents.filter(agent =>
 const activeAiConfigId = computed(() => (
   chatModalOpen.value && chatTarget.value?.aiConfigId ? Number(chatTarget.value.aiConfigId) : null
 ))
+
+const workspaceFilesFor = (agent: Agent | null) => {
+  const configId = Number(agent?.aiConfigId || 0)
+  if (Number.isFinite(configId) && configId > 0) return workspaceFilesByConfig.value[String(configId)] || []
+  return props.allFiles || []
+}
+
+const loadWorkspaceFiles = async (aiConfigId: number, force = false) => {
+  if (!Number.isFinite(aiConfigId) || aiConfigId <= 0) return
+  const key = String(aiConfigId)
+  if (!force && workspaceFilesByConfig.value[key]) return
+  if (workspaceFilesLoading.has(aiConfigId)) return
+  workspaceFilesLoading.add(aiConfigId)
+  try {
+    const files = await listWorkspaceFiles(aiConfigId)
+    workspaceFilesByConfig.value = { ...workspaceFilesByConfig.value, [key]: files }
+  } catch (error) {
+    console.error('Failed to load AI workspace files:', error)
+  } finally {
+    workspaceFilesLoading.delete(aiConfigId)
+  }
+}
+
+const refreshActiveWorkspaceFiles = () => {
+  const configId = Number(chatTarget.value?.aiConfigId || 0)
+  void loadWorkspaceFiles(configId, true)
+}
 
 watch(activeAiConfigId, value => emit('update:activeAiConfigId', value), { immediate: true })
 
@@ -283,6 +312,7 @@ const openFloatingAgentChat = (agent: Agent, initialSessionId = resolveActiveRun
     focusFloatingAgentChat(existing.windowId)
     return
   }
+  void loadWorkspaceFiles(configId)
   floatingChatSequence += 1
   floatingChatZIndex += 1
   floatingAgentChats.value.push({
@@ -310,6 +340,7 @@ const openAgentChat = (agent: Agent, options: { floating?: boolean } = {}) => {
     return
   }
   chatTarget.value = agent
+  void loadWorkspaceFiles(targetConfigId)
   chatLiveTokenUsed.value = 0
   selectedFiles.value = []
   chatInitialSessionId.value = resolveActiveRunSessionId(agent)
@@ -332,6 +363,7 @@ const expandFloatingAgentChat = (windowId: string) => {
   chatFloating.value = false
   closeChatPip()
   chatTarget.value = target.agent
+  void loadWorkspaceFiles(Number(target.agent.aiConfigId))
   chatLiveTokenUsed.value = 0
   selectedFiles.value = []
   chatInitialSessionId.value = target.initialSessionId
@@ -343,6 +375,7 @@ const expandFloatingAgentChat = (windowId: string) => {
 const openAgentTaskDetail = (agent: Agent, jobId: string, sessionId?: string) => {
   if (!agent.aiConfigId || !jobId) return
   chatTarget.value = agent
+  void loadWorkspaceFiles(Number(agent.aiConfigId))
   chatLiveTokenUsed.value = 0
   selectedFiles.value = []
   chatInitialSessionId.value = String(sessionId || `session_task_${jobId}`).trim()
@@ -422,8 +455,8 @@ defineExpose({
           :mcp-dynamic-rule="mcpDynamicRule"
           :mcp-catalog-refresh-key="chatMcpCatalogRefreshKey"
           :selected-files="selectedFiles"
-          :all-files="allFiles"
-          :selectable-file-root="aiWorkspaceDirname(chatTarget)"
+          :all-files="workspaceFilesFor(chatTarget)"
+          selectable-file-root=""
           :current-user-id="Number(currentUser?.id) || undefined"
           :connected-devices="connectedDevices"
           @close="closeAgentChat"
@@ -437,7 +470,7 @@ defineExpose({
           @task-plan-refresh="chatTaskPlanRefreshSignal = $event"
           @open-settings="chatTarget && emit('open-settings', chatTarget)"
           @total-chat-tokens-update="chatLiveTokenUsed = Math.max(0, Number($event) || 0)"
-          @refresh-files="emit('refresh-files')"
+          @refresh-files="refreshActiveWorkspaceFiles"
           @model-changed="onConversationModelChanged"
         />
       </div>
@@ -453,8 +486,8 @@ defineExpose({
     :current-user-id="Number(currentUser?.id) || undefined"
     :mcp-dynamic-rule="mcpDynamicRule"
     :mcp-catalog-refresh-key="chatMcpCatalogRefreshKey"
-    :all-files="allFiles"
-    :selectable-file-root="aiWorkspaceDirname(window.agent)"
+    :all-files="workspaceFilesFor(window.agent)"
+    selectable-file-root=""
     :cascade-index="index + 1"
     :z-index="window.zIndex"
     :connected-devices="connectedDevices"
@@ -462,7 +495,7 @@ defineExpose({
     @close="closeFloatingAgentChat(window.windowId)"
     @expand="expandFloatingAgentChat(window.windowId)"
     @open-settings="emit('open-settings', window.agent)"
-    @refresh-files="emit('refresh-files')"
+    @refresh-files="void loadWorkspaceFiles(Number(window.agent.aiConfigId), true)"
     @model-changed="onConversationModelChanged"
   />
 </template>

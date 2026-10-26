@@ -9,6 +9,7 @@ type PreviewKind = WorkspaceFileKind | 'audio' | 'document'
 const props = withDefaults(defineProps<{
   open: boolean
   path: string
+  aiConfigId?: number
   displayName?: string
   size?: number
   sourceUrl?: string
@@ -47,7 +48,7 @@ const previewKindForBlob = (blob: Blob): PreviewKind => {
 }
 
 const fetchSourceBlob = async (path: string) => {
-  if (!props.sourceUrl) return fetchWorkspaceFileBlob(path)
+  if (!props.sourceUrl) return fetchWorkspaceFileBlob(path, props.aiConfigId)
   const response = await fetch(props.sourceUrl)
   if (!response.ok) throw new Error(`文件加载失败（HTTP ${response.status}）`)
   return response.blob()
@@ -95,7 +96,7 @@ const loadPreview = async () => {
       else if (kind.value !== 'binary' && !tooLarge.value) mediaUrl.value = URL.createObjectURL(blob)
       return
     }
-    const result = await readWorkspaceFile(path)
+    const result = await readWorkspaceFile(path, props.aiConfigId)
     if (epoch !== loadEpoch) return
     fileSize.value = Number(result.size || props.size || 0)
     binary.value = !!result.binary
@@ -104,7 +105,7 @@ const loadPreview = async () => {
       ? result.kind
       : (result.binary ? 'binary' : (result.kind || 'text'))
     if (kind.value === 'image' || kind.value === 'video') {
-      const blob = await fetchWorkspaceFileBlob(path)
+      const blob = await fetchWorkspaceFileBlob(path, props.aiConfigId)
       if (epoch !== loadEpoch) return
       fileSize.value = blob.size || fileSize.value
       mediaUrl.value = URL.createObjectURL(blob)
@@ -136,7 +137,7 @@ const download = async () => {
   }
 }
 
-watch(() => [props.open, props.path, props.sourceUrl] as const, () => {
+watch(() => [props.open, props.path, props.aiConfigId, props.sourceUrl] as const, () => {
   if (props.open) void loadPreview()
   else {
     loadEpoch += 1

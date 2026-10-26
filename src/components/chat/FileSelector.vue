@@ -5,6 +5,7 @@ import WorkspaceFilePreviewDialog from './WorkspaceFilePreviewDialog.vue'
 
 interface Props {
   isOpen: boolean
+  aiConfigId?: number
   allFiles: string[]
   selectedFiles: string[]
   currentPath: string
@@ -419,6 +420,7 @@ const handleModelChange = (event: Event) => {
   <WorkspaceFilePreviewDialog
     :open="!!previewPath"
     :path="previewPath"
+    :ai-config-id="aiConfigId"
     @close="closePreview"
   />
 </template>
