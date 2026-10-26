@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { useAiWorkspaceFiles } from '@/composables/dashboard/useAiWorkspaceFiles'
 import { BACKGROUND_POPUP_Z_INDEX, PINNED_POPUP_Z_INDEX } from '@/composables/usePopupZIndex'
-import { listWorkspaceFiles } from '@/api/workspace'
 import type { Agent, User } from '@/types'
 import {
   applyConversationModel,
@@ -61,8 +61,11 @@ const { isMobile } = useBreakpoint()
 const selectedFiles = ref<string[]>([])
 const chatModalOpen = ref(false)
 const chatTarget = ref<Agent | null>(null)
-const workspaceFilesByConfig = ref<Record<string, string[]>>({})
-const workspaceFilesLoading = new Set<number>()
+const {
+  filesFor: workspaceFilesFor,
+  load: loadWorkspaceFiles,
+  refresh: refreshWorkspaceFiles,
+} = useAiWorkspaceFiles(() => props.allFiles || [])
 const agentChatZIndex = computed(() =>
   chatFloating.value || chatPipActive.value ? PINNED_POPUP_Z_INDEX : BACKGROUND_POPUP_Z_INDEX,
 )
@@ -96,31 +99,8 @@ const activeAiConfigId = computed(() => (
   chatModalOpen.value && chatTarget.value?.aiConfigId ? Number(chatTarget.value.aiConfigId) : null
 ))
 
-const workspaceFilesFor = (agent: Agent | null) => {
-  const configId = Number(agent?.aiConfigId || 0)
-  if (Number.isFinite(configId) && configId > 0) return workspaceFilesByConfig.value[String(configId)] || []
-  return props.allFiles || []
-}
-
-const loadWorkspaceFiles = async (aiConfigId: number, force = false) => {
-  if (!Number.isFinite(aiConfigId) || aiConfigId <= 0) return
-  const key = String(aiConfigId)
-  if (!force && workspaceFilesByConfig.value[key]) return
-  if (workspaceFilesLoading.has(aiConfigId)) return
-  workspaceFilesLoading.add(aiConfigId)
-  try {
-    const files = await listWorkspaceFiles(aiConfigId)
-    workspaceFilesByConfig.value = { ...workspaceFilesByConfig.value, [key]: files }
-  } catch (error) {
-    console.error('Failed to load AI workspace files:', error)
-  } finally {
-    workspaceFilesLoading.delete(aiConfigId)
-  }
-}
-
 const refreshActiveWorkspaceFiles = () => {
-  const configId = Number(chatTarget.value?.aiConfigId || 0)
-  void loadWorkspaceFiles(configId, true)
+  refreshWorkspaceFiles(chatTarget.value?.aiConfigId)
 }
 
 watch(activeAiConfigId, value => emit('update:activeAiConfigId', value), { immediate: true })
